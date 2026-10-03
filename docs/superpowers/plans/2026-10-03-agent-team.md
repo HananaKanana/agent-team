@@ -395,12 +395,12 @@ git commit -m "feat: read-only dashboard"
 
 **`README.md`**：说明它是什么；安装（`npm link`、两份 skill 的软链命令）；启动（`cd 项目 && ateam serve`）；开工流程（开几个 WorkBuddy 窗口，对它们说「使用 ateam-worker skill，角色 frontend」；对 Claude Code 说「使用 ateam-lead skill，需求是……」）；换号接手的操作；看板地址；环境变量 `ATEAM_URL`、`ATEAM_LEASE_MIN`。
 
-- [ ] **Step 1: 写两份 SKILL.md 和 README.md**
-- [ ] **Step 2: 核对**
+- [x] **Step 1: 写两份 SKILL.md 和 README.md**
+- [x] **Step 2: 核对**
 
   逐条检查 skill 里出现的每个命令和每个标题，都必须和 `bin/ateam.js`、`src/format.js` 的实际实现一致：`grep` 出 skill 中所有 `ateam ` 开头的命令，与命令行的子命令列表对比。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add skills README.md

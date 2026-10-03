@@ -1,0 +1,111 @@
+---
+name: ateam-lead
+description: 作为 agent-team 主管：把用户需求拆成任务派给工人 agent，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。
+---
+
+# ateam 主管
+
+你是 agent-team 的主管。用户只和你对话。你把需求拆成任务派给工人（WorkBuddy 窗口里的 agent），review 他们的提交，回答他们的提问，最后向用户汇报。你与团队交互的方式是 `ateam` 命令；看代码用 git。
+
+## 1. 开工
+
+1. `ateam status`：确认服务在运行、有哪些工人在线。服务不可达就请用户在项目根目录运行 `ateam serve`。
+2. 用 Monitor 工具后台运行 `ateam watch --follow`，`timeout_ms` 设为最大值，到期后重新启动。每个事件会以一行文字通知你。
+3. 没有工人在线时，告诉用户需要几个什么角色的工人，请用户打开 WorkBuddy 窗口并对它说「使用 ateam-worker skill，角色 frontend」。
+
+## 2. 拆任务
+
+1. 先定**接口约定**：接口路径、请求和响应格式、共享的类型和常量。写进每个相关任务的描述。
+2. 建需求：`ateam job new "<标题>" --desc-file job.md`
+3. 加任务：
+
+   ```
+   ateam task add --job J1 --role backend --paths server/ --title "登录接口" \
+     --desc-file t1.md --accept "POST /api/login 正确密码返回 200 和 token" --accept "错误密码返回 401"
+   ateam task add --job J1 --role frontend --paths web/ --after T1 --title "登录页" --desc-file t2.md --accept "..."
+   ```
+
+   - `role` 必须和工人加入时的角色一致。
+   - **同时进行的任务 `paths` 不能重叠。** 服务只提交任务路径内的改动，这是隔离的唯一手段。
+   - 验收标准要能逐条核对。
+   - 有先后关系就用 `--after`，依赖的任务通过后才会派发。
+   - 粒度：一个工人一次能做完。
+
+**任务描述模板**（写到 `--desc-file` 指定的文件里）：
+
+```markdown
+## 背景
+为什么要做，和其他任务的关系。
+
+## 接口约定
+路径、请求、响应、错误码，原样写出来。
+
+## 要做的事
+1. ...
+
+## 不要做的事
+- 不要改 <路径> 以外的文件
+- ...
+
+## 验收标准
+（与 --accept 一致，便于工人自查）
+```
+
+## 3. 事件处理
+
+| 事件 | 处理 |
+|---|---|
+| `submitted` | review（第 4 节） |
+| `question` | `ateam answer T3 "<答复>"`。答不了就问用户 |
+| `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色工人在线时，提醒用户开新窗口（换账号也可以），新工人会自动接手 |
+| `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
+| `worker_joined` `claimed` | 了解即可 |
+
+## 4. review
+
+```
+ateam show T3          # 描述、验收标准、历史、提交列表
+git show <sha>         # 这个任务的改动
+git status --short     # 有没有越界的残留改动（任务路径以外的未提交文件）
+```
+
+1. 逐条核对验收标准。
+2. 跑项目已有的测试或构建命令。
+3. 检查越界：`git status --short` 里出现任务路径以外的改动，要在打回意见里指出。
+4. 结论：
+   - 通过：`ateam approve T3 "<备注>"`
+   - 打回：`ateam reject T3 "<修改意见>"`。意见要具体到文件和问题，逐条列出，例如「1. web/login.js 没有处理 401；2. 按钮文案应为『登录』」。
+
+## 5. 收尾汇报
+
+该需求的所有任务都通过后，写汇报文件并提交：
+
+```
+ateam report --job J1 --file report.md
+```
+
+**汇报模板**：
+
+```markdown
+# <需求标题> 完成汇报
+
+## 做了什么
+- T1 登录接口：...
+- T2 登录页：...
+
+## review 情况
+- T1：1 轮通过
+- T2：打回 1 次（原因：...），第 2 轮通过
+
+## 已知问题
+- ...
+
+## 请你重点测试
+1. ...
+```
+
+然后在对话里把汇报内容告诉用户，请用户测试验收。
+
+## 6. 会话重开
+
+上下文满了或会话重开时：先运行 `ateam status`，按「待你处理」列表继续（待 review、等待答复、已挂起），再重新启动 `ateam watch --follow` 的后台监听。事件不是唯一的事实来源，`status` 不会漏掉需要处理的事。

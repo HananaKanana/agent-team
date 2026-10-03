@@ -347,8 +347,8 @@ git commit -m "feat: ateam CLI and LLM-oriented output formatting"
 - 窄屏时任务看板改为纵向堆叠。
 - 用户写的文本一律用 `textContent` 插入，或者转义后再插入，防止注入。
 
-- [ ] **Step 1: 实现 `src/dashboard.html`**
-- [ ] **Step 2: 一次性探测**
+- [x] **Step 1: 实现 `src/dashboard.html`**
+- [x] **Step 2: 一次性探测**
 
   启动服务，用 Task 5 的命令行造一些数据：1 个需求、3 个任务，分别处于已通过、返工中、待领取（handoff）；再提交一份汇报（另建一个全部通过的需求）。然后：
   - `curl -s localhost:<port>/ | head` 确认返回了 HTML
@@ -356,7 +356,7 @@ git commit -m "feat: ateam CLI and LLM-oriented output formatting"
 
   **不做浏览器验证**（用户全局约定）。看板的视觉效果列入 Task 8 的手工核对清单。删除临时数据。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add src/dashboard.html

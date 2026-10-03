@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ateam 调度台</title>
+<style>
+:root {
+  --bg: #e9ece6;
+  --surface: #f7f8f4;
+  --sunken: #dfe3dc;
+  --ink: #1f2a24;
+  --muted: #5f6e64;
+  --line: #c9cfc6;
+  --pending: #8b958e;
+  --working: #2d5d9f;
+  --rework: #b5562b;
+  --asking: #a87f0e;
+  --submitted: #6a4fa3;
+  --approved: #2f7d4f;
+  --held: #8a3b5c;
+  --focus: #2d5d9f;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141a17;
+    --surface: #1c2420;
+    --sunken: #101512;
+    --ink: #e3e9e2;
+    --muted: #93a197;
+    --line: #2f3a34;
+    --pending: #7d877f;
+    --working: #6d9be0;
+    --rework: #e08a5f;
+    --asking: #d9b44a;
+    --submitted: #a88ee0;
+    --approved: #5fbf86;
+    --held: #d27a9f;
+    --focus: #6d9be0;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+  min-height: 100vh;
+}
+button { font: inherit; color: inherit; }
+.meta { color: var(--muted); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+header.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px;
+  padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+header.top h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .02em; }
+.workers { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.worker {
+  display: flex; align-items: baseline; gap: 6px; padding: 3px 10px;
+  border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; background: var(--bg);
+}
+.worker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--approved); align-self: center; }
+.worker.offline { color: var(--muted); opacity: .6; }
+.worker.offline .dot { background: var(--pending); }
+.worker .meta { color: var(--muted); }
+.banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
+.banner[hidden] { display: none; }
+
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: calc(100vh - 56px); }
+nav.jobs { border-right: 1px solid var(--line); padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+nav.jobs h2, main h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+.job {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 12px; border: 1px solid transparent; border-radius: 8px; background: none;
+}
+.job:hover { background: var(--surface); }
+.job[aria-current="true"] { background: var(--surface); border-color: var(--line); }
+.job .title { font-weight: 600; }
+.job .sub { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; margin-top: 4px; }
+
+/* 需求进度：每个任务一格，按状态着色 */
+.strip { display: flex; gap: 2px; margin-top: 8px; height: 8px; }
+.strip span { flex: 1; border-radius: 2px; background: var(--pending); opacity: .45; }
+.strip span.s-approved { background: var(--approved); opacity: 1; }
+.strip span.s-working { background: var(--working); opacity: .9; }
+.strip span.s-rework { background: var(--rework); opacity: .9; }
+.strip span.s-asking { background: var(--asking); opacity: .9; }
+.strip span.s-submitted { background: var(--submitted); opacity: .9; }
+.strip span.s-held { background: var(--held); opacity: .9; }
+.strip.big { height: 14px; gap: 3px; margin: 14px 0 6px; }
+
+main { padding: 20px 24px 40px; min-width: 0; }
+.empty { color: var(--muted); padding: 40px 0; max-width: 46ch; }
+.job-head h2.job-title { font-size: 22px; color: var(--ink); font-weight: 650; margin: 0; }
+.job-head .desc { color: var(--muted); margin: 4px 0 0; max-width: 72ch; white-space: pre-wrap; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+.stats b { color: var(--ink); font-weight: 600; }
+
+.report {
+  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--approved);
+  border-radius: 8px; padding: 6px 20px 14px; margin-bottom: 22px; max-width: 80ch;
+}
+.report-label { color: var(--approved); font-weight: 600; font-size: 13px; margin-top: 10px; }
+
+.board { display: grid; grid-template-columns: repeat(7, minmax(168px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.lane { background: var(--sunken); border-radius: 8px; padding: 8px; min-height: 120px; }
+.lane h3 { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; margin: 2px 4px 8px; }
+.lane h3 .n { color: var(--muted); font-weight: 400; }
+.lane h3::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); align-self: center; margin-right: 6px; }
+.lane h3 .label { margin-right: auto; }
+.card {
+  display: block; width: 100%; text-align: left; cursor: pointer; margin-bottom: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--c);
+  border-radius: 6px; padding: 8px 10px;
+}
+.card:hover { border-color: var(--c); }
+.card .id { color: var(--muted); font-size: 12px; }
+.card .t { font-weight: 600; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.card .m { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11.5px; }
+.tag { padding: 0 6px; border-radius: 4px; background: var(--sunken); color: var(--muted); }
+.tag.warn { background: var(--rework); color: #fff; }
+.tag.handoff { background: var(--asking); color: #fff; }
+
+/* 任务详情抽屉 */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100vw);
+  background: var(--surface); border-left: 1px solid var(--line);
+  box-shadow: -12px 0 32px rgba(15, 25, 20, .18);
+  overflow-y: auto; padding: 18px 22px 40px; z-index: 10;
+  transform: translateX(0); transition: transform .18s ease-out;
+}
+.drawer[hidden] { display: block; transform: translateX(105%); visibility: hidden; }
+.drawer .close { float: right; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.drawer h2 { font-size: 18px; color: var(--ink); margin: 4px 0 4px; }
+.drawer h4 { font-size: 13px; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+.drawer .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; font-size: 13px; }
+.drawer .facts dt { color: var(--muted); }
+.drawer .facts dd { margin: 0; overflow-wrap: anywhere; }
+.drawer .descbox { white-space: pre-wrap; background: var(--bg); border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+.drawer ol, .drawer ul.commits { margin: 0; padding-left: 20px; }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+.timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
+.timeline li { position: relative; padding: 0 0 12px 14px; }
+.timeline li::before {
+  content: ""; position: absolute; left: -6px; top: 6px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--surface); border: 2px solid var(--c, var(--pending));
+}
+.timeline .when { color: var(--muted); font-size: 12px; }
+.timeline .what { font-weight: 600; font-size: 13px; }
+.timeline .text { white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; }
+
+.md h1, .md h2, .md h3 { color: var(--ink); margin: 14px 0 6px; }
+.md h1 { font-size: 19px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14px; }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md pre { background: var(--bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
+.md code { background: var(--bg); padding: 0 4px; border-radius: 3px; }
+.md pre code { background: none; padding: 0; }
+
+.c-pending { --c: var(--pending); } .c-working { --c: var(--working); } .c-rework { --c: var(--rework); }
+.c-asking { --c: var(--asking); } .c-submitted { --c: var(--submitted); } .c-approved { --c: var(--approved); }
+.c-held { --c: var(--held); }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.jobs { border-right: none; border-bottom: 1px solid var(--line); }
+  main { padding: 16px; }
+  .board { grid-template-columns: 1fr; overflow-x: visible; }
+  .lane { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>ateam 调度台</h1>
+  <div class="workers" id="workers"></div>
+</header>
+<div class="banner" id="banner" hidden>连不上 ateam 服务，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
+<div class="layout">
+  <nav class="jobs" id="jobs" aria-label="需求列表"></nav>
+  <main id="main"></main>
+</div>
+<aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
+
+<script>
+'use strict';
+
+const LANES = [
+  { key: 'pending', label: '待领取' },
+  { key: 'working', label: '进行中' },
+  { key: 'rework', label: '返工中' },
+  { key: 'asking', label: '等待答复' },
+  { key: 'submitted', label: '待 review' },
+  { key: 'approved', label: '已通过' },
+  { key: 'held', label: '已挂起' },
+];
+const LANE_LABEL = Object.fromEntries(LANES.map((l) => [l.key, l.label]));
+const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收' };
+const HISTORY = {
+  created: ['创建', 'pending'], claimed: ['领取', 'working'], progress: ['进度', 'working'],
+  asked: ['提问', 'asking'], answered: ['答复', 'asking'], submitted: ['交付', 'submitted'],
+  approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
+  held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'],
+};
+
+let data = null;
+let lastJson = '';
+let view = { job: null, task: null };
+
+// ---------- 小工具 ----------
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') node.className = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+const pad = (n) => String(n).padStart(2, '0');
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function ago(ts) {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return `${s} 秒前`;
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+  return `${Math.floor(s / 3600)} 小时前`;
+}
+
+function laneOf(t) {
+  if (t.status === 'working' && t.rejectCount > 0) return 'rework';
+  return t.status;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// 极简 markdown：先转义 HTML，再处理标题、列表、代码块、行内代码、粗体
+function renderMarkdown(src) {
+  const lines = escapeHtml(src).split('\n');
+  const out = [];
+  let list = null;
+  let code = null;
+  const inline = (s) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const line of lines) {
+    if (code !== null) {
+      if (/^```/.test(line)) { out.push(`<pre><code>${code.join('\n')}</code></pre>`); code = null; }
+      else code.push(line);
+      continue;
+    }
+    if (/^```/.test(line)) { closeList(); code = []; continue; }
+    let m;
+    if ((m = line.match(/^(#{1,3})\s+(.*)$/))) { closeList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
+    if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    if ((m = line.match(/^\s*\d+\.\s+(.*)$/))) { if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    closeList();
+    if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  if (code !== null) out.push(`<pre><code>${code.join('\n')}</code></pre>`);
+  closeList();
+  return out.join('\n');
+}
+
+function strip(tasks, big) {
+  return el('div', { class: big ? 'strip big' : 'strip', 'aria-hidden': 'true' },
+    tasks.map((t) => el('span', { class: `s-${laneOf(t)}`, title: `${t.id} ${LANE_LABEL[laneOf(t)]}` })));
+}
+
+function reviewStats(tasks) {
+  let reviews = 0;
+  let rejects = 0;
+  for (const t of tasks) {
+    for (const h of t.history) {
+      if (h.type === 'approved') reviews++;
+      if (h.type === 'rejected') { reviews++; rejects++; }
+    }
+  }
+  const approved = tasks.filter((t) => t.status === 'approved');
+  const firstPass = approved.filter((t) => t.rejectCount === 0).length;
+  const rate = approved.length ? `${Math.round((firstPass / approved.length) * 100)}%` : '—';
+  return { reviews, rejects, rate, approved: approved.length };
+}
+
+// ---------- 渲染 ----------
+
+function renderWorkers() {
+  const box = document.getElementById('workers');
+  const agents = data.state.agents;
+  box.replaceChildren(...(agents.length ? agents.map((a) => el('span', { class: `worker ${a.status}`, title: a.status === 'online' ? '在线' : '掉线' },
+    el('span', { class: 'dot' }), el('b', null, a.id), el('span', { class: 'meta' }, a.role),
+    a.currentTask ? el('span', null, a.currentTask) : el('span', { class: 'meta' }, a.status === 'online' ? '空闲' : '掉线'),
+    el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`),
+  )) : [el('span', { class: 'meta' }, '还没有工人加入。打开 WorkBuddy 窗口，让它使用 ateam-worker skill。')]));
+}
+
+function renderJobs() {
+  const nav = document.getElementById('jobs');
+  const { jobs, tasks } = data.state;
+  const items = jobs.slice().reverse().map((j) => {
+    const jt = tasks.filter((t) => t.jobId === j.id);
+    const done = jt.filter((t) => t.status === 'approved').length;
+    return el('button', {
+      class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
+      onclick: () => { view.job = j.id; view.task = null; saveView(); render(); },
+    },
+    el('div', { class: 'title' }, `${j.id} ${j.title}`),
+    el('div', { class: 'sub' }, el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
+    jt.length ? strip(jt, false) : null);
+  });
+  nav.replaceChildren(el('h2', null, '需求'), ...(items.length ? items : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，主管会在这里建立任务。')]));
+}
+
+function renderMain() {
+  const main = document.getElementById('main');
+  const job = data.state.jobs.find((j) => j.id === view.job);
+  if (!job) {
+    main.replaceChildren(el('p', { class: 'empty' }, data.state.jobs.length ? '在左侧选择一个需求，查看任务看板。' : '等待主管创建第一个需求。'));
+    return;
+  }
+  const tasks = data.state.tasks.filter((t) => t.jobId === job.id);
+  const st = reviewStats(tasks);
+  const head = el('div', { class: 'job-head' },
+    el('h2', { class: 'job-title' }, `${job.id} ${job.title}`),
+    job.description ? el('p', { class: 'desc' }, job.description) : null,
+    tasks.length ? strip(tasks, true) : null);
+  const stats = el('div', { class: 'stats' },
+    el('span', null, '状态 ', el('b', null, JOB_STATUS[job.status] || job.status)),
+    el('span', null, '已通过 ', el('b', null, `${st.approved}/${tasks.length}`)),
+    el('span', null, 'review ', el('b', null, st.reviews), ' 次'),
+    el('span', null, '一次通过率 ', el('b', null, st.rate)),
+    el('span', null, '打回 ', el('b', null, st.rejects), ' 次'));
+
+  let report = null;
+  if (job.status === 'awaiting_acceptance' && job.report) {
+    const body = el('div', { class: 'md' });
+    body.innerHTML = renderMarkdown(job.report); // renderMarkdown 先转义了 HTML
+    report = el('section', { class: 'report' }, el('div', { class: 'report-label' }, '主管汇报，等你验收'), body);
+  }
+
+  const board = el('div', { class: 'board' }, LANES.map((lane) => {
+    const cards = tasks.filter((t) => laneOf(t) === lane.key);
+    return el('section', { class: `lane c-${lane.key}`, 'aria-label': lane.label },
+      el('h3', null, el('span', { class: 'label' }, lane.label), el('span', { class: 'n' }, cards.length)),
+      cards.map((t) => card(t, lane.key)));
+  }));
+
+  main.replaceChildren(head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。'));
+}
+
+function card(t, lane) {
+  const handedOff = t.history.some((h) => h.type === 'handoff');
+  return el('button', { class: `card c-${lane}`, onclick: () => { view.task = t.id; saveView(); renderDrawer(true); } },
+    el('div', { class: 'id' }, t.id),
+    el('div', { class: 't' }, t.title),
+    el('div', { class: 'm' },
+      el('span', { class: 'tag' }, t.role),
+      t.assignee ? el('span', { class: 'tag' }, t.assignee) : null,
+      t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`) : null,
+      handedOff ? el('span', { class: 'tag handoff' }, '接手') : null));
+}
+
+function renderDrawer(fresh) {
+  const drawer = document.getElementById('drawer');
+  const t = view.task && data.state.tasks.find((x) => x.id === view.task);
+  if (!t) { drawer.hidden = true; drawer.replaceChildren(); return; }
+  const scroll = fresh ? 0 : drawer.scrollTop;
+  const lane = laneOf(t);
+  drawer.replaceChildren(
+    el('button', { class: 'close', onclick: closeDrawer }, '关闭'),
+    el('div', { class: 'id mono' }, `${t.id}，属于需求 ${t.jobId}`),
+    el('h2', null, t.title),
+    el('dl', { class: 'facts' },
+      el('dt', null, '状态'), el('dd', { class: `c-${lane}` }, LANE_LABEL[lane]),
+      el('dt', null, '角色'), el('dd', null, t.role),
+      el('dt', null, '处理人'), el('dd', null, t.assignee || '无'),
+      el('dt', null, '路径'), el('dd', null, t.paths.map((p, i) => [i ? '、' : '', el('code', null, p)])),
+      el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
+      el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
+    el('h4', null, '验收标准'),
+    t.acceptance.length ? el('ol', null, t.acceptance.map((a) => el('li', null, a))) : el('p', { class: 'meta' }, '未填写'),
+    el('h4', null, '描述'),
+    el('div', { class: 'descbox' }, t.description || '（无）'),
+    el('h4', null, '提交'),
+    t.commits.length ? el('ul', { class: 'commits' }, t.commits.map((c) => el('li', null, el('code', null, c)))) : el('p', { class: 'meta' }, '暂无'),
+    el('h4', null, '时间线'),
+    el('ol', { class: 'timeline' }, t.history.map((h) => {
+      const [label, color] = HISTORY[h.type] || [h.type, 'pending'];
+      return el('li', { class: `c-${color}` },
+        el('div', null, el('span', { class: 'what' }, label), ' ', el('span', { class: 'when' }, `${fmtTime(h.ts)}  ${h.actor}`)),
+        h.text ? el('div', { class: 'text' }, h.text) : null,
+        h.commit ? el('div', { class: 'when' }, '提交 ', el('code', null, h.commit)) : null);
+    })));
+  drawer.hidden = false;
+  drawer.scrollTop = scroll;
+  if (fresh) drawer.querySelector('.close').focus();
+}
+
+function closeDrawer() {
+  view.task = null;
+  saveView();
+  renderDrawer();
+}
+
+function render() {
+  if (!data) return;
+  if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
+  renderWorkers();
+  renderJobs();
+  renderMain();
+  renderDrawer(false);
+}
+
+// 选中的需求和打开的任务记在地址栏 hash 里，刷新页面后保留
+function saveView() {
+  const hash = [view.job, view.task].filter(Boolean).join('/');
+  history.replaceState(null, '', hash ? `#${hash}` : location.pathname);
+}
+function loadView() {
+  const [job, task] = location.hash.slice(1).split('/');
+  view = { job: job || null, task: task || null };
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/api/state', { cache: 'no-store' });
+    const json = await res.text();
+    document.getElementById('banner').hidden = true;
+    if (json !== lastJson) {
+      lastJson = json;
+      data = JSON.parse(json);
+      render();
+    } else {
+      renderWorkers(); // 只刷新「心跳 N 分钟前」
+    }
+  } catch {
+    document.getElementById('banner').hidden = false;
+  }
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && view.task) closeDrawer(); });
+loadView();
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

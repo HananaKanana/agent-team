@@ -303,9 +303,9 @@ git commit -m "feat: http server with long-poll wait/watch and lease sweep"
 
 **`serve`**：`startServer({ root: process.cwd(), port: --port ?? 7700, leaseMin: --lease ?? ATEAM_LEASE_MIN ?? 15 })`，启动后输出 `ateam 服务已启动：http://127.0.0.1:<port>（看板同地址）`。
 
-- [ ] **Step 1: 实现 `src/format.js`**
-- [ ] **Step 2: 实现 `bin/ateam.js`**
-- [ ] **Step 3: 一次性探测**
+- [x] **Step 1: 实现 `src/format.js`**
+- [x] **Step 2: 实现 `bin/ateam.js`**
+- [x] **Step 3: 一次性探测**
 
   在临时 git 仓库里后台运行 `node <repo>/bin/ateam.js serve --port 7798 --lease 0.05`，设置 `ATEAM_URL=http://127.0.0.1:7798`，然后用命令行依次执行：
   - `join` → `job new` → `task add`（带两个 `--accept`）→ `wait`（输出以 `# 新任务` 开头）→ `progress` → `submit` 但没有改动（输出以 `错误：` 开头，退出码 1）→ 写文件后再 `submit` → `status`（「待你处理」列表里有该任务）→ `reject` → `wait`（输出以 `# 打回` 开头）
@@ -313,7 +313,7 @@ git commit -m "feat: http server with long-poll wait/watch and lease sweep"
 
   这一步可以把重试时长临时调短来加快探测，但探测完要恢复成 60 秒。删除临时文件。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add src/format.js bin/ateam.js

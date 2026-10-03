@@ -177,9 +177,9 @@ git commit -am "feat: store dispatch, lease, review state machine"
     4. 任何一步报 `index.lock` 时等 500 毫秒重试，最多 3 次。
   - 全部使用 `child_process.execFile`（不经过 shell），`cwd: root`。
 
-- [ ] **Step 1: 实现两个文件**
+- [x] **Step 1: 实现两个文件**
 
-- [ ] **Step 2: 一次性探测**
+- [x] **Step 2: 一次性探测**
 
   在 scratchpad 里 `git init` 一个临时仓库，先做一次初始提交。然后验证：
   1. 新建 `web/a.js`，同时 `server/b.js` 已经 `git add`，调用 `commitPaths(root, ['web/', 'nope/'], '[T1] x')` → 返回 sha；`git show --stat HEAD` 只包含 `web/a.js`；`server/b.js` 仍在暂存区
@@ -189,7 +189,7 @@ git commit -am "feat: store dispatch, lease, review state machine"
 
   删除 probe 和临时仓库。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add src/persist.js src/git.js

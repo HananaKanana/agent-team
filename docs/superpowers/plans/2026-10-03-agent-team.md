@@ -126,7 +126,7 @@ git commit -m "feat: store skeleton (jobs, tasks, agents, events)"
   - `sweep(isWaiting: (agentId) => boolean) → number`：把超时且不在挂起中的在线工人标记为 `offline`。若其持有的任务状态为 `working` 或 `asking` → 变为 `pending`，`handoff=true`，`assignee=null`，写 `handoff` 历史。发出 `worker_offline` 事件，事件 text 注明被收回的任务编号。返回本次标记为掉线的工人数量。
   - 依赖判断：`dependsOn` 里的任务全部 `approved` 才可领取。
 
-- [ ] **Step 1: 实现以上方法**
+- [x] **Step 1: 实现以上方法**
 
   工人「持有的任务」以 `agent.currentTask` 为准，并与 `task.assignee` 保持双向一致：领取时双方都设置，任务通过、挂起、收回时双方都清空。
 
@@ -134,7 +134,7 @@ git commit -m "feat: store skeleton (jobs, tasks, agents, events)"
   - 规则 3（领取新任务）只在 `agent.currentTask` 为空时才生效。所以交付后处于 `submitted` 的工人会一直挂起等待 review 结果，返工自然会派回给他本人。
   - `sweep` 把工人标记为掉线时，总是清空 `agent.currentTask`。对于 `submitted` 状态的任务，`assignee` 保持不变；如果之后被打回，就按「原工人已掉线」的分支处理，进入 handoff。
 
-- [ ] **Step 2: 一次性探测**
+- [x] **Step 2: 一次性探测**
 
   在 scratchpad 里写 `probe2.mjs`，用 `let t = 0; now = () => t` 注入时钟，`leaseMs = 1000`。依次验证：
   1. fe 领到 T1（`task`）
@@ -151,7 +151,7 @@ git commit -m "feat: store skeleton (jobs, tasks, agents, events)"
 
   运行：`node probe2.mjs`，无断言失败即通过。删除 probe。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git commit -am "feat: store dispatch, lease, review state machine"

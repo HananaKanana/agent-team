@@ -159,6 +159,235 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return agent;
   }
 
+  // ---------- 派发 ----------
+
+  function depsMet(task) {
+    return task.dependsOn.every((id) => state.tasks.find((t) => t.id === id)?.status === 'approved');
+  }
+
+  function sameRole(a, b) {
+    return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+
+  // spec §4.1：返回 { kind, task, delivery? } 或 null（asking 中、或没有可派发的任务）
+  function nextFor(agentId) {
+    const agent = touch(agentId);
+
+    if (agent.currentTask) {
+      const task = getTask(agent.currentTask);
+      if (task.status !== 'working') return null; // asking / submitted：等答复或 review 结果
+      // 规则 1：待送达的打回意见或答复
+      if (task.pendingDelivery) {
+        const delivery = task.pendingDelivery;
+        task.pendingDelivery = null;
+        changed();
+        return { kind: delivery.kind, task, delivery };
+      }
+      // 规则 2：重复调用 wait，重新返回当前任务
+      return { kind: 'resume', task };
+    }
+
+    // 规则 3：领取新任务，handoff 优先，再按编号
+    const candidates = state.tasks
+      .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && depsMet(t))
+      .sort((a, b) => (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
+    const task = candidates[0];
+    if (!task) return null;
+
+    const isHandoff = task.handoff;
+    task.status = 'working';
+    task.assignee = agent.id;
+    task.handoff = false;
+    agent.currentTask = task.id;
+    const delivery = task.pendingDelivery ?? undefined;
+    task.pendingDelivery = null;
+    addHistory(task, 'claimed', agent.id, isHandoff ? '接手任务（上一位工人掉线）' : '领取任务');
+    emit('claimed', {
+      taskId: task.id, agentId: agent.id,
+      text: isHandoff ? `${agent.id} 接手了 ${task.id}（上一位工人掉线）` : `${agent.id} 领取了 ${task.id}`,
+    });
+    changed();
+    return { kind: isHandoff ? 'handoff' : 'task', task, delivery };
+  }
+
+  // 工人当前持有的任务，且必须处于 working
+  function workingTaskOf(agentId) {
+    const agent = touch(agentId);
+    if (!agent.currentTask) {
+      throw new AteamError('BAD_STATE', `你当前没有进行中的任务。请运行 ateam wait --as ${agent.id} 领取任务。`);
+    }
+    const task = getTask(agent.currentTask);
+    if (task.status === 'asking') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 正在等待主管答复。请运行 ateam wait --as ${agent.id} 等待答复。`);
+    }
+    if (task.status !== 'working') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，不能执行此操作。请运行 ateam wait --as ${agent.id} 等待下一步。`);
+    }
+    return { agent, task };
+  }
+
+  function progress(agentId, text) {
+    text = requireText(text, '进度笔记');
+    const { agent, task } = workingTaskOf(agentId);
+    addHistory(task, 'progress', agent.id, text);
+    changed();
+    return task;
+  }
+
+  function ask(agentId, text) {
+    text = requireText(text, '问题');
+    const { agent, task } = workingTaskOf(agentId);
+    task.status = 'asking';
+    addHistory(task, 'asked', agent.id, text);
+    emit('question', { taskId: task.id, agentId: agent.id, text });
+    changed();
+    return task;
+  }
+
+  function taskForSubmit(agentId) {
+    return workingTaskOf(agentId).task;
+  }
+
+  function recordSubmit(agentId, summary, commit) {
+    summary = requireText(summary, '提交总结');
+    const { agent, task } = workingTaskOf(agentId);
+    if (commit) task.commits.push(commit);
+    task.status = 'submitted';
+    addHistory(task, 'submitted', agent.id, summary, commit);
+    emit('submitted', {
+      taskId: task.id, agentId: agent.id,
+      text: commit ? `${task.id} 已提交 ${commit}：${summary}` : `${task.id} 已提交（无代码改动）：${summary}`,
+    });
+    changed();
+    return task;
+  }
+
+  // ---------- review ----------
+
+  function releaseAgentOf(task) {
+    const agent = task.assignee && findAgent(task.assignee);
+    if (agent && agent.currentTask === task.id) agent.currentTask = null;
+  }
+
+  function approve(taskId, note = '') {
+    const task = getTask(taskId);
+    if (task.status !== 'submitted' && task.status !== 'held') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有 submitted 或 held 的任务可以通过。`);
+    }
+    task.status = 'approved';
+    task.handoff = false;
+    task.pendingDelivery = null;
+    releaseAgentOf(task);
+    addHistory(task, 'approved', 'lead', note ?? '');
+    changed();
+    return task;
+  }
+
+  function reject(taskId, text) {
+    text = requireText(text, '修改意见');
+    const task = getTask(taskId);
+    if (task.status !== 'submitted') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有 submitted 的任务可以打回。`);
+    }
+    task.rejectCount += 1;
+    addHistory(task, 'rejected', 'lead', text);
+
+    if (task.rejectCount >= 3) {
+      task.status = 'held';
+      releaseAgentOf(task);
+      emit('task_held', { taskId: task.id, text: `${task.id} 已被打回 ${task.rejectCount} 次，转为挂起，等你处理（task edit + release，或自己修改后 approve）` });
+    } else {
+      const agent = findAgent(task.assignee);
+      task.pendingDelivery = { kind: 'rejected', text };
+      if (agent && agent.status === 'online' && agent.currentTask === task.id) {
+        task.status = 'working';
+      } else {
+        task.status = 'pending';
+        task.handoff = true;
+        task.assignee = null;
+      }
+    }
+    changed();
+    return task;
+  }
+
+  function answer(taskId, text) {
+    text = requireText(text, '答复');
+    const task = getTask(taskId);
+    if (task.status === 'asking') {
+      task.status = 'working';
+    } else if (!(task.status === 'pending' && task.handoff)) {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，没有待回答的提问。`);
+    }
+    task.pendingDelivery = { kind: 'answer', text };
+    addHistory(task, 'answered', 'lead', text);
+    changed();
+    return task;
+  }
+
+  function release(taskId) {
+    const task = getTask(taskId);
+    if (task.status !== 'held') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有 held 的任务可以放回。`);
+    }
+    task.status = 'pending';
+    task.rejectCount = 0;
+    task.assignee = null;
+    // 已有提交时按接手处理，让下一位工人先看历史和 git 现状
+    task.handoff = task.commits.length > 0;
+    addHistory(task, 'released', 'lead', '重新放回待领取');
+    changed();
+    return task;
+  }
+
+  function report(jobId, markdown) {
+    markdown = requireText(markdown, '汇报内容');
+    const job = getJob(jobId);
+    const tasks = state.tasks.filter((t) => t.jobId === job.id);
+    if (tasks.length === 0) {
+      throw new AteamError('BAD_STATE', `需求 ${job.id} 还没有任何任务，不能提交汇报。`);
+    }
+    const unfinished = tasks.filter((t) => t.status !== 'approved');
+    if (unfinished.length > 0) {
+      throw new AteamError('BAD_STATE', `需求 ${job.id} 还有未通过的任务：${unfinished.map((t) => `${t.id}（${t.status}）`).join('、')}。全部通过后才能提交汇报。`);
+    }
+    job.report = markdown;
+    job.status = 'awaiting_acceptance';
+    job.updatedAt = now();
+    changed();
+    return job;
+  }
+
+  // ---------- 租约 ----------
+
+  function sweep(isWaiting) {
+    let count = 0;
+    for (const agent of state.agents) {
+      if (agent.status !== 'online') continue;
+      if (now() - agent.lastSeenAt <= leaseMs || isWaiting(agent.id)) continue;
+      agent.status = 'offline';
+      count += 1;
+      let reclaimed = null;
+      if (agent.currentTask) {
+        const task = state.tasks.find((t) => t.id === agent.currentTask);
+        if (task && (task.status === 'working' || task.status === 'asking')) {
+          task.status = 'pending';
+          task.handoff = true;
+          task.assignee = null;
+          addHistory(task, 'handoff', 'system', `${agent.id} 掉线，任务退回待领取`);
+          reclaimed = task.id;
+        }
+        agent.currentTask = null;
+      }
+      emit('worker_offline', {
+        agentId: agent.id, taskId: reclaimed ?? undefined,
+        text: reclaimed ? `${agent.id} 掉线，任务 ${reclaimed} 已收回，等待接手` : `${agent.id} 掉线`,
+      });
+    }
+    if (count > 0) changed();
+    return count;
+  }
+
   // ---------- 查询 ----------
 
   function pendingActions() {
@@ -183,6 +412,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     leaseMs,
     createJob, addTask, editTask,
     join, touch,
+    nextFor, progress, ask, taskForSubmit, recordSubmit,
+    approve, reject, answer, release, report, sweep,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

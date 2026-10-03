@@ -59,7 +59,7 @@ agent-team/
   src/persist.js          # 读写 state.json（先写临时文件再 rename）
   src/server.js           # HTTP 路由、长轮询挂起和唤醒、租约定时扫描、托管看板
   src/format.js           # 把任务、事件渲染成给 LLM 读的 markdown 文本
-  src/git.js              # submit 时执行 git add / commit，拿到提交号
+  src/git.js              # 服务端在项目根执行 git add / commit，拿到提交号
   src/dashboard.html      # 看板
   skills/ateam-lead/SKILL.md
   skills/ateam-worker/SKILL.md
@@ -129,7 +129,7 @@ agent-team/
 1. 有分配给我、并且带有 `pendingDelivery` 的任务（打回意见或提问答复）→ 送达，清空 `pendingDelivery`，状态为 `working`。
 2. 已经分配给我、状态为 `working` 的任务（比如工人重复调用了 `wait`）→ 重新返回这个任务的完整内容。
 3. 我的角色下、`pending`、依赖都已满足的任务：先给 `handoff=true` 的，再按编号从小到大 → 领取，`assignee=我`，状态为 `working`。如果该任务带有 `pendingDelivery`（上一任没收到的打回意见或答复），一并送达后清空。
-4. 都没有 → 挂起，直到有可派发的任务或超时（默认 300 秒，可用 `--timeout` 改）。超时返回「暂无任务，请立即再次调用 ateam wait」。
+4. 都没有 → 挂起，直到有可派发的任务或超时（默认 90 秒，可用 `--timeout` 改；见 §10.1）。超时返回「暂无任务，请立即再次调用 ateam wait」。
 
 一个工人同一时间只持有一个任务。工人处于 `asking` 时调用 `wait`，会一直挂起，直到答复送达。
 
@@ -168,12 +168,12 @@ agent-team/
 | 命令 | 说明 |
 |---|---|
 | `ateam join --role <role>` | 返回工人编号，比如 `fe-7f3a`，前缀取角色的前两个字母 |
-| `ateam wait --as ID [--timeout 300]` | 按 §4.1 返回内容 |
+| `ateam wait --as ID [--timeout 90]` | 按 §4.1 返回内容 |
 | `ateam progress --as ID "<笔记>"` | 写进度笔记，同时刷新心跳 |
 | `ateam ask --as ID "<问题>"` | 任务转为 `asking`，发出 `question` 事件 |
 | `ateam submit --as ID "<总结>" [--no-changes]` | 见下文 |
 
-**`submit` 的行为**：由命令行在项目根目录执行
+**`submit` 的行为**：由**服务**在项目根目录（`serve` 启动时的目录）执行
 
 ```
 git add -A -- <paths...>
@@ -183,8 +183,8 @@ git commit -m "[T3] <总结>" -- <paths...>
 带路径的 `git commit` 只提交这些路径，即使别的工人在暂存区里放了东西，也不会被一起提交。提交完成后，把提交号记到任务上，任务转为 `submitted`，发出 `submitted` 事件。
 
 - 指定路径下没有任何改动时报错。如果确实不需要改代码（比如只是回答问题后确认无需改动），可以加 `--no-changes`。
-- 遇到 `index.lock` 冲突（两个工人同时提交）时，自动等待并重试，最多 5 次。
-- 由命令行来提交，而不是让工人自己敲 git 命令，是为了**强制**路径隔离，同时减少模型出错。
+- 服务单进程按顺序处理请求，两个工人的提交自然排队，不会互相冲突。如果主管恰好也在执行 git 命令导致 `index.lock` 冲突，服务会短暂等待后重试，最多 3 次。
+- 由服务来提交，而不是让工人自己敲 git 命令：一是**强制**路径隔离，二是工人的工作目录不一定是项目根目录，三是减少模型出错。
 
 ### 5.3 主管
 
@@ -194,7 +194,7 @@ git commit -m "[T3] <总结>" -- <paths...>
 | `ateam task add --job J1 --role backend --paths server/ [--after T1,T2] --title "..." --desc-file t.md --accept "..." --accept "..."` | 添加任务，返回 `T3` |
 | `ateam task edit T3 [--desc-file ...] [--accept ...] [--paths ...]` | 修改任务，只允许在 `pending` 或 `held` 状态下修改 |
 | `ateam release T3` | 把 `held` 的任务放回 `pending` |
-| `ateam watch [--timeout 600]` | 挂起，直到有未送达的事件，然后一次性返回全部并标记为已送达 |
+| `ateam watch [--timeout 90]` | 挂起，直到有未送达的事件，然后一次性返回全部并标记为已送达 |
 | `ateam watch --follow` | 一直运行，每个事件输出一行，用于 Claude Code 的 Monitor 后台监听 |
 | `ateam approve T3 ["<备注>"]` | 通过 |
 | `ateam reject T3 "<修改意见>"` | 打回（规则见 §4、§4.3） |
@@ -248,7 +248,7 @@ git commit -m "[T3] <总结>" -- <paths...>
 
 - 在本项目目录运行 `npm link`，之后全局都能用 `ateam` 命令。
 - 把 `skills/ateam-lead/` 复制或软链到 `~/.claude/skills/`。
-- 把 `skills/ateam-worker/` 导入到 WorkBuddy 的 skill 目录（具体路径见 §10 待确认）。
+- 把 `skills/ateam-worker/` 复制或软链到 `~/.workbuddy/skills/ateam-worker/`（WorkBuddy 用户级 skill 目录，格式与 Claude Code 相同：`SKILL.md` = YAML frontmatter（`name`、`description`）+ Markdown 正文）。
 
 ## 8. 看板
 
@@ -270,15 +270,25 @@ git commit -m "[T3] <总结>" -- <paths...>
 | 操作不合法 | 比如提交不属于自己的任务、对 `pending` 任务执行 approve。返回明确的错误，并说明当前状态和正确做法 |
 | 项目目录不是 git 仓库 | `serve` 报错退出，提示先运行 `git init`（`submit` 依赖 git） |
 | 端口被占用 | `serve` 报错退出，提示用 `--port` 换端口，并设置 `ATEAM_URL` |
-| 两个工人同时 git commit | `index.lock` 自动重试（§5.2） |
+| 两个工人同时提交 | 服务按顺序执行 git，自然排队（§5.2） |
 | 并发请求 | 单进程按顺序处理，不存在重复派发 |
 | 主管会话重开 | `ateam status` 的「待你处理」列表 + 未送达的事件 |
 
-## 10. 待确认事项（实现时核实）
+## 10. 已确认事项（WorkBuddy 环境）
 
-1. **WorkBuddy 执行命令的超时时间**：如果它的命令执行工具有较短的超时（比如 60 秒），worker skill 里就要让 `wait` 带上更小的 `--timeout`。
-2. **WorkBuddy 的 skill 安装目录和格式**：是否兼容 `SKILL.md` 加 frontmatter 的写法。
-3. **WorkBuddy 能否在项目目录下执行 shell 命令**：如果不行，需要改成通过 MCP 包装（协议不变，外面套一层 MCP）。
+### 10.1 命令超时
+
+WorkBuddy 的 bash 工具：前台命令默认超时 120 秒（`BASH_DEFAULT_TIMEOUT_MS`）；显式传 timeout 最多可到 600 秒（`BASH_MAX_TIMEOUT_MS`）。超时后，命令会被自动转为后台任务，工人拿不到输出；或者在不支持后台时被 SIGTERM 杀掉（退出码 137）。
+
+因此 `wait` 和 `watch` 的默认挂起时间定为 **90 秒**，保证不依赖模型每次都正确传 timeout 参数，也能稳定拿到结果。命令行内部的「服务不可达重试」只在连不上服务时触发，不会和挂起时间叠加。
+
+### 10.2 Skill 目录与格式
+
+用户级目录为 `~/.workbuddy/skills/<name>/SKILL.md`；另有项目级目录 `<workspace>/.workbuddy/skills/`。frontmatter 里 `name`、`description` 必填。`agent_created: true` 只有模型自己创建的 skill 才需要，用户手动安装的不需要。
+
+### 10.3 Shell 执行
+
+WorkBuddy 有 bash 工具，可以直接运行 `ateam` 命令，不需要包一层 MCP。工人的工作目录不一定是项目根目录，git 操作统一由服务执行（§5.2）。
 
 ## 11. 测试与验证
 

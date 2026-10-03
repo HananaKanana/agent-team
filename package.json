@@ -1,0 +1,13 @@
+{
+  "name": "agent-team",
+  "version": "0.1.0",
+  "description": "Local task coordination service: a lead agent dispatches tasks to worker agents in one project directory",
+  "type": "module",
+  "bin": {
+    "ateam": "bin/ateam.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

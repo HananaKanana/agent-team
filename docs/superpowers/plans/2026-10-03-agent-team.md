@@ -79,17 +79,17 @@
     - `takeEvents() → event[]`：返回 `delivered:false` 的事件，并标记为 `true`
     - 内部辅助（不导出）：`addHistory(task, type, actor, text, commit?)`、`emit(type, fields)`
 
-- [ ] **Step 1: 写 `package.json`、`.gitignore`、`src/errors.js`**
+- [x] **Step 1: 写 `package.json`、`.gitignore`、`src/errors.js`**
 
-- [ ] **Step 2: 在 `src/store.js` 实现以上方法**
+- [x] **Step 2: 在 `src/store.js` 实现以上方法**
 
   工人 ID 用 `crypto.randomBytes(2).toString('hex')`，冲突时重新生成。所有时间戳都取自 `now()`。
 
-- [ ] **Step 3: 一次性探测**
+- [x] **Step 3: 一次性探测**
 
   在 scratchpad 里写 `probe1.mjs`：从仓库导入 `createStore`；建需求 → 加两个任务（T2 依赖 T1）→ `join('frontend')` 得到形如 `fr-xxxx` 的 ID → `editTask` 改 T1 描述 → `takeEvents()` 返回 1 条 `worker_joined`，再调一次返回空数组 → `addTask` 用不存在的依赖时抛 `NOT_FOUND`。运行：`node probe1.mjs`，全部 `console.assert` 无输出即通过。删除 probe。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add package.json .gitignore src/errors.js src/store.js

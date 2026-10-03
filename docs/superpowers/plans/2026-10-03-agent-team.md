@@ -238,11 +238,11 @@ git commit -m "feat: state persistence and path-scoped git commit"
 - `submit` 流程：`taskForSubmit` → 若 `noChanges` 则 `commit=null`；否则 `commitPaths(root, task.paths, '[T3] '+summary)`，结果为 `nothing` 时抛 `INVALID`，提示「指定路径下没有改动；如确实无需改代码，请加 --no-changes」→ `recordSubmit`。
 - 定时扫描：`setInterval(() => store.sweep(id => waiters.has(id)), min(30000, leaseMs/3))`，并 `unref()`。
 
-- [ ] **Step 1: 实现 `src/server.js`**
+- [x] **Step 1: 实现 `src/server.js`**
 
   路由用一个 `{ 'POST /api/join': handler, ... }` 对象分发。请求体最大 1MB，JSON 解析失败返回 `INVALID`。
 
-- [ ] **Step 2: 一次性探测**
+- [x] **Step 2: 一次性探测**
 
   在 scratchpad 里写 `probe4.mjs`：在临时 git 仓库上 `startServer({ root, port: 7799, leaseMin: 0.05 })`，用 `fetch` 验证：
   1. 两个工人加入；fe 挂起 `wait`；主管建需求和任务后，fe 的 `wait` 在 1 秒内返回任务（不必等超时）
@@ -254,7 +254,7 @@ git commit -m "feat: state persistence and path-scoped git commit"
 
   删除 probe。
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add src/server.js

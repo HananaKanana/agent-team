@@ -172,11 +172,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
 
   function handleWait(body, res) {
     const agentId = body.as;
-    const result = store.nextFor(agentId); // 先 touch，掉线的工人在这里拿到 LEASE_LOST
-    if (result) return send(res, 200, { ok: true, result });
-
+    // 先结束同一工人的旧挂起，再派发：否则旧挂起可能在下一轮 wake 里再收到同一个任务
     const old = waiters.get(agentId);
     if (old) finishWaiter(agentId, old, 200, { ok: true, result: null });
+
+    const result = store.nextFor(agentId); // 先 touch，掉线的工人在这里拿到 LEASE_LOST
+    if (result) return send(res, 200, { ok: true, result });
 
     const waiter = { res, timer: null };
     waiter.timer = setTimeout(() => {
@@ -208,10 +209,19 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     });
   }
 
+  // 防止网页跨站调用接口：只认本机 Host（挡 DNS rebinding），POST 必须是 JSON（浏览器跨站发 JSON 需要预检，本服务不响应预检）
+  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const key = `${req.method} ${url.pathname}`;
     try {
+      if (!allowedHosts.has(req.headers.host ?? '')) {
+        return send(res, 403, { ok: false, code: 'INVALID', message: `只接受 http://127.0.0.1:${port} 或 http://localhost:${port} 的请求。` });
+      }
+      if (req.method === 'POST' && !/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
+        return send(res, 415, { ok: false, code: 'INVALID', message: '请求的 Content-Type 必须是 application/json。请用 ateam 命令行操作。' });
+      }
       if (key === 'GET /') {
         try {
           const html = await readFile(DASHBOARD);

@@ -64,17 +64,21 @@ export async function commitPaths(root, paths, message) {
       throw gitError('git add', err);
     }
   }
-  if (valid.length === 0) return { nothing: true };
-
-  try {
-    await git(root, ['diff', '--cached', '--quiet', '--', ...valid]);
-    return { nothing: true };
-  } catch (err) {
-    if (err.code !== 1) throw gitError('git diff', err);
+  // 只保留确实有暂存改动的路径：空目录、只含被忽略文件的目录 git add 不报错，
+  // 但放进 git commit 的路径参数会报 pathspec 不匹配
+  const changed = [];
+  for (const p of valid) {
+    try {
+      await git(root, ['diff', '--cached', '--quiet', '--', p]);
+    } catch (err) {
+      if (err.code !== 1) throw gitError('git diff', err);
+      changed.push(p);
+    }
   }
+  if (changed.length === 0) return { nothing: true };
 
   try {
-    await git(root, ['commit', '-m', message, '--', ...valid]);
+    await git(root, ['commit', '-m', message, '--', ...changed]);
     const { stdout } = await git(root, ['rev-parse', '--short', 'HEAD']);
     return { sha: stdout.trim() };
   } catch (err) {

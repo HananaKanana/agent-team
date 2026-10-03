@@ -415,7 +415,7 @@ git commit -m "docs: worker/lead skills and README"
 - Create: `docs/manual-checklist.md`
 - 一次性脚本放在 scratchpad，不进仓库
 
-- [ ] **Step 1: 端到端模拟**
+- [x] **Step 1: 端到端模拟**
 
   在 scratchpad 写 `e2e.sh`：新建临时 git 仓库，运行 `ateam serve --lease 0.1`；用 3 个 shell 角色（主管、fe、be）只通过 `ateam` 命令行完成以下流程：
   1. 建需求，加任务：T1 后端；T2 前端，依赖 T1。T2 的 `paths` 包含一个不存在的目录（Review Focus #1）
@@ -430,12 +430,12 @@ git commit -m "docs: worker/lead skills and README"
 
   每一步用 `grep -q` 检查输出，失败就打印出来。跑通后删除脚本和临时仓库。
 
-- [ ] **Step 2: 运行既有测试**
+- [x] **Step 2: 运行既有测试**
 
   Run: `node --test`
   Expected: 退出码 0（目前没有测试文件）
 
-- [ ] **Step 3: 写 `docs/manual-checklist.md`**（交给用户）
+- [x] **Step 3: 写 `docs/manual-checklist.md`**（交给用户）
 
   1. `npm link` 后，在任意目录能运行 `ateam`
   2. 两份 skill 已软链；WorkBuddy 能识别 `ateam-worker`，Claude Code 能识别 `ateam-lead`
@@ -447,7 +447,7 @@ git commit -m "docs: worker/lead skills and README"
   8. 收到 Claude Code 的最终汇报，看板上显示汇报内容
   9. 看板在深色模式和窄屏下显示正常
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add docs/manual-checklist.md

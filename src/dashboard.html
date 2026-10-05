@@ -69,6 +69,23 @@ header.top h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .0
 }
 .worker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--approved); align-self: center; }
 .worker.offline { color: var(--muted); opacity: .6; }
+button.worker { font: inherit; cursor: pointer; }
+.worker.stale { border-color: var(--asking); }
+.worker.stale .dot { background: var(--asking); }
+.worker .warn { color: var(--asking); font-weight: 600; }
+.helper-btn { margin-left: auto; }
+/* 提示词面板：顶部右侧弹出 */
+.helper {
+  position: fixed; top: 56px; right: 16px; z-index: 15; width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 25, 20, .22); padding: 14px 16px 16px;
+}
+.helper[hidden] { display: none; }
+.helper h4 { font-size: 13px; color: var(--muted); margin: 14px 0 4px; font-weight: 600; }
+.helper h4:first-of-type { margin-top: 4px; }
+.helper .who { font-weight: 600; margin-top: 10px; }
+.helper .who.focus { color: var(--asking); }
 .worker.offline .dot { background: var(--pending); }
 .worker .meta { color: var(--muted); }
 .banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
@@ -237,6 +254,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 <header class="top">
   <h1>ateam 调度台</h1>
   <div class="workers" id="workers"></div>
+  <button class="btn helper-btn" id="helper-btn" type="button">提示词</button>
 </header>
 <section class="needs" id="needs" hidden aria-label="需要工人"></section>
 <div class="banner" id="banner" hidden>连不上 ateam 服务，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
@@ -245,6 +263,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <main id="main"></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
+<div class="helper" id="helper" hidden role="dialog" aria-label="给工人的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="主管汇报"></div>
 
 <script>
@@ -375,15 +394,78 @@ function renderWorkers() {
   // 掉线的工人不再占位：只显示在线的，掉线的折叠成一个灰色计数，鼠标悬停可看编号
   const online = agents.filter((a) => a.status === 'online');
   const offline = agents.filter((a) => a.status !== 'online');
-  const chips = online.map((a) => el('span', { class: 'worker online', title: '在线' },
+  const chips = online.map((a) => {
+    const stale = isStale(a);
+    return el('button', {
+      type: 'button',
+      class: `worker online${stale ? ' stale' : ''}`,
+      title: stale ? '好几分钟没有动静，可能停住了。点击查看叫醒它的提示词' : '在线。点击查看提示词',
+      onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: a.id }; renderHelper(); },
+    },
     el('span', { class: 'dot' }), el('b', null, a.name || a.id), a.name ? el('span', { class: 'meta' }, a.id) : null, el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     a.currentTask ? el('span', null, a.currentTask) : el('span', { class: 'meta' }, '空闲'),
-    el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`)));
+    el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`),
+    stale ? el('span', { class: 'warn' }, '可能停了') : null);
+  });
   if (offline.length) {
     chips.push(el('span', { class: 'worker offline', title: offline.map((a) => `${agentLabel(a.id)}，${a.role}`).join('\n') },
       el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
   }
-  box.replaceChildren(...(agents.length ? chips : [el('span', { class: 'meta' }, '还没有工人加入。打开 WorkBuddy 窗口，让它使用 ateam-worker skill。')]));
+  box.replaceChildren(...(agents.length ? chips : [el('span', { class: 'meta' }, '还没有工人加入。点右边「提示词」，复制给新开的 WorkBuddy 窗口。')]));
+  renderHelper();
+}
+
+// 在线工人超过 3 分钟没有任何动静（挂着 wait 的工人最多 90 秒就会刷新一次心跳）→ 多半停住了
+const STALE_MS = 3 * 60 * 1000;
+function isStale(a) {
+  return a.status === 'online' && Date.now() - a.lastSeenAt > STALE_MS;
+}
+
+let helper = { open: false, focus: null };
+
+function wakePrompt(a) {
+  const doing = a.currentTask ? `继续做 ${a.currentTask}，做完提交后` : '';
+  return `继续。你是 ateam 工人 ${a.id}（角色 ${a.role}）。${doing}运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。如果提示租约已失效，就重新 ateam join --role ${a.role}${a.name ? ` --name ${a.name}` : ''}。`;
+}
+
+function copyRow(text) {
+  return el('div', { class: 'prompt' },
+    el('code', null, text),
+    el('button', {
+      class: 'btn',
+      onclick: async (e) => {
+        e.stopPropagation();
+        try { await navigator.clipboard.writeText(text); copied = text; } catch { copied = null; }
+        renderHelper();
+        setTimeout(() => { if (copied === text) { copied = null; renderHelper(); } }, 2000);
+      },
+    }, copied === text ? '已复制' : '复制'));
+}
+
+function renderHelper() {
+  const panel = document.getElementById('helper');
+  if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
+  const { agents, tasks } = data.state;
+  const online = agents.filter((a) => a.status === 'online');
+  // 角色：在线工人的角色 + 还没完成的任务的角色
+  const roles = new Map();
+  for (const t of tasks) if (t.status !== 'approved' && t.status !== 'cancelled') roles.set(t.role.trim().toLowerCase(), t.role);
+  for (const a of online) roles.set(a.role.trim().toLowerCase(), a.role);
+  const ordered = online.slice().sort((x, y) => (y.id === helper.focus) - (x.id === helper.focus) || isStale(y) - isStale(x));
+  fill(panel,
+    el('div', { class: 'drawer-tools' }, el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); } }, '关闭')),
+    el('h4', null, '叫醒停住的工人'),
+    el('p', { class: 'hint' }, '工人停下来不动时（标签变黄、显示「可能停了」），在它自己的 WorkBuddy 窗口里发这句话。'),
+    ordered.length ? ordered.map((a) => [
+      el('div', { class: `who${a.id === helper.focus ? ' focus' : ''}` },
+        `${agentLabel(a.id)}，${a.role}${a.currentTask ? `，${a.currentTask}` : '，空闲'}，心跳 ${ago(a.lastSeenAt)}${isStale(a) ? '，可能停了' : ''}`),
+      copyRow(wakePrompt(a)),
+    ]) : el('p', { class: 'hint' }, '没有在线的工人。'),
+    el('h4', null, '新开一个工人'),
+    el('p', { class: 'hint' }, '打开新的 WorkBuddy 窗口（可以换账号），工作目录选项目目录，发下面对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
+    roles.size ? [...roles.values()].map((role) => [el('div', { class: 'who' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)), copyRow(workerPrompt(role))])
+      : copyRow(workerPrompt('<角色，比如 frontend>')));
+  panel.hidden = false;
 }
 
 function renderJobs() {
@@ -683,14 +765,21 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
   if (view.report) closeReport();
   else if (view.task) closeDrawer();
 });
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
+  if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (!view.task) return;
   if (e.target.closest('#drawer, .card')) return;
   closeDrawer();
+});
+document.getElementById('helper-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  helper = helper.open ? { open: false, focus: null } : { open: true, focus: null };
+  renderHelper();
 });
 loadView();
 poll();

@@ -457,6 +457,12 @@ async function poll() {
 }
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && view.task) closeDrawer(); });
+// 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
+document.addEventListener('click', (e) => {
+  if (!view.task) return;
+  if (e.target.closest('#drawer, .card')) return;
+  closeDrawer();
+});
 loadView();
 poll();
 setInterval(poll, 3000);

@@ -388,6 +388,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return count;
   }
 
+  // 任务路径里有比上次心跳更新的文件改动时，把心跳推到那个时间（见 server 的租约扫描）
+  function noteActivity(agentId, ts) {
+    const agent = findAgent(agentId);
+    if (!agent || agent.status !== 'online' || !(ts > agent.lastSeenAt)) return false;
+    agent.lastSeenAt = Math.min(ts, now());
+    changed();
+    return true;
+  }
+
   // ---------- 查询 ----------
 
   function pendingActions() {
@@ -413,7 +422,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     createJob, addTask, editTask,
     join, touch,
     nextFor, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, report, sweep,
+    approve, reject, answer, release, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

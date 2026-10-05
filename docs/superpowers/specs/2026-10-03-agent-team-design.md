@@ -137,6 +137,7 @@ agent-team/
 
 - 工人每次调用 `ateam ... --as ID` 都会刷新 `lastSeenAt`。`wait` 挂起期间，连接存在也视为在线。
 - **不用后台进程发心跳**：token 用完时窗口停了，后台进程还会继续报活，那样就检测不到掉线。
+- **文件活动也算心跳**：判掉线之前，服务用 `git status` 查看该工人任务 `paths` 内未提交的改动，取最新的文件修改时间；比 `lastSeenAt` 新就把 `lastSeenAt` 推到那个时间。工人埋头写代码、很久不调用命令时不会被误判；token 用完后文件不再变化，照常掉线。
 - 服务每 30 秒扫描一次：`lastSeenAt` 超过租约时长（默认 15 分钟，可用 `--lease` 或 `ATEAM_LEASE_MIN` 改），并且没有挂起中的 `wait` 连接 → 工人标记为 `offline`。
   - 如果它持有任务：任务转为 `pending`，`handoff=true`，`assignee=null`，`pendingDelivery` 保留（接手的工人会收到），写一条 `handoff` 历史，并发出 `worker_offline` 事件。
 - 掉线的工人再调用任何命令：返回「你的租约已失效，任务已被收回。请重新运行 ateam join」。

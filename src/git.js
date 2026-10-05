@@ -1,6 +1,7 @@
 // 服务端在项目根执行 git。全部用 execFile，不经过 shell。
 import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const LOCK_RETRIES = 3;
@@ -84,6 +85,26 @@ export async function commitPaths(root, paths, message) {
   } catch (err) {
     throw gitError('git commit', err);
   }
+}
+
+// 任务路径内未提交改动（含新文件）的最新修改时间，没有改动时返回 null。
+// 用作工人的「活动心跳」：工人在写代码，文件就在变；token 用完窗口停了，文件也就不变了。
+export async function latestChangeTime(root, paths) {
+  const { stdout } = await run(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...paths]);
+  const entries = stdout.split('\0');
+  let latest = null;
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (entry.length < 4) continue;
+    if (entry[0] === 'R' || entry[0] === 'C') i++; // 重命名后面跟着原路径
+    try {
+      const { mtimeMs } = await stat(join(root, entry.slice(3)));
+      if (latest === null || mtimeMs > latest) latest = mtimeMs;
+    } catch {
+      // 已删除的文件没有修改时间，忽略
+    }
+  }
+  return latest === null ? null : Math.floor(latest);
 }
 
 function gitError(step, err) {

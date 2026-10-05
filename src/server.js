@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
-import { commitPaths, ensureGitignore, ensureGitRepo } from './git.js';
+import { commitPaths, ensureGitignore, ensureGitRepo, latestChangeTime } from './git.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 const MAX_BODY = 1024 * 1024;
@@ -247,9 +247,27 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
 
   const server = http.createServer((req, res) => { handle(req, res); });
 
-  const sweepTimer = setInterval(() => {
-    store.sweep((id) => waiters.has(id));
-  }, Math.min(30000, leaseMs / 3));
+  // 租约扫描。判掉线之前，先看工人任务路径里有没有比上次心跳更新的文件改动：
+  // 埋头写代码、很久没调用 ateam 命令的工人，只要文件还在变，就不算掉线。
+  let sweeping = false;
+  async function sweepTick() {
+    if (sweeping) return;
+    sweeping = true;
+    try {
+      for (const agent of store.state.agents) {
+        if (agent.status !== 'online' || !agent.currentTask || waiters.has(agent.id)) continue;
+        if (Date.now() - agent.lastSeenAt <= leaseMs) continue;
+        const task = store.state.tasks.find((t) => t.id === agent.currentTask);
+        if (!task || (task.status !== 'working' && task.status !== 'asking')) continue;
+        const ts = await latestChangeTime(root, task.paths).catch(() => null);
+        if (ts) store.noteActivity(agent.id, ts);
+      }
+      store.sweep((id) => waiters.has(id));
+    } finally {
+      sweeping = false;
+    }
+  }
+  const sweepTimer = setInterval(sweepTick, Math.min(30000, leaseMs / 3));
   sweepTimer.unref();
   server.on('close', () => clearInterval(sweepTimer));
 

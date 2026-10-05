@@ -77,6 +77,9 @@ function footer(agentId) {
   return [
     '',
     '---',
+    '**现在就开始做。** 不要先停下来向用户汇报「领到了任务」，也不要问用户要不要开始；直接读代码、改代码。',
+    '做完提交后立即回到 ateam wait，整个过程中不要结束本轮回复。',
+    '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
   ].join('\n');

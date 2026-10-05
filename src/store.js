@@ -411,6 +411,29 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
 
   // ---------- 租约 ----------
 
+  // 主管（或用户在看板上）确认原窗口没了，立即收回任务交给别人接手，不必等租约过期。
+  // 同时把原工人标记为掉线：原窗口万一又活过来，会收到「租约已失效」并重新加入，不会和接手的人抢同一个任务。
+  function reclaim(taskId, reason = '') {
+    const task = getTask(taskId);
+    if (task.status !== 'working' && task.status !== 'asking') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中或等待答复的任务可以收回。`);
+    }
+    const agent = task.assignee && findAgent(task.assignee);
+    const who = agent?.id ?? task.assignee ?? '原工人';
+    if (agent) {
+      agent.status = 'offline';
+      agent.currentTask = null;
+    }
+    task.status = 'pending';
+    task.handoff = true;
+    task.assignee = null;
+    reason = String(reason ?? '').trim();
+    addHistory(task, 'handoff', 'lead', `收回 ${who} 手上的任务，等待接手${reason ? `：${reason}` : ''}`);
+    emit('worker_offline', { agentId: agent?.id, taskId: task.id, text: `${who} 的任务 ${task.id} 已被收回，等待接手` });
+    changed();
+    return { task, agentId: agent?.id ?? null };
+  }
+
   function sweep(isWaiting) {
     let count = 0;
     for (const agent of state.agents) {
@@ -473,7 +496,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     createJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, cancel, report, sweep, noteActivity,
+    approve, reject, answer, release, cancel, reclaim, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

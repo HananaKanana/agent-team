@@ -166,6 +166,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
     'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),
+    'POST /api/reclaim': (b) => {
+      const { task, agentId } = store.reclaim(requireId(b), b.text ?? '');
+      // 原工人若正挂在 wait 上，立即告诉它租约已失效
+      const waiter = agentId && waiters.get(agentId);
+      if (waiter) {
+        finishWaiter(agentId, waiter, 400, { ok: false, code: 'LEASE_LOST', message: `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${task.role}` });
+      }
+      return { task, agentId };
+    },
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
     'GET /api/state': () => ({ state: store.state, pending: store.pendingActions(), root }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),

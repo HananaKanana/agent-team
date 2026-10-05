@@ -582,6 +582,7 @@ function renderDrawer(fresh) {
       el('dt', null, '路径'), el('dd', null, t.paths.map((p, i) => [i ? '、' : '', el('code', null, p)])),
       el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
       el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
+    (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
     t.status === 'pending' ? [
       el('h4', null, t.handoff ? '让新工人接手' : '找工人来做'),
       el('p', { class: 'hint' }, '在新的 WorkBuddy 窗口（可以换账号）里发这句话。已有同角色工人在线时不用开新窗口，它做完手上的会自动领。'),
@@ -611,6 +612,37 @@ function closeDrawer() {
   view.task = null;
   saveView();
   renderDrawer();
+}
+
+// 收回任务：两步确认，避免误点
+let reclaimArm = null;   // 已点过一次「收回任务」的任务编号
+let reclaimError = null;
+function reclaimBox(t) {
+  const armed = reclaimArm === t.id;
+  return [
+    el('h4', null, '原窗口没了？'),
+    el('p', { class: 'hint' }, armed
+      ? `确定收回？${agentLabel(t.assignee)} 会被标记为掉线，任务退回待领取，由同角色的工人接手，已有改动保留。`
+      : `如果 ${agentLabel(t.assignee)} 的窗口已经关了或 token 用完，不必等它超时掉线，可以立即收回，交给新工人接手。窗口只是停住了的话，用顶部的叫醒话就行。`),
+    el('div', { class: 'prompt' },
+      el('button', {
+        class: armed ? 'btn primary' : 'btn',
+        onclick: async (e) => {
+          e.stopPropagation();
+          if (!armed) { reclaimArm = t.id; reclaimError = null; renderDrawer(false); return; }
+          reclaimArm = null;
+          try {
+            const res = await fetch('/api/reclaim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, text: '用户在看板上收回' }) });
+            const out = await res.json();
+            reclaimError = out.ok ? null : out.message;
+          } catch { reclaimError = '连不上 ateam 服务。'; }
+          await poll();
+          renderDrawer(false);
+        },
+      }, armed ? '确认收回' : '收回任务'),
+      armed ? el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); reclaimArm = null; renderDrawer(false); } }, '取消') : null,
+      reclaimError ? el('span', { class: 'hint' }, reclaimError) : null),
+  ];
 }
 
 // 工人显示名：起了名字的显示名字，否则显示编号

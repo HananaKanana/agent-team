@@ -59,6 +59,7 @@ description: 作为 agent-team 主管：把用户需求拆成任务派给工人 
 |---|---|
 | `submitted` | review（第 4 节） |
 | `question` | `ateam answer T3 "<答复>"`。答不了就问用户 |
+| （用户说某个工人窗口没了） | `ateam reclaim T3`：立即收回任务交给同角色的其他工人接手，不必等租约过期；原工人会被标记掉线 |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色工人在线时，提醒用户开新窗口（换账号也可以），新工人会自动接手 |
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `worker_joined` `claimed` | 了解即可 |

@@ -142,6 +142,7 @@ agent-team/
 - **文件活动也算心跳**：判掉线之前，服务用 `git status` 查看该工人任务 `paths` 内未提交的改动，取最新的文件修改时间；比 `lastSeenAt` 新就把 `lastSeenAt` 推到那个时间。工人埋头写代码、很久不调用命令时不会被误判；token 用完后文件不再变化，照常掉线。
 - 服务每 30 秒扫描一次：`lastSeenAt` 超过租约时长（默认 15 分钟，可用 `--lease` 或 `ATEAM_LEASE_MIN` 改），并且没有挂起中的 `wait` 连接 → 工人标记为 `offline`。
   - 如果它持有任务：任务转为 `pending`，`handoff=true`，`assignee=null`，`pendingDelivery` 保留（接手的工人会收到），写一条 `handoff` 历史，并发出 `worker_offline` 事件。
+- **立即收回**（`ateam reclaim T3`，或看板任务详情里的「收回任务」按钮，两步确认）：确认原窗口没了时不必等租约过期。任务按掉线规则退回（`pending` + `handoff`），原工人同时标记为 `offline`，防止它复活后和接手的人抢任务。这是看板上唯一的写操作。
 - 掉线的工人再调用任何命令：返回「你的租约已失效，任务已被收回。请重新运行 ateam join」。
 - 接手的工人领到 `handoff` 任务时，输出里会有醒目的「接手任务」提示，并附上完整历史，要求它先看 `git log` 和 `git status` 了解现状。
 

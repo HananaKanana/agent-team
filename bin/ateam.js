@@ -34,6 +34,7 @@ const USAGE = `用法：ateam <命令> [参数]
   ateam task edit T3 [--title "..."] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
   ateam cancel T3 ["<原因>"]
+  ateam reclaim T3 ["<原因>"]
   ateam watch [--timeout 90] [--follow]
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
@@ -234,6 +235,12 @@ const commands = {
     const { task } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
     return `已修改任务 ${task.id}。${next}`;
+  },
+
+  async reclaim({ positional }) {
+    const id = requireArg(positional[0], '任务编号', 'ateam reclaim T3 "原窗口 token 用完了"');
+    const { task, agentId } = await request('POST', '/api/reclaim', { id, text: positional[1] ?? '' });
+    return `已收回 ${task.id}${agentId ? `（原工人 ${agentId} 已标记掉线）` : ''}，任务退回待领取，同角色（${task.role}）的空闲工人会以「接手任务」领走，在已有改动上继续。`;
   },
 
   async cancel({ positional }) {

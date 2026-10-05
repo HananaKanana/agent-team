@@ -175,7 +175,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     const agentId = body.as;
     // 先结束同一工人的旧挂起，再派发：否则旧挂起可能在下一轮 wake 里再收到同一个任务
     const old = waiters.get(agentId);
-    if (old) finishWaiter(agentId, old, 200, { ok: true, result: null });
+    if (old) finishWaiter(agentId, old, 200, { ok: true, result: null, waiting: store.waitingInfo(agentId) });
 
     const result = store.nextFor(agentId); // 先 touch，掉线的工人在这里拿到 LEASE_LOST
     if (result) return send(res, 200, { ok: true, result });
@@ -184,7 +184,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     waiter.timer = setTimeout(() => {
       try {
         store.touch(agentId);
-        finishWaiter(agentId, waiter, 200, { ok: true, result: null });
+        finishWaiter(agentId, waiter, 200, { ok: true, result: null, waiting: store.waitingInfo(agentId) });
       } catch (err) {
         finishWaiter(agentId, waiter, 400, { ok: false, code: err.code ?? 'INTERNAL', message: err.message });
       }

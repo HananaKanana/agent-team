@@ -210,6 +210,26 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return { kind: isHandoff ? 'handoff' : 'task', task, delivery };
   }
 
+  // 「暂无任务」时告诉工人在等什么：本角色还有哪些任务在等依赖、等的是谁
+  function waitingInfo(agentId) {
+    const agent = findAgent(agentId);
+    if (!agent) return null;
+    if (agent.currentTask) {
+      const task = state.tasks.find((t) => t.id === agent.currentTask);
+      return task ? { holding: { id: task.id, status: task.status } } : null;
+    }
+    const blocked = state.tasks
+      .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && !depsMet(t))
+      .map((t) => ({
+        id: t.id, title: t.title,
+        waitingFor: t.dependsOn
+          .map((id) => state.tasks.find((x) => x.id === id))
+          .filter((d) => d && d.status !== 'approved')
+          .map((d) => ({ id: d.id, status: d.status })),
+      }));
+    return { blocked };
+  }
+
   // 工人当前持有的任务，且必须处于 working
   function workingTaskOf(agentId) {
     const agent = touch(agentId);
@@ -448,7 +468,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     leaseMs,
     createJob, addTask, editTask,
     join, touch,
-    nextFor, progress, ask, taskForSubmit, recordSubmit,
+    nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     approve, reject, answer, release, cancel, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };

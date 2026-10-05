@@ -19,6 +19,7 @@ description: 作为 agent-team 的工人加入团队、领取并完成开发任�
 ## 运行命令的规则
 
 - 所有 `ateam` 命令都**直接前台运行**。不要加后台参数，不要设置超时参数。`ateam wait` 最多挂起 90 秒就会自己返回。
+- **一条命令只运行一次 `ateam wait`。** 不要写 `for`/`while` 循环，不要加 `sleep`，不要接管道（`| head`、`$(...)` 等）。你的命令有 120 秒超时，循环里连续等几次一定会超时，结果就丢了。等待本身已经在服务端完成，你只需要一次次重复调用。
 - **不要自己执行 `git commit`、`git add`、`git push`**。提交由 `ateam submit` 完成，服务会只提交你任务允许的路径。
 - 你可以用 `git log`、`git status`、`git diff`、`git show` 查看现状。
 

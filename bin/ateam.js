@@ -175,7 +175,7 @@ const commands = {
   async wait({ flags }) {
     const as = requireAs(flags);
     const data = await request('POST', '/api/wait', { as }, holdSeconds(flags));
-    return formatWait(data?.result ?? null, as);
+    return formatWait(data?.result ?? null, as, data?.waiting);
   },
 
   async progress({ flags, positional }) {

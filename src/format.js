@@ -87,11 +87,31 @@ function deliverySection(delivery) {
   return `\n\n## 未送达的消息\n\n**${DELIVERY_LABEL[delivery.kind] ?? delivery.kind}**：\n\n${delivery.text}`;
 }
 
-export function formatWait(result, agentId) {
+const HOLDING_REASON = {
+  submitted: '已提交，等主管 review',
+  asking: '已提问，等主管答复',
+};
+
+function waitingLines(waiting) {
+  if (!waiting) return [];
+  if (waiting.holding) {
+    const why = HOLDING_REASON[waiting.holding.status] ?? waiting.holding.status;
+    return [`你手上的任务 ${waiting.holding.id} ${why}。`];
+  }
+  if (!waiting.blocked?.length) return ['你这个角色目前没有待领取的任务，等主管派新任务。'];
+  return [
+    '你这个角色的任务都在等依赖完成：',
+    ...waiting.blocked.map((t) => `- ${t.id} ${t.title}：等 ${t.waitingFor.map((d) => `${d.id}（${STATUS[d.status] ?? d.status}）`).join('、')}`),
+  ];
+}
+
+export function formatWait(result, agentId, waiting) {
   if (!result) {
+    const why = waitingLines(waiting);
     return [
       `暂无任务。请立即再次运行：ateam wait --as ${agentId}`,
       '',
+      ...(why.length ? [...why, ''] : []),
       '这是正常的等待，不是工作结束：主管随时可能派任务、打回或答复。',
       '不要结束本轮，不要向用户总结或提问，直接再次运行上面的命令。只有用户明确叫你停下时才停。',
     ].join('\n');

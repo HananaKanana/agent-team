@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ateam 命令行：主管和工人与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
+// ateam 命令行：主管和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -21,7 +21,7 @@ const USAGE = `用法：ateam <命令> [参数]
 服务
   ateam serve [--port 7700] [--lease 15]
 
-工人
+worker
   ateam join --role <角色> [--name <名字>]
   ateam wait --as <ID> [--timeout 90]
   ateam progress --as <ID> "<笔记>"
@@ -92,7 +92,7 @@ function readTextFile(path, flag) {
 }
 
 function requireAs(flags) {
-  if (!flags.as) fail('缺少 --as <工人编号>。如果还没加入团队，请先运行 ateam join --role <角色>。');
+  if (!flags.as) fail('缺少 --as <worker 编号>。如果还没加入团队，请先运行 ateam join --role <角色>。');
   return flags.as;
 }
 
@@ -160,7 +160,7 @@ const commands = {
     } catch (err) {
       fail(err.message);
     }
-    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，工人的改动必须在这个目录里）`;
+    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）`;
   },
 
   async join({ flags }) {
@@ -168,7 +168,7 @@ const commands = {
     const { agent } = await request('POST', '/api/join', { role, name: flags.name ?? '' });
     const named = agent.name ? `，名字 ${agent.name}` : '';
     return [
-      `已加入团队。你的工人编号是 **${agent.id}**（角色 ${agent.role}${named}）。之后每条命令都要带 --as ${agent.id}。`,
+      `已加入团队。你的 worker 编号是 **${agent.id}**（角色 ${agent.role}${named}）。之后每条命令都要带 --as ${agent.id}。`,
       '',
       `下一步：ateam wait --as ${agent.id}`,
     ].join('\n');
@@ -240,7 +240,7 @@ const commands = {
   async reclaim({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam reclaim T3 "原窗口 token 用完了"');
     const { task, agentId } = await request('POST', '/api/reclaim', { id, text: positional[1] ?? '' });
-    return `已收回 ${task.id}${agentId ? `（原工人 ${agentId} 已标记掉线）` : ''}，任务退回待领取，同角色（${task.role}）的空闲工人会以「接手任务」领走，在已有改动上继续。`;
+    return `已收回 ${task.id}${agentId ? `（原 worker ${agentId} 已标记掉线）` : ''}，任务退回待领取，同角色（${task.role}）的空闲 worker 会以「接手任务」领走，在已有改动上继续。`;
   },
 
   async cancel({ positional }) {
@@ -281,7 +281,7 @@ const commands = {
     if (task.status === 'held') {
       return `已打回 ${task.id}（第 ${task.rejectCount} 次），任务已转为挂起。请改写任务（ateam task edit ${task.id} ...）后 ateam release ${task.id}，或自己修改后 ateam approve ${task.id}。`;
     }
-    const where = task.status === 'working' ? `修改意见将送达 ${task.assignee}` : '原工人已掉线，任务退回待领取，修改意见会交给接手的工人';
+    const where = task.status === 'working' ? `修改意见将送达 ${task.assignee}` : '原 worker 已掉线，任务退回待领取，修改意见会交给接手的 worker';
     return `已打回 ${task.id}（第 ${task.rejectCount} 次），${where}。`;
   },
 
@@ -289,7 +289,7 @@ const commands = {
     const id = requireArg(positional[0], '任务编号', 'ateam answer T3 "<答复>"');
     const text = requireArg(positional[1], '答复', `ateam answer ${id} "用 ISO 8601 格式"`);
     const { task } = await request('POST', '/api/answer', { id, text });
-    const where = task.status === 'working' ? `将送达 ${task.assignee}` : '提问者已掉线，答复会交给接手的工人';
+    const where = task.status === 'working' ? `将送达 ${task.assignee}` : '提问者已掉线，答复会交给接手的 worker';
     return `已答复 ${task.id}，${where}。`;
   },
 

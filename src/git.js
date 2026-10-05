@@ -88,7 +88,7 @@ export async function commitPaths(root, paths, message) {
 }
 
 // 任务路径内未提交改动（含新文件）的最新修改时间，没有改动时返回 null。
-// 用作工人的「活动心跳」：工人在写代码，文件就在变；token 用完窗口停了，文件也就不变了。
+// 用作 worker 的「活动心跳」：worker 在写代码，文件就在变；token 用完窗口停了，文件也就不变了。
 export async function latestChangeTime(root, paths) {
   const { stdout } = await run(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...paths]);
   const entries = stdout.split('\0');

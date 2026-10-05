@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 做一个本地任务协调服务 `ateam`（服务 + 命令行 + 看板 + 两份 skill），让 Claude Code 主管带 WorkBuddy 工人协作开发，支持掉线接手和 review 闭环。
+**Goal:** 做一个本地任务协调服务 `ateam`（服务 + 命令行 + 看板 + 两份 skill），让 Claude Code 主管带 worker 协作开发，支持掉线接手和 review 闭环。
 
 **Architecture:** `src/store.js` 是纯逻辑状态机（时钟可注入，不碰网络和磁盘）；`src/server.js` 用 Node 内置 `http` 把它暴露成 JSON 接口，负责长轮询、租约扫描、落盘和 git 提交；`bin/ateam.js` 是唯一的客户端，把 JSON 渲染成给大模型读的 markdown；看板是一个静态 HTML 文件，轮询 `/api/state`。
 
@@ -20,7 +20,7 @@
 - 看板每 **3 秒**刷新一次。
 - 命令行连不上服务时重试约 60 秒（每 2 秒一次），然后输出 `错误：服务不可达，请通知用户。` 并以退出码 2 退出；业务错误退出码为 1。
 - 所有错误输出以 `错误：` 开头，并写明下一步该做什么。
-- ID 格式：需求 `J1`、任务 `T1`（自增）；工人 `<角色前两个字母小写>-<4位十六进制>`，例如 `fe-7f3a`。
+- ID 格式：需求 `J1`、任务 `T1`（自增）；worker `<角色前两个字母小写>-<4位十六进制>`，例如 `fe-7f3a`。
 - 提交信息格式：`[T3] <总结>`。
 - 状态文件：`<项目根>/.ateam/state.json`，先写 `state.json.tmp` 再 rename。
 - **不写测试代码**（用户全局约定）。每个任务的验证方式：`node --check` 检查语法，加上在临时目录（scratchpad）里写的一次性探测脚本，跑完删除，不进仓库。仓库根的 `node --test` 照常运行（目前没有测试文件）。
@@ -30,10 +30,10 @@
 以下情况设计文档没有专门写，但最容易在实际使用中出问题。没有测试网，所以由 Task 8 的端到端模拟逐条覆盖，并在代码审阅时重点看：
 
 1. **任务路径在首次提交时还不存在，或者部分路径不存在**（比如 `paths: ["web/", "shared/types.ts"]` 而 `shared/` 没建）→ `git add` 报 pathspec 不匹配时，应该跳过不存在的路径，用存在的路径正常提交，而不是整个提交失败。
-2. **同一个工人有两个挂起的 `wait`**（命令行重试或模型重复调用）→ 新连接替换旧连接，旧连接立即返回「暂无任务」，同一个任务不能送达两次。
-3. **工人的 `wait` 连接被客户端断开**（WorkBuddy 窗口关闭、进程被杀）→ 服务在连接 `close` 时移除这个挂起，否则会被一直当作在线，永远不掉线。
-4. **主管 `approve` 了一个被别人依赖的任务**，而依赖它的工人正挂在 `wait` 上 → 挂起的工人必须立即被唤醒并领到任务，不能等到 90 秒超时。
-5. **服务重启时有工人正挂在 `wait` 上**（连接被重置）→ 命令行把 `ECONNRESET` 和 `ECONNREFUSED` 一样当作可重试错误，服务回来后自动重新挂起。
+2. **同一个 worker 有两个挂起的 `wait`**（命令行重试或模型重复调用）→ 新连接替换旧连接，旧连接立即返回「暂无任务」，同一个任务不能送达两次。
+3. **worker 的 `wait` 连接被客户端断开**（agent 窗口关闭、进程被杀）→ 服务在连接 `close` 时移除这个挂起，否则会被一直当作在线，永远不掉线。
+4. **主管 `approve` 了一个被别人依赖的任务**，而依赖它的 worker 正挂在 `wait` 上 → 挂起的 worker 必须立即被唤醒并领到任务，不能等到 90 秒超时。
+5. **服务重启时有 worker 正挂在 `wait` 上**（连接被重置）→ 命令行把 `ECONNRESET` 和 `ECONNREFUSED` 一样当作可重试错误，服务回来后自动重新挂起。
 
 ---
 
@@ -43,20 +43,20 @@
 |---|---|
 | `package.json` | 包信息、bin、engines |
 | `src/errors.js` | `AteamError` |
-| `src/store.js` | 状态机：需求、任务、工人、事件；派发、租约、review |
+| `src/store.js` | 状态机：需求、任务、worker、事件；派发、租约、review |
 | `src/persist.js` | `loadState` / `saveState` |
 | `src/git.js` | `ensureGitRepo`、`ensureGitignore`、`commitPaths` |
 | `src/server.js` | HTTP 路由、长轮询、租约定时扫描、落盘、托管看板 |
 | `src/format.js` | JSON 渲染成 markdown 文本 |
 | `bin/ateam.js` | 命令行：参数解析、HTTP 调用、重试、退出码 |
 | `src/dashboard.html` | 看板 |
-| `skills/ateam-worker/SKILL.md` | 工人 skill |
+| `skills/ateam-worker/SKILL.md` | worker skill |
 | `skills/ateam-lead/SKILL.md` | 主管 skill |
 | `README.md` | 安装与使用 |
 
 ---
 
-### Task 1: 脚手架 + 状态机（需求、任务、工人、事件）
+### Task 1: 脚手架 + 状态机（需求、任务、worker、事件）
 
 **Files:**
 - Create: `package.json`, `.gitignore`（内容：`node_modules/`、`.ateam/`）, `src/errors.js`, `src/store.js`
@@ -73,7 +73,7 @@
     - `addTask({ jobId, title, role, paths: string[], description = '', acceptance: string[] = [], dependsOn: string[] = [] }) → task`。校验：需求存在；`dependsOn` 里的任务都存在；`paths` 非空。需求状态从 `planning` 变为 `active`。写一条 `created` 历史。
     - `editTask(taskId, patch: { title?, description?, acceptance?, paths?, dependsOn? }) → task`：只允许 `pending` 或 `held` 状态；写一条 `edited` 历史。
     - `join(role) → agent`：生成 ID，状态为 `online`，发出 `worker_joined` 事件。
-    - `touch(agentId) → agent`：刷新 `lastSeenAt`。工人不存在或已 `offline` 时抛 `LEASE_LOST`，提示「你的租约已失效，任务已被收回。请重新运行 ateam join --role <role>」。
+    - `touch(agentId) → agent`：刷新 `lastSeenAt`。worker 不存在或已 `offline` 时抛 `LEASE_LOST`，提示「你的租约已失效，任务已被收回。请重新运行 ateam join --role <role>」。
     - `getTask(id) → task`（找不到抛 `NOT_FOUND`）、`getJob(id) → job`
     - `pendingActions() → task[]`：状态为 `submitted`、`asking`、`held` 的任务
     - `takeEvents() → event[]`：返回 `delivered:false` 的事件，并标记为 `true`
@@ -83,7 +83,7 @@
 
 - [x] **Step 2: 在 `src/store.js` 实现以上方法**
 
-  工人 ID 用 `crypto.randomBytes(2).toString('hex')`，冲突时重新生成。所有时间戳都取自 `now()`。
+  worker ID 用 `crypto.randomBytes(2).toString('hex')`，冲突时重新生成。所有时间戳都取自 `now()`。
 
 - [x] **Step 3: 一次性探测**
 
@@ -110,29 +110,29 @@ git commit -m "feat: store skeleton (jobs, tasks, agents, events)"
     - 规则 1：任务分配给我且有 `pendingDelivery` → kind 取 `pendingDelivery.kind`（`rejected` 或 `answer`），送达后清空。
     - 规则 2：已分配给我且状态为 `working` → `resume`。
     - 规则 3：领取新任务 → `handoff=true` 时 kind 为 `handoff`（同时带上残留的 `pendingDelivery` 放在 `delivery` 里，然后清空），否则为 `task`。领取时 `handoff` 置回 `false`，写 `claimed` 历史，发出 `claimed` 事件（事件 text 注明是否接手）。
-    - 工人处于 `asking` 或没有可派发任务时 → 返回 `null`。
+    - worker 处于 `asking` 或没有可派发任务时 → 返回 `null`。
   - `progress(agentId, text)`：任务必须属于我且状态为 `working`；写 `progress` 历史。
   - `ask(agentId, text)`：`working` → `asking`；写 `asked` 历史；发出 `question` 事件。
   - `taskForSubmit(agentId) → task`：校验任务属于我且状态为 `working`，供 server 在执行 git 之前调用。
   - `recordSubmit(agentId, summary, commit: string|null) → task`：再校验一次；`commit` 不为空时追加到 `commits`；状态变为 `submitted`；写 `submitted` 历史；发出 `submitted` 事件。
-  - `approve(taskId, note = '')`：只允许 `submitted` 或 `held` 状态；变为 `approved`；工人的 `currentTask` 清空；写 `approved` 历史。
+  - `approve(taskId, note = '')`：只允许 `submitted` 或 `held` 状态；变为 `approved`；worker 的 `currentTask` 清空；写 `approved` 历史。
   - `reject(taskId, text)`：只允许 `submitted`；`rejectCount++`；写 `rejected` 历史。然后：
-    - 若 `rejectCount >= 3` → 变为 `held`，工人的 `currentTask` 清空，发出 `task_held` 事件。
-    - 否则若原工人在线 → 变为 `working`，`pendingDelivery = {kind:'rejected', text}`。
+    - 若 `rejectCount >= 3` → 变为 `held`，worker 的 `currentTask` 清空，发出 `task_held` 事件。
+    - 否则若原 worker 在线 → 变为 `working`，`pendingDelivery = {kind:'rejected', text}`。
     - 否则 → 变为 `pending`，`handoff=true`，`assignee=null`，`pendingDelivery` 同上。
   - `answer(taskId, text)`：允许 `asking`（→ `working`），或 `pending && handoff`（状态不变）；`pendingDelivery = {kind:'answer', text}`；写 `answered` 历史。
   - `release(taskId)`：`held` → `pending`；`rejectCount = 0`；`assignee = null`；写 `released` 历史。
   - `report(jobId, markdown)`：该需求所有任务都必须是 `approved`，否则抛 `BAD_STATE`，并列出未通过的任务编号；需求状态变为 `awaiting_acceptance`。
-  - `sweep(isWaiting: (agentId) => boolean) → number`：把超时且不在挂起中的在线工人标记为 `offline`。若其持有的任务状态为 `working` 或 `asking` → 变为 `pending`，`handoff=true`，`assignee=null`，写 `handoff` 历史。发出 `worker_offline` 事件，事件 text 注明被收回的任务编号。返回本次标记为掉线的工人数量。
+  - `sweep(isWaiting: (agentId) => boolean) → number`：把超时且不在挂起中的在线 worker 标记为 `offline`。若其持有的任务状态为 `working` 或 `asking` → 变为 `pending`，`handoff=true`，`assignee=null`，写 `handoff` 历史。发出 `worker_offline` 事件，事件 text 注明被收回的任务编号。返回本次标记为掉线的 worker 数量。
   - 依赖判断：`dependsOn` 里的任务全部 `approved` 才可领取。
 
 - [x] **Step 1: 实现以上方法**
 
-  工人「持有的任务」以 `agent.currentTask` 为准，并与 `task.assignee` 保持双向一致：领取时双方都设置，任务通过、挂起、收回时双方都清空。
+  worker「持有的任务」以 `agent.currentTask` 为准，并与 `task.assignee` 保持双向一致：领取时双方都设置，任务通过、挂起、收回时双方都清空。
 
   补充两条规则：
-  - 规则 3（领取新任务）只在 `agent.currentTask` 为空时才生效。所以交付后处于 `submitted` 的工人会一直挂起等待 review 结果，返工自然会派回给他本人。
-  - `sweep` 把工人标记为掉线时，总是清空 `agent.currentTask`。对于 `submitted` 状态的任务，`assignee` 保持不变；如果之后被打回，就按「原工人已掉线」的分支处理，进入 handoff。
+  - 规则 3（领取新任务）只在 `agent.currentTask` 为空时才生效。所以交付后处于 `submitted` 的 worker 会一直挂起等待 review 结果，返工自然会派回给他本人。
+  - `sweep` 把 worker 标记为掉线时，总是清空 `agent.currentTask`。对于 `submitted` 状态的任务，`assignee` 保持不变；如果之后被打回，就按「原 worker 已掉线」的分支处理，进入 handoff。
 
 - [x] **Step 2: 一次性探测**
 
@@ -144,10 +144,10 @@ git commit -m "feat: store skeleton (jobs, tasks, agents, events)"
   5. `recordSubmit` 后 `reject`，`nextFor` 得到 `rejected`
   6. 第 2、3 次打回后状态为 `held`；`release` 后为 `pending`，`rejectCount` 为 0
   7. `t += 2000; sweep(() => false)` 返回 1，任务状态为 `pending` 且 `handoff`；旧 ID 调 `nextFor` 抛 `LEASE_LOST`
-  8. 新工人 `nextFor` 得到 `handoff`
+  8. 新 worker `nextFor` 得到 `handoff`
   9. 依赖 T1 的 T2 在 T1 `approve` 之前不可领取，之后可以领取
   10. `report` 在还有未通过的任务时抛 `BAD_STATE`
-  11. `sweep(() => true)` 不会让挂起中的工人掉线
+  11. `sweep(() => true)` 不会让挂起中的 worker 掉线
 
   运行：`node probe2.mjs`，无断言失败即通过。删除 probe。
 
@@ -230,11 +230,11 @@ git commit -m "feat: state persistence and path-scoped git commit"
 
 **长轮询**：
 - `waiters: Map<agentId, {res, timer}>`。`/api/wait` 先立即调用 `nextFor`，结果不为空就直接返回；否则挂起。
-  - 同一个工人已经有挂起时，旧的立即以 `{result:null}` 返回（Review Focus #2）。
+  - 同一个 worker 已经有挂起时，旧的立即以 `{result:null}` 返回（Review Focus #2）。
   - 在 `res.on('close')` 时移除挂起（Review Focus #3）。
   - 超时（`timeout` 秒，默认 90，上限 110）后，先 `touch`，再返回 `{result:null}`。
 - `watchers: Set<{res, timer}>`。`/api/watch` 有未送达的事件就立即返回；否则挂起，超时后返回 `{events:[]}`。
-- `onChange` 时：先 `saveState`；然后对每个挂起的工人尝试 `nextFor`，不为空就返回（Review Focus #4）；最后如果有未送达的事件，就用 `takeEvents()` 的结果返回给**所有**挂起的 watcher。注意：唤醒过程本身也会触发 `onChange`，要用一个重入标记避免递归。
+- `onChange` 时：先 `saveState`；然后对每个挂起的 worker 尝试 `nextFor`，不为空就返回（Review Focus #4）；最后如果有未送达的事件，就用 `takeEvents()` 的结果返回给**所有**挂起的 watcher。注意：唤醒过程本身也会触发 `onChange`，要用一个重入标记避免递归。
 - `submit` 流程：`taskForSubmit` → 若 `noChanges` 则 `commit=null`；否则 `commitPaths(root, task.paths, '[T3] '+summary)`，结果为 `nothing` 时抛 `INVALID`，提示「指定路径下没有改动；如确实无需改代码，请加 --no-changes」→ `recordSubmit`。
 - 定时扫描：`setInterval(() => store.sweep(id => waiters.has(id)), min(30000, leaseMs/3))`，并 `unref()`。
 
@@ -245,11 +245,11 @@ git commit -m "feat: state persistence and path-scoped git commit"
 - [x] **Step 2: 一次性探测**
 
   在 scratchpad 里写 `probe4.mjs`：在临时 git 仓库上 `startServer({ root, port: 7799, leaseMin: 0.05 })`，用 `fetch` 验证：
-  1. 两个工人加入；fe 挂起 `wait`；主管建需求和任务后，fe 的 `wait` 在 1 秒内返回任务（不必等超时）
+  1. 两个 worker 加入；fe 挂起 `wait`；主管建需求和任务后，fe 的 `wait` 在 1 秒内返回任务（不必等超时）
   2. 主管 `watch` 能收到 `claimed`
   3. 写文件后 `submit` 返回 sha
-  4. 同一个工人并发两个 `wait`，第一个立即得到 `null`
-  5. 用 `AbortController` 中止一个 `wait` 后，等待超过租约时长，该工人变为 `offline`
+  4. 同一个 worker 并发两个 `wait`，第一个立即得到 `null`
+  5. 用 `AbortController` 中止一个 `wait` 后，等待超过租约时长，该 worker 变为 `offline`
   6. 重启服务（关掉再 `startServer`）后 `/api/state` 内容一致
 
   删除 probe。
@@ -285,12 +285,12 @@ git commit -m "feat: http server with long-poll wait/watch and lease sweep"
 - `--desc-file` 和 `--file` 相对于当前工作目录读取。
 - 剩下的第一个位置参数作为 text、summary 或 title。
 
-**`formatWait` 的输出**（工人 skill 依赖这些标题，必须一字不差）：
+**`formatWait` 的输出**（worker skill 依赖这些标题，必须一字不差）：
 
 - `null` → `暂无任务。请立即再次运行：ateam wait --as <ID>`
 - `task` → `# 新任务 <ID>：<标题>`，后接 `formatTask` 正文
 - `resume` → `# 继续任务 <ID>：<标题>`，后接正文
-- `handoff` → `# ⚠ 接手任务 <ID>：<标题>`，然后一段说明「上一位工人中途掉线。先阅读下方历史，再运行 git log --oneline -5 和 git status 了解现状，在已有改动基础上继续，不要从头做起。」，后接正文（含完整历史）。如果带有 `delivery`，再附一节「未送达的消息」。
+- `handoff` → `# ⚠ 接手任务 <ID>：<标题>`，然后一段说明「上一位 worker 中途掉线。先阅读下方历史，再运行 git log --oneline -5 和 git status 了解现状，在已有改动基础上继续，不要从头做起。」，后接正文（含完整历史）。如果带有 `delivery`，再附一节「未送达的消息」。
 - `rejected` → `# 打回 <ID>（第 n 次）`，后接修改意见原文和任务正文
 - `answer` → `# 答复 <ID>`，后接答复原文
 - 每种有任务的输出最后都加两行：`进度：ateam progress --as <ID> "..."`、`完成：ateam submit --as <ID> "<做了什么、怎么验证的>"`
@@ -331,7 +331,7 @@ git commit -m "feat: ateam CLI and LLM-oriented output formatting"
 - Consumes: `GET /api/state` → `{state, pending}`
 
 页面内容（spec §8）：
-- **工人栏**：在线工人正常显示，掉线工人显示为灰色；「上次心跳 N 分钟前」。
+- **worker 栏**：在线 worker 正常显示，掉线 worker 显示为灰色；「上次心跳 N 分钟前」。
 - **需求列表**：进度条（`approved` 数 / 总数）；review 统计：
   - review 次数 = 所有任务的 `approved` 和 `rejected` 历史条数之和
   - 一次通过率 = `rejectCount === 0` 的已通过任务数 / 已通过任务数
@@ -376,7 +376,7 @@ git commit -m "feat: read-only dashboard"
 **`ateam-worker/SKILL.md`**
 - frontmatter：
   - `name: ateam-worker`
-  - `description: 作为 agent-team 的工人加入团队、领取并完成开发任务。当用户让你「加入 ateam」「作为前端/后端工人」「连接 agent-team 接任务」时使用。`
+  - `description: 作为 agent-team 的 worker 加入团队、领取并完成开发任务。当用户让你「加入 ateam」「作为前端/后端 worker」「连接 agent-team 接任务」时使用。`
 - 正文覆盖 spec §7.1 的 9 条，另加：
   - 「看到哪个标题就做什么」的对照表：`# 新任务`、`# 继续任务`、`# ⚠ 接手任务`、`# 打回`、`# 答复`、`暂无任务`、`错误：`
   - 所有 `ateam` 命令都直接前台运行，不要加后台参数，不要设置超时参数，因为命令自身会在 90 秒内返回（spec §10.1）
@@ -386,14 +386,14 @@ git commit -m "feat: read-only dashboard"
 **`ateam-lead/SKILL.md`**
 - frontmatter：
   - `name: ateam-lead`
-  - `description: 作为 agent-team 主管：把用户需求拆成任务派给工人 agent，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。`
+  - `description: 作为 agent-team 主管：把用户需求拆成任务派给 worker，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。`
 - 正文覆盖 spec §7.2 的 6 条，另加：
   - 用 Monitor 工具运行 `ateam watch --follow` 做后台监听（`timeout_ms` 设为最大值，到期后重新启动）
   - 写任务描述的模板：背景、接口约定、要做的事、不要做的事、验收标准
   - review 用的具体命令：`ateam show T3`、`git show <sha>`、`git status --short`
   - 汇报模板
 
-**`README.md`**：说明它是什么；安装（`npm link`、两份 skill 的软链命令）；启动（`cd 项目 && ateam serve`）；开工流程（开几个 WorkBuddy 窗口，对它们说「使用 ateam-worker skill，角色 frontend」；对 Claude Code 说「使用 ateam-lead skill，需求是……」）；换号接手的操作；看板地址；环境变量 `ATEAM_URL`、`ATEAM_LEASE_MIN`。
+**`README.md`**：说明它是什么；安装（`npm link`、两份 skill 的软链命令）；启动（`cd 项目 && ateam serve`）；开工流程（开几个 agent 窗口，对它们说「使用 ateam-worker skill，角色 frontend」；对 Claude Code 说「使用 ateam-lead skill，需求是……」）；换号接手的操作；看板地址；环境变量 `ATEAM_URL`、`ATEAM_LEASE_MIN`。
 
 - [x] **Step 1: 写两份 SKILL.md 和 README.md**
 - [x] **Step 2: 核对**
@@ -422,8 +422,8 @@ git commit -m "docs: worker/lead skills and README"
   2. be 领 T1、写文件、提交；主管打回；be 收到 `# 打回` 后修改再提交；主管通过
   3. fe 此前一直挂在 `wait` 上，应在 T1 通过后立刻领到 T2（Review Focus #4）
   4. fe 提问；主管回答；fe 收到 `# 答复`
-  5. fe 停止调用命令，等待超过租约时长；`ateam status` 显示 T2 退回待领取；新工人 `join` 后 `wait` 得到 `# ⚠ 接手任务`
-  6. 新工人提交；主管通过；`report` 成功
+  5. fe 停止调用命令，等待超过租约时长；`ateam status` 显示 T2 退回待领取；新 worker `join` 后 `wait` 得到 `# ⚠ 接手任务`
+  6. 新 worker 提交；主管通过；`report` 成功
   7. 另建一个任务，连续打回 3 次后状态为 `held`
   8. 在 fe 挂起 `wait` 时重启服务，`wait` 自动重连，不报错（Review Focus #5）
   9. `git log --oneline` 里每个提交都以 `[T` 开头，且只包含对应任务的路径
@@ -438,12 +438,12 @@ git commit -m "docs: worker/lead skills and README"
 - [x] **Step 3: 写 `docs/manual-checklist.md`**（交给用户）
 
   1. `npm link` 后，在任意目录能运行 `ateam`
-  2. 两份 skill 已软链；WorkBuddy 能识别 `ateam-worker`，Claude Code 能识别 `ateam-lead`
+  2. 两份 skill 已软链；agent 能识别 `ateam-worker`，Claude Code 能识别 `ateam-lead`
   3. 在真实项目里运行 `ateam serve`，浏览器打开看板
-  4. 开 2 个 WorkBuddy 窗口（前端、后端），它们加入后看板显示 2 个在线工人
+  4. 开 2 个 agent 窗口（前端、后端），它们加入后看板显示 2 个在线 worker
   5. 对 Claude Code 提一个小需求，看到任务拆分、派发、并行开发
   6. 看板上能看到进度笔记实时增加、review 打回和通过、review 统计
-  7. 关掉一个 WorkBuddy 窗口（模拟 token 用完），约 15 分钟后看板显示掉线、任务退回；开新窗口加入后，它接手并继续
+  7. 关掉一个 agent 窗口（模拟 token 用完），约 15 分钟后看板显示掉线、任务退回；开新窗口加入后，它接手并继续
   8. 收到 Claude Code 的最终汇报，看板上显示汇报内容
   9. 看板在深色模式和窄屏下显示正常
 

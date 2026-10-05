@@ -1,5 +1,5 @@
 // 把任务、事件、状态渲染成给大模型读的 markdown 文本。
-// 工人 skill 依赖 formatWait 的标题文本，修改时要同步 skills/ateam-worker/SKILL.md。
+// worker skill 依赖 formatWait 的标题文本，修改时要同步 skills/ateam-worker/SKILL.md。
 
 const STATUS = {
   pending: '待领取',
@@ -131,7 +131,7 @@ export function formatWait(result, agentId, waiting) {
       break;
     case 'handoff':
       out = `# ⚠ 接手任务 ${title}\n\n`
-        + '上一位工人中途掉线。先阅读下方历史，再运行 git log --oneline -5 和 git status 了解现状，在已有改动基础上继续，不要从头做起。\n\n'
+        + '上一位 worker 中途掉线。先阅读下方历史，再运行 git log --oneline -5 和 git status 了解现状，在已有改动基础上继续，不要从头做起。\n\n'
         + `${formatTask(task)}${deliverySection(delivery)}`;
       break;
     case 'rejected':
@@ -152,7 +152,7 @@ const EVENT_HINT = {
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,
-  worker_offline: (e) => (e.taskId ? `任务 ${e.taskId} 已退回待领取；用 ateam status 确认，需要时提醒用户开新的工人窗口` : ''),
+  worker_offline: (e) => (e.taskId ? `任务 ${e.taskId} 已退回待领取；用 ateam status 确认，需要时提醒用户开新的 worker 窗口` : ''),
 };
 
 export function formatEventLine(e) {
@@ -197,7 +197,7 @@ export function formatStatus(state, pending, jobId, root) {
   const undelivered = state.events.filter((e) => !e.delivered).length;
   if (undelivered) lines.push('', `另有 ${undelivered} 条未读事件：ateam watch`);
 
-  lines.push('', '## 工人', '');
+  lines.push('', '## worker', '');
   const agents = state.agents.filter((a) => !a.hidden);
   if (agents.length) {
     for (const a of agents) {
@@ -207,7 +207,7 @@ export function formatStatus(state, pending, jobId, root) {
       lines.push(`- ${who}，角色 ${a.role}，${online}${task}，上次心跳 ${ago(a.lastSeenAt, now)}`);
     }
   } else {
-    lines.push('（还没有工人加入）');
+    lines.push('（还没有 worker 加入）');
   }
 
   lines.push('', '## 需求', '');

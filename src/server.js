@@ -117,7 +117,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     send(watcher.res, 200, body);
   }
 
-  // git 操作串行执行，两个工人的提交排队，不会交错
+  // git 操作串行执行，两个 worker 的提交排队，不会交错
   let gitQueue = Promise.resolve();
   function serial(fn) {
     const run = gitQueue.then(fn, fn);
@@ -169,7 +169,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     'POST /api/agents/hide': (b) => ({ hidden: store.hideAgents(b.ids) }),
     'POST /api/reclaim': (b) => {
       const { task, agentId } = store.reclaim(requireId(b), b.text ?? '');
-      // 原工人若正挂在 wait 上，立即告诉它租约已失效
+      // 原 worker 若正挂在 wait 上，立即告诉它租约已失效
       const waiter = agentId && waiters.get(agentId);
       if (waiter) {
         finishWaiter(agentId, waiter, 400, { ok: false, code: 'LEASE_LOST', message: `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${task.role}` });
@@ -183,11 +183,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
 
   function handleWait(body, res) {
     const agentId = body.as;
-    // 先结束同一工人的旧挂起，再派发：否则旧挂起可能在下一轮 wake 里再收到同一个任务
+    // 先结束同一 worker 的旧挂起，再派发：否则旧挂起可能在下一轮 wake 里再收到同一个任务
     const old = waiters.get(agentId);
     if (old) finishWaiter(agentId, old, 200, { ok: true, result: null, waiting: store.waitingInfo(agentId) });
 
-    const result = store.nextFor(agentId); // 先 touch，掉线的工人在这里拿到 LEASE_LOST
+    const result = store.nextFor(agentId); // 先 touch，掉线的 worker 在这里拿到 LEASE_LOST
     if (result) return send(res, 200, { ok: true, result });
 
     const waiter = { res, timer: null };
@@ -258,8 +258,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
 
   const server = http.createServer((req, res) => { handle(req, res); });
 
-  // 租约扫描。判掉线之前，先看工人任务路径里有没有比上次心跳更新的文件改动：
-  // 埋头写代码、很久没调用 ateam 命令的工人，只要文件还在变，就不算掉线。
+  // 租约扫描。判掉线之前，先看 worker 任务路径里有没有比上次心跳更新的文件改动：
+  // 埋头写代码、很久没调用 ateam 命令的 worker，只要文件还在变，就不算掉线。
   let sweeping = false;
   async function sweepTick() {
     if (sweeping) return;

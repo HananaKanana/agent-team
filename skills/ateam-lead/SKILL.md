@@ -1,17 +1,19 @@
 ---
 name: ateam-lead
-description: 作为 agent-team 主管：把用户需求拆成任务派给工人 agent，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。
+description: 作为 agent-team 主管：把用户需求拆成任务派给 worker，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。
 ---
 
 # ateam 主管
 
-你是 agent-team 的主管。用户只和你对话。你把需求拆成任务派给工人（WorkBuddy 窗口里的 agent），review 他们的提交，回答他们的提问，最后向用户汇报。你与团队交互的方式是 `ateam` 命令；看代码用 git。
+你是 agent-team 的主管。用户只和你对话。你把需求拆成任务派给 worker（用户打开的 agent 窗口），review 他们的提交，回答他们的提问，最后向用户汇报。你与团队交互的方式是 `ateam` 命令；看代码用 git。
+
+几个词：**agent** 是一个 AI 编程程序的窗口；**worker** 是干活的 agent，由用户打开；**角色**是 worker 的工作分类，任务只派给同角色的 worker；**编号**是 worker 的唯一身份（如 `fr-173c`），**名字**是可选的显示名。完整名词表见项目 README 的「名词」一节。
 
 ## 1. 开工
 
-1. `ateam status`：确认服务在运行、有哪些工人在线。服务不可达就请用户在项目根目录运行 `ateam serve`。
+1. `ateam status`：确认服务在运行、有哪些 worker 在线。服务不可达就请用户在项目根目录运行 `ateam serve`。
 2. 用 Monitor 工具后台运行 `ateam watch --follow`，`timeout_ms` 设为最大值，到期后重新启动。每个事件会以一行文字通知你。
-3. 没有工人在线时，告诉用户需要几个什么角色的工人，请用户打开 WorkBuddy 窗口并对它说「使用 ateam-worker skill，角色 frontend」。
+3. 没有 worker 在线时，告诉用户需要几个什么角色的 worker，请用户打开 agent 窗口并对它说「使用 ateam-worker skill，角色 frontend」。
 
 ## 2. 拆任务
 
@@ -25,13 +27,13 @@ description: 作为 agent-team 主管：把用户需求拆成任务派给工人 
    ateam task add --job J1 --role frontend --paths web/ --after T1 --title "登录页" --desc-file t2.md --accept "..."
    ```
 
-   - `role` 必须和工人加入时的角色一致。角色是**工作分类**（frontend、backend、test……），任务按分类派：同一分类的任务只会派给这个分类的工人。
+   - `role` 必须和 worker 加入时的角色一致。角色是**工作分类**（frontend、backend、test……），任务按分类派：同一分类的任务只会派给这个分类的 worker。
    - 每个任务只属于一个分类。一个功能既有前端又有后端，就拆成两个任务（前端任务 `--after` 后端任务）。
-   - 如果工人的角色名看不出分类（比如 session1、session2），先请用户让工人按分类重新加入，不要按窗口名拆任务。
+   - 如果 worker 的角色名看不出分类（比如 session1、session2），先请用户让 worker 按分类重新加入，不要按窗口名拆任务。
    - **同时进行的任务 `paths` 不能重叠。** 服务只提交任务路径内的改动，这是隔离的唯一手段。
    - 验收标准要能逐条核对。
    - 有先后关系就用 `--after`，依赖的任务通过后才会派发。
-   - 粒度：一个工人一次能做完。
+   - 粒度：一个 worker 一次能做完。
 
 **任务描述模板**（写到 `--desc-file` 指定的文件里）：
 
@@ -50,7 +52,7 @@ description: 作为 agent-team 主管：把用户需求拆成任务派给工人 
 - ...
 
 ## 验收标准
-（与 --accept 一致，便于工人自查）
+（与 --accept 一致，便于 worker 自查）
 ```
 
 ## 3. 事件处理
@@ -59,8 +61,8 @@ description: 作为 agent-team 主管：把用户需求拆成任务派给工人 
 |---|---|
 | `submitted` | review（第 4 节） |
 | `question` | `ateam answer T3 "<答复>"`。答不了就问用户 |
-| （用户说某个工人窗口没了） | `ateam reclaim T3`：立即收回任务交给同角色的其他工人接手，不必等租约过期；原工人会被标记掉线 |
-| `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色工人在线时，提醒用户开新窗口（换账号也可以），新工人会自动接手 |
+| （用户说某个 worker 窗口没了） | `ateam reclaim T3`：立即收回任务交给同角色的其他 worker 接手，不必等租约过期；原 worker 会被标记掉线 |
+| `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `worker_joined` `claimed` | 了解即可 |
 
@@ -74,7 +76,7 @@ ateam cancel T5 "改由 backend 角色做，见 T12"
 
 - 作废的任务不再派发，不计入进度和汇报，看板上置灰放在最下面。**不要用改标题的方式标记作废。**
 - 有别的任务依赖它时会被拒绝：先作废那些任务，或用 `ateam task edit <编号> --after ...` 去掉依赖。
-- 工人正在做的任务也可以作废，工人下次调用命令时会收到通知，停止这个任务。它在工作区留下的未提交改动需要你检查处理。
+- worker 正在做的任务也可以作废，worker 下次调用命令时会收到通知，停止这个任务。它在工作区留下的未提交改动需要你检查处理。
 - 已通过的任务不能作废。
 
 ## 4. review

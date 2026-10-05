@@ -5,21 +5,23 @@
 
 ## 1. 目标
 
-让一个「主管 agent」（Claude Code）带领若干「工人 agent」（WorkBuddy + DeepSeek V4.1 Flash）在同一台电脑、同一个项目目录里协作开发。
+让一个「主管 agent」（Claude Code）带领若干「worker」（agent 窗口，目前用 WorkBuddy + DeepSeek V4.1 Flash）在同一台电脑、同一个项目目录里协作开发。
 
-- 用户只和主管对话：提需求 → 主管拆任务 → 派给工人 → 工人完成后回报 → 主管 review（不通过则打回）→ 全部通过后主管向用户汇报 → 用户测试验收。
-- 工人是用户手动打开的常驻 WorkBuddy 窗口。工人随时可能因 token 用完而中途消失，用户换账号开新窗口后，新工人要能接着干，由主管负责重新安排。
+- 用户只和主管对话：提需求 → 主管拆任务 → 派给 worker → worker 完成后回报 → 主管 review（不通过则打回）→ 全部通过后主管向用户汇报 → 用户测试验收。
+- worker 是用户手动打开的常驻 agent 窗口。worker 随时可能因 token 用完而中途消失，用户换账号开新窗口后，新 worker 要能接着干，由主管负责重新安排。
 - 用户通过网页看板全局查看：做了哪些工作、完成情况、review 情况。
+
+名词定义见 README 的「名词」一节：agent 指一个 AI 编程程序的窗口；主管和 worker 都是 agent，主管带团队，worker 干活。
 
 **成功标准**
 
 1. 一主两工（前端 + 后端）能跑完一个需求的完整闭环：拆分 → 并行开发 → 提交 → review（含至少一次打回）→ 汇报。
-2. 工人中途掉线后，新开的工人能接手同一任务，并在已有改动的基础上继续，不从头做起。
+2. worker 中途掉线后，新开的 worker 能接手同一任务，并在已有改动的基础上继续，不从头做起。
 3. 看板能看清每个需求、每个任务的状态，以及完整的 review 历史。
 
 **不做的事（YAGNI）**
 
-- 不负责启动或管理 agent 进程。工人窗口由用户手动打开。
+- 不负责启动或管理 agent 进程。worker 窗口由用户手动打开。
 - 看板只读，不在网页上派任务或审批。
 - 不做账号和鉴权：服务只监听 127.0.0.1。
 - 不做多项目：一个项目起一个服务。
@@ -37,15 +39,15 @@
             └──────────────────────────┘
                    ▲  ateam 命令行
        ┌───────────┴───────────┐
- WorkBuddy #1（frontend）  WorkBuddy #2（backend）
+ agent #1（frontend）  agent #2（backend）
  （加载 ateam-worker skill）
 ```
 
 | 组成 | 职责 |
 |---|---|
 | `ateam serve` | 在项目根目录启动服务。HTTP + 长轮询，默认端口 7700；托管看板页面；状态持久化到 `.ateam/state.json` |
-| `ateam` 命令行 | 主管和工人与服务交互的**唯一**方式。输出是给大模型读的 markdown 文本 |
-| `ateam-worker` skill | 教工人：加入 → 等任务 → 干活 → 写进度 → 提交 → 再等 |
+| `ateam` 命令行 | 主管和 worker 与服务交互的**唯一**方式。输出是给大模型读的 markdown 文本 |
+| `ateam-worker` skill | 教 worker：加入 → 等任务 → 干活 → 写进度 → 提交 → 再等 |
 | `ateam-lead` skill | 教主管：建需求 → 拆任务 → 监听事件 → review → 回答提问 → 写汇报 |
 | 看板 | 单个 HTML 文件 + 原生 JS，每 3 秒拉取一次 `/api/state` |
 
@@ -82,14 +84,14 @@ agent-team/
   }],
   tasks: [{
     id: "T3", jobId: "J1", title,
-    role: "frontend",              // 自由字符串，与工人 join 时的角色匹配
+    role: "frontend",              // 自由字符串，与 worker join 时的角色匹配
     paths: ["web/"],               // 允许改动的路径；submit 只提交这些路径
     description: "markdown",       // 含接口约定
     acceptance: ["...", "..."],    // 验收标准
     dependsOn: ["T1"],             // 依赖的任务全部 approved 后才可领取
     status: "pending" | "working" | "asking" | "submitted" | "approved" | "held" | "cancelled",
     assignee: null | "fe-7f3a",
-    handoff: false,                // true = 上一任工人掉线，此任务等待接手
+    handoff: false,                // true = 上一任 worker 掉线，此任务等待接手
     rejectCount: 0,
     commits: ["a1b2c3d", ...],     // 历次提交
     pendingDelivery: null | { kind: "rejected" | "answer", text },  // 待送达给 assignee 的消息
@@ -107,7 +109,7 @@ agent-team/
 
 `history.type` 的取值：`created` `claimed` `progress` `asked` `answered` `submitted` `approved` `rejected` `handoff` `held` `released` `edited` `cancelled`。
 
-**作废**（`ateam cancel T3 ["原因"]`）：除 `approved` 外任何状态都可作废；仍有未作废的任务依赖它时拒绝。作废后不再派发，不计入进度和汇报；持有它的工人下次调用命令时收到「已被主管作废」的提示。看板上的任务时间线直接渲染 `history`。
+**作废**（`ateam cancel T3 ["原因"]`）：除 `approved` 外任何状态都可作废；仍有未作废的任务依赖它时拒绝。作废后不再派发，不计入进度和汇报；持有它的 worker 下次调用命令时收到「已被主管作废」的提示。看板上的任务时间线直接渲染 `history`。
 
 ## 4. 任务生命周期
 
@@ -117,34 +119,34 @@ agent-team/
     ▲                            │  ▲                 │
     │ 租约过期（handoff=true）    │  │ 答复送达         │ reject
     └────────────────────────────┘  │                 ▼
-                     ask ▼          │        原工人在线 → working（带打回意见）
-                       asking ──answer        原工人掉线 → pending（handoff=true）
+                     ask ▼          │        原 worker 在线 → working（带打回意见）
+                       asking ──answer        原 worker 掉线 → pending（handoff=true）
                                               第 3 次打回 → held（等主管处理）
 ```
 
 需求状态：没有任务时为 `planning`，有任务时为 `active`，主管提交汇报后为 `awaiting_acceptance`。只有该需求下所有任务都 `approved`，才能提交汇报。
 
-### 4.1 派发规则（工人调用 `wait` 时）
+### 4.1 派发规则（worker 调用 `wait` 时）
 
 按优先级：
 
 1. 有分配给我、并且带有 `pendingDelivery` 的任务（打回意见或提问答复）→ 送达，清空 `pendingDelivery`，状态为 `working`。
-2. 已经分配给我、状态为 `working` 的任务（比如工人重复调用了 `wait`）→ 重新返回这个任务的完整内容。
+2. 已经分配给我、状态为 `working` 的任务（比如 worker 重复调用了 `wait`）→ 重新返回这个任务的完整内容。
 3. 我的角色下、`pending`、依赖都已满足的任务：先给 `handoff=true` 的，再按编号从小到大 → 领取，`assignee=我`，状态为 `working`。如果该任务带有 `pendingDelivery`（上一任没收到的打回意见或答复），一并送达后清空。
 4. 都没有 → 挂起，直到有可派发的任务或超时（默认 90 秒，可用 `--timeout` 改；见 §10.1）。超时返回「暂无任务，请立即再次调用 ateam wait」。
 
-一个工人同一时间只持有一个任务。工人处于 `asking` 时调用 `wait`，会一直挂起，直到答复送达。
+一个 worker 同一时间只持有一个任务。worker 处于 `asking` 时调用 `wait`，会一直挂起，直到答复送达。
 
 ### 4.2 租约与掉线
 
-- 工人每次调用 `ateam ... --as ID` 都会刷新 `lastSeenAt`。`wait` 挂起期间，连接存在也视为在线。
+- worker 每次调用 `ateam ... --as ID` 都会刷新 `lastSeenAt`。`wait` 挂起期间，连接存在也视为在线。
 - **不用后台进程发心跳**：token 用完时窗口停了，后台进程还会继续报活，那样就检测不到掉线。
-- **文件活动也算心跳**：判掉线之前，服务用 `git status` 查看该工人任务 `paths` 内未提交的改动，取最新的文件修改时间；比 `lastSeenAt` 新就把 `lastSeenAt` 推到那个时间。工人埋头写代码、很久不调用命令时不会被误判；token 用完后文件不再变化，照常掉线。
-- 服务每 30 秒扫描一次：`lastSeenAt` 超过租约时长（默认 15 分钟，可用 `--lease` 或 `ATEAM_LEASE_MIN` 改），并且没有挂起中的 `wait` 连接 → 工人标记为 `offline`。
-  - 如果它持有任务：任务转为 `pending`，`handoff=true`，`assignee=null`，`pendingDelivery` 保留（接手的工人会收到），写一条 `handoff` 历史，并发出 `worker_offline` 事件。
-- **立即收回**（`ateam reclaim T3`，或看板任务详情里的「收回任务」按钮，两步确认）：确认原窗口没了时不必等租约过期。任务按掉线规则退回（`pending` + `handoff`），原工人同时标记为 `offline`，防止它复活后和接手的人抢任务。这是看板上唯一的写操作。
-- 掉线的工人再调用任何命令：返回「你的租约已失效，任务已被收回。请重新运行 ateam join」。
-- 接手的工人领到 `handoff` 任务时，输出里会有醒目的「接手任务」提示，并附上完整历史，要求它先看 `git log` 和 `git status` 了解现状。
+- **文件活动也算心跳**：判掉线之前，服务用 `git status` 查看该 worker 任务 `paths` 内未提交的改动，取最新的文件修改时间；比 `lastSeenAt` 新就把 `lastSeenAt` 推到那个时间。worker 埋头写代码、很久不调用命令时不会被误判；token 用完后文件不再变化，照常掉线。
+- 服务每 30 秒扫描一次：`lastSeenAt` 超过租约时长（默认 15 分钟，可用 `--lease` 或 `ATEAM_LEASE_MIN` 改），并且没有挂起中的 `wait` 连接 → worker 标记为 `offline`。
+  - 如果它持有任务：任务转为 `pending`，`handoff=true`，`assignee=null`，`pendingDelivery` 保留（接手的 worker 会收到），写一条 `handoff` 历史，并发出 `worker_offline` 事件。
+- **立即收回**（`ateam reclaim T3`，或看板任务详情里的「收回任务」按钮，两步确认）：确认原窗口没了时不必等租约过期。任务按掉线规则退回（`pending` + `handoff`），原 worker 同时标记为 `offline`，防止它复活后和接手的人抢任务。这是看板上唯一的写操作。
+- 掉线的 worker 再调用任何命令：返回「你的租约已失效，任务已被收回。请重新运行 ateam join」。
+- 接手的 worker 领到 `handoff` 任务时，输出里会有醒目的「接手任务」提示，并附上完整历史，要求它先看 `git log` 和 `git status` 了解现状。
 
 ### 4.3 打回上限
 
@@ -167,11 +169,11 @@ agent-team/
 |---|---|
 | `ateam serve [--port 7700] [--lease 15]` | 在当前目录（项目根）启动服务，状态写到 `./.ateam/`，并自动把 `.ateam/` 加进 `.gitignore` |
 
-### 5.2 工人
+### 5.2 worker
 
 | 命令 | 说明 |
 |---|---|
-| `ateam join --role <role>` | 返回工人编号，比如 `fe-7f3a`，前缀取角色的前两个字母 |
+| `ateam join --role <role>` | 返回 worker 编号，比如 `fe-7f3a`，前缀取角色的前两个字母 |
 | `ateam wait --as ID [--timeout 90]` | 按 §4.1 返回内容 |
 | `ateam progress --as ID "<笔记>"` | 写进度笔记，同时刷新心跳 |
 | `ateam ask --as ID "<问题>"` | 任务转为 `asking`，发出 `question` 事件 |
@@ -184,11 +186,11 @@ git add -A -- <paths...>
 git commit -m "[T3] <总结>" -- <paths...>
 ```
 
-带路径的 `git commit` 只提交这些路径，即使别的工人在暂存区里放了东西，也不会被一起提交。提交完成后，把提交号记到任务上，任务转为 `submitted`，发出 `submitted` 事件。
+带路径的 `git commit` 只提交这些路径，即使别的 worker 在暂存区里放了东西，也不会被一起提交。提交完成后，把提交号记到任务上，任务转为 `submitted`，发出 `submitted` 事件。
 
 - 指定路径下没有任何改动时报错。如果确实不需要改代码（比如只是回答问题后确认无需改动），可以加 `--no-changes`。
-- 服务单进程按顺序处理请求，两个工人的提交自然排队，不会互相冲突。如果主管恰好也在执行 git 命令导致 `index.lock` 冲突，服务会短暂等待后重试，最多 3 次。
-- 由服务来提交，而不是让工人自己敲 git 命令：一是**强制**路径隔离，二是工人的工作目录不一定是项目根目录，三是减少模型出错。
+- 服务单进程按顺序处理请求，两个 worker 的提交自然排队，不会互相冲突。如果主管恰好也在执行 git 命令导致 `index.lock` 冲突，服务会短暂等待后重试，最多 3 次。
+- 由服务来提交，而不是让 worker 自己敲 git 命令：一是**强制**路径隔离，二是 worker 的工作目录不一定是项目根目录，三是减少模型出错。
 
 ### 5.3 主管
 
@@ -202,8 +204,8 @@ git commit -m "[T3] <总结>" -- <paths...>
 | `ateam watch --follow` | 一直运行，每个事件输出一行，用于 Claude Code 的 Monitor 后台监听 |
 | `ateam approve T3 ["<备注>"]` | 通过 |
 | `ateam reject T3 "<修改意见>"` | 打回（规则见 §4、§4.3） |
-| `ateam answer T3 "<答复>"` | 回答提问。答复存入 `pendingDelivery`；`asking` 的任务转为 `working`。如果提问者已掉线（任务为 `pending` 且 `handoff=true`），答复同样存入 `pendingDelivery`，交给接手的工人 |
-| `ateam status [--job J1]` | 全局概况：工人在线情况、各任务状态，以及置顶的「待你处理」列表（`submitted`、`asking`、`held` 的任务） |
+| `ateam answer T3 "<答复>"` | 回答提问。答复存入 `pendingDelivery`；`asking` 的任务转为 `working`。如果提问者已掉线（任务为 `pending` 且 `handoff=true`），答复同样存入 `pendingDelivery`，交给接手的 worker |
+| `ateam status [--job J1]` | 全局概况：worker 在线情况、各任务状态，以及置顶的「待你处理」列表（`submitted`、`asking`、`held` 的任务） |
 | `ateam show T3` | 任务详情、完整历史、提交列表 |
 | `ateam report --job J1 --file report.md` | 提交汇报，需求转为 `awaiting_acceptance` |
 
@@ -215,12 +217,12 @@ git commit -m "[T3] <总结>" -- <paths...>
 
 - 所有 agent 在同一个项目目录下工作。主管拆任务时，保证同时进行的任务 `paths` 互不重叠，典型做法是前端 `web/`、后端 `server/`。
 - `submit` 只提交任务 `paths` 内的改动（§5.2），所以每个提交都只属于一个任务，主管用 `git show <sha>` review 时看到的就是这个任务的改动。
-- 越界改动（工人改了 `paths` 以外的文件）不会被提交，会留在工作区。主管 review 时用 `git status` 能发现。skill 里明令禁止越界。
+- 越界改动（worker 改了 `paths` 以外的文件）不会被提交，会留在工作区。主管 review 时用 `git status` 能发现。skill 里明令禁止越界。
 - 以后如果需要更强的隔离，可以给任务加一个 `workdir` 字段，指向独立的 worktree，协议不用变。
 
 ## 7. Skills
 
-### 7.1 ateam-worker（给 WorkBuddy）
+### 7.1 ateam-worker（给 agent）
 
 要点：
 
@@ -238,11 +240,11 @@ git commit -m "[T3] <总结>" -- <paths...>
 
 要点：
 
-1. **开工**：确认服务在运行（`ateam status`），确认工人在线情况。用 Monitor 启动 `ateam watch --follow` 进行后台监听。
+1. **开工**：确认服务在运行（`ateam status`），确认 worker 在线情况。用 Monitor 启动 `ateam watch --follow` 进行后台监听。
 2. **拆任务**：
    - 先定接口约定（接口路径、请求和响应格式），写进相关任务的描述。
    - 每个任务都要写明 `role`、`paths`（同时进行的任务不能重叠）、可以逐条核对的验收标准，以及必要的依赖。
-   - 粒度控制在一个工人一次能做完。
+   - 粒度控制在一个 worker 一次能做完。
 3. **review**：`ateam show T3` → `git show <sha>` → 逐条核对验收标准 → 跑项目已有的测试 → 用 `git status` 检查有没有越界的残留改动 → `approve` 或 `reject`。打回意见要具体到文件和问题。
 4. **事件处理**：`question` → `answer`；`worker_offline` → 在 `ateam status` 里确认任务已退回，需要时提醒用户开新窗口；`task_held` → 改写任务或自己修。
 5. **收尾**：所有任务通过后，写汇报（做了什么、每个任务 review 了几轮、已知问题、请用户重点测试的地方），然后 `ateam report`，并在对话里告诉用户。
@@ -252,13 +254,13 @@ git commit -m "[T3] <总结>" -- <paths...>
 
 - 在本项目目录运行 `npm link`，之后全局都能用 `ateam` 命令。
 - 把 `skills/ateam-lead/` 复制或软链到 `~/.claude/skills/`。
-- 把 `skills/ateam-worker/` 复制或软链到 `~/.workbuddy/skills/ateam-worker/`（WorkBuddy 用户级 skill 目录，格式与 Claude Code 相同：`SKILL.md` = YAML frontmatter（`name`、`description`）+ Markdown 正文）。
+- 把 `skills/ateam-worker/` 复制或软链到 `~/.workbuddy/skills/ateam-worker/`（agent 的用户级 skill 目录，格式与 Claude Code 相同：`SKILL.md` = YAML frontmatter（`name`、`description`）+ Markdown 正文）。
 
 ## 8. 看板
 
 `GET /` 返回 `dashboard.html`，页面每 3 秒拉取一次 `GET /api/state`（完整状态快照）。
 
-- **工人栏**：编号、角色、在线或掉线（掉线显示为灰色）、当前任务、上次心跳是多久前。
+- **worker 栏**：编号、角色、在线或掉线（掉线显示为灰色）、当前任务、上次心跳是多久前。
 - **需求列表**：标题、状态、进度条（已通过数 / 总数）、review 统计（review 总次数、一次通过率、打回次数）。
 - **任务看板**（选中某个需求后）：按 待领取 / 进行中 / 返工中（`working` 且 `rejectCount>0`）/ 等待答复 / 待 review / 已通过 / 已挂起 分列。卡片上显示角色、处理人、打回次数，接手过的任务带「接手」标记。
 - **任务详情**（点开卡片）：描述、验收标准、依赖、提交列表，以及按时间排列的 `history`（进度、提问答复、交付、review 结论和意见、交接）。
@@ -268,21 +270,21 @@ git commit -m "[T3] <总结>" -- <paths...>
 
 | 情况 | 处理 |
 |---|---|
-| 服务重启 | 启动时读取 `state.json`。所有工人的 `lastSeenAt` 不变，租约照常计算；挂起的 `wait` 连接断开后，命令行会自动重试并重新挂起 |
+| 服务重启 | 启动时读取 `state.json`。所有 worker 的 `lastSeenAt` 不变，租约照常计算；挂起的 `wait` 连接断开后，命令行会自动重试并重新挂起 |
 | 写盘中途崩溃 | 先写 `state.json.tmp` 再 rename，保证落盘是原子操作 |
 | 服务不可达 | 命令行重试约 60 秒，之后退出码为 2，并输出「服务不可达，请通知用户」 |
 | 操作不合法 | 比如提交不属于自己的任务、对 `pending` 任务执行 approve。返回明确的错误，并说明当前状态和正确做法 |
 | 项目目录不是 git 仓库 | `serve` 报错退出，提示先运行 `git init`（`submit` 依赖 git） |
 | 端口被占用 | `serve` 报错退出，提示用 `--port` 换端口，并设置 `ATEAM_URL` |
-| 两个工人同时提交 | 服务按顺序执行 git，自然排队（§5.2） |
+| 两个 worker 同时提交 | 服务按顺序执行 git，自然排队（§5.2） |
 | 并发请求 | 单进程按顺序处理，不存在重复派发 |
 | 主管会话重开 | `ateam status` 的「待你处理」列表 + 未送达的事件 |
 
-## 10. 已确认事项（WorkBuddy 环境）
+## 10. 已确认事项（agent 环境）
 
 ### 10.1 命令超时
 
-WorkBuddy 的 bash 工具：前台命令默认超时 120 秒（`BASH_DEFAULT_TIMEOUT_MS`）；显式传 timeout 最多可到 600 秒（`BASH_MAX_TIMEOUT_MS`）。超时后，命令会被自动转为后台任务，工人拿不到输出；或者在不支持后台时被 SIGTERM 杀掉（退出码 137）。
+agent 的 bash 工具：前台命令默认超时 120 秒（`BASH_DEFAULT_TIMEOUT_MS`）；显式传 timeout 最多可到 600 秒（`BASH_MAX_TIMEOUT_MS`）。超时后，命令会被自动转为后台任务，worker 拿不到输出；或者在不支持后台时被 SIGTERM 杀掉（退出码 137）。
 
 因此 `wait` 和 `watch` 的默认挂起时间定为 **90 秒**，保证不依赖模型每次都正确传 timeout 参数，也能稳定拿到结果。命令行内部的「服务不可达重试」只在连不上服务时触发，不会和挂起时间叠加。
 
@@ -292,12 +294,12 @@ WorkBuddy 的 bash 工具：前台命令默认超时 120 秒（`BASH_DEFAULT_TIM
 
 ### 10.3 Shell 执行
 
-WorkBuddy 有 bash 工具，可以直接运行 `ateam` 命令，不需要包一层 MCP。工人的工作目录不一定是项目根目录，git 操作统一由服务执行（§5.2）。
+agent 有 bash 工具，可以直接运行 `ateam` 命令，不需要包一层 MCP。worker 的工作目录不一定是项目根目录，git 操作统一由服务执行（§5.2）。
 
 ## 11. 测试与验证
 
 遵循用户的全局约定：**不新写测试代码**。
 
 - **代码审阅**：顺着调用链推演状态机的每一条转移路径。
-- **一次性模拟**：在临时目录里写脚本，直接驱动 `store.js`（注入时钟），再加上一个真实服务进程配合 `ateam` 命令行，模拟一主两工：派任务 → 领取 → 提交 → 打回 → 再提交 → 通过；工人掉线 → 接手；提问 → 答复；连续 3 次打回 → held。跑完删除，不进仓库。
-- **手工核对清单**（交给用户）：真实的 WorkBuddy 窗口加入、等任务、提交；关掉一个窗口，模拟 token 用完，换新窗口接手；看板上各个视图显示正确；最终汇报显示正确。
+- **一次性模拟**：在临时目录里写脚本，直接驱动 `store.js`（注入时钟），再加上一个真实服务进程配合 `ateam` 命令行，模拟一主两工：派任务 → 领取 → 提交 → 打回 → 再提交 → 通过；worker 掉线 → 接手；提问 → 答复；连续 3 次打回 → held。跑完删除，不进仓库。
+- **手工核对清单**（交给用户）：真实的 agent 窗口加入、等任务、提交；关掉一个窗口，模拟 token 用完，换新窗口接手；看板上各个视图显示正确；最终汇报显示正确。

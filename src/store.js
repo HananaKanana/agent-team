@@ -1,4 +1,4 @@
-// 纯逻辑状态机：需求、任务、工人、事件。不碰网络和磁盘，时钟可注入。
+// 纯逻辑状态机：需求、任务、worker、事件。不碰网络和磁盘，时钟可注入。
 import { randomBytes } from 'node:crypto';
 import { AteamError } from './errors.js';
 
@@ -136,7 +136,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return task;
   }
 
-  // ---------- 工人 ----------
+  // ---------- worker ----------
 
   // name：用户给窗口起的好记名字（比如「账号A」），只用于显示；编号 id 仍然唯一
   function join(role, name = '') {
@@ -205,16 +205,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     agent.currentTask = task.id;
     const delivery = task.pendingDelivery ?? undefined;
     task.pendingDelivery = null;
-    addHistory(task, 'claimed', agent.id, isHandoff ? '接手任务（上一位工人掉线）' : '领取任务');
+    addHistory(task, 'claimed', agent.id, isHandoff ? '接手任务（上一位 worker 掉线）' : '领取任务');
     emit('claimed', {
       taskId: task.id, agentId: agent.id,
-      text: isHandoff ? `${agent.id} 接手了 ${task.id}（上一位工人掉线）` : `${agent.id} 领取了 ${task.id}`,
+      text: isHandoff ? `${agent.id} 接手了 ${task.id}（上一位 worker 掉线）` : `${agent.id} 领取了 ${task.id}`,
     });
     changed();
     return { kind: isHandoff ? 'handoff' : 'task', task, delivery };
   }
 
-  // 「暂无任务」时告诉工人在等什么：本角色还有哪些任务在等依赖、等的是谁
+  // 「暂无任务」时告诉 worker 在等什么：本角色还有哪些任务在等依赖、等的是谁
   function waitingInfo(agentId) {
     const agent = findAgent(agentId);
     if (!agent) return null;
@@ -234,7 +234,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return { blocked };
   }
 
-  // 工人当前持有的任务，且必须处于 working
+  // worker 当前持有的任务，且必须处于 working
   function workingTaskOf(agentId) {
     const agent = touch(agentId);
     if (!agent.currentTask) {
@@ -361,7 +361,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     task.status = 'pending';
     task.rejectCount = 0;
     task.assignee = null;
-    // 已有提交时按接手处理，让下一位工人先看历史和 git 现状
+    // 已有提交时按接手处理，让下一位 worker 先看历史和 git 现状
     task.handoff = task.commits.length > 0;
     addHistory(task, 'released', 'lead', '重新放回待领取');
     changed();
@@ -412,14 +412,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
   // ---------- 租约 ----------
 
   // 主管（或用户在看板上）确认原窗口没了，立即收回任务交给别人接手，不必等租约过期。
-  // 同时把原工人标记为掉线：原窗口万一又活过来，会收到「租约已失效」并重新加入，不会和接手的人抢同一个任务。
+  // 同时把原 worker 标记为掉线：原窗口万一又活过来，会收到「租约已失效」并重新加入，不会和接手的人抢同一个任务。
   function reclaim(taskId, reason = '') {
     const task = getTask(taskId);
     if (task.status !== 'working' && task.status !== 'asking') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中或等待答复的任务可以收回。`);
     }
     const agent = task.assignee && findAgent(task.assignee);
-    const who = agent?.id ?? task.assignee ?? '原工人';
+    const who = agent?.id ?? task.assignee ?? '原 worker';
     if (agent) {
       agent.status = 'offline';
       agent.currentTask = null;
@@ -434,7 +434,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return { task, agentId: agent?.id ?? null };
   }
 
-  // 从看板和 status 里移除掉线的工人。记录保留（标记 hidden），历史里的编号和名字照常显示。
+  // 从看板和 status 里移除掉线的 worker。记录保留（标记 hidden），历史里的编号和名字照常显示。
   function hideAgents(ids) {
     const want = new Set(Array.isArray(ids) ? ids : []);
     let count = 0;

@@ -73,14 +73,6 @@ header.top h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .0
 .worker.offline { color: var(--muted); opacity: .6; }
 button.worker { cursor: pointer; }
 button.worker:hover { border-color: var(--muted); }
-/* 可能停住：整片淡黄底，右侧一个小标记 */
-.worker.stale { background: color-mix(in srgb, var(--asking) 10%, var(--bg)); border-color: color-mix(in srgb, var(--asking) 40%, var(--line)); }
-.worker.stale .dot { background: var(--asking); }
-.worker .warn {
-  margin-left: 2px; padding: 3px 7px; border-radius: 999px;
-  background: var(--asking); color: #fff; font-size: 11px; font-weight: 600;
-}
-@media (prefers-color-scheme: dark) { .worker .warn { color: #101512; } }
 .helper-btn { margin-left: auto; }
 /* 提示词面板：顶部右侧弹出 */
 .helper {
@@ -403,16 +395,15 @@ function renderWorkers() {
   const online = agents.filter((a) => a.status === 'online');
   const offline = agents.filter((a) => a.status !== 'online');
   const chips = online.map((a) => {
-    const stale = isStale(a);
     return el('button', {
       type: 'button',
-      class: `worker online${stale ? ' stale' : ''}`,
-      title: `${agentLabel(a.id)}，心跳 ${ago(a.lastSeenAt)}。${stale ? '好几分钟没有动静，可能停住了，点击查看叫醒它的提示词' : '点击查看提示词'}`,
+      class: 'worker online',
+      title: `${agentLabel(a.id)}，心跳 ${ago(a.lastSeenAt)}。点击查看提示词`,
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: a.id }; renderHelper(); },
     },
     el('span', { class: 'dot' }), el('b', null, a.name || a.id), el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     el('span', { class: 'task' }, a.currentTask || '空闲'),
-    stale ? el('span', { class: 'warn' }, `${quiet(a.lastSeenAt)}没动静`) : null);
+  );
   });
   if (offline.length) {
     chips.push(el('span', { class: 'worker offline', title: offline.map((a) => `${agentLabel(a.id)}，${a.role}`).join('\n') },
@@ -424,10 +415,6 @@ function renderWorkers() {
 
 // 在线工人超过 3 分钟没有任何动静（挂着 wait 的工人最多 90 秒就会刷新一次心跳）→ 多半停住了
 const STALE_MS = 3 * 60 * 1000;
-function quiet(ts) {
-  const m = Math.floor((Date.now() - ts) / 60000);
-  return m < 60 ? `${m} 分钟` : `${Math.floor(m / 60)} 小时`;
-}
 function isStale(a) {
   return a.status === 'online' && Date.now() - a.lastSeenAt > STALE_MS;
 }
@@ -466,7 +453,7 @@ function renderHelper() {
   fill(panel,
     el('div', { class: 'drawer-tools' }, el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); } }, '关闭')),
     el('h4', null, '叫醒停住的工人'),
-    el('p', { class: 'hint' }, '工人停下来不动时（标签变黄、显示「可能停了」），在它自己的 WorkBuddy 窗口里发这句话。'),
+    el('p', { class: 'hint' }, '工人停下来不动时，在它自己的 WorkBuddy 窗口里发这句话。'),
     ordered.length ? ordered.map((a) => [
       el('div', { class: `who${a.id === helper.focus ? ' focus' : ''}` },
         `${agentLabel(a.id)}，${a.role}${a.currentTask ? `，${a.currentTask}` : '，空闲'}，心跳 ${ago(a.lastSeenAt)}${isStale(a) ? '，可能停了' : ''}`),

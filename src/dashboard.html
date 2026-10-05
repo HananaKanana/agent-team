@@ -305,11 +305,18 @@ function reviewStats(tasks) {
 function renderWorkers() {
   const box = document.getElementById('workers');
   const agents = data.state.agents;
-  box.replaceChildren(...(agents.length ? agents.map((a) => el('span', { class: `worker ${a.status}`, title: a.status === 'online' ? '在线' : '掉线' },
+  // 掉线的工人不再占位：只显示在线的，掉线的折叠成一个灰色计数，鼠标悬停可看编号
+  const online = agents.filter((a) => a.status === 'online');
+  const offline = agents.filter((a) => a.status !== 'online');
+  const chips = online.map((a) => el('span', { class: 'worker online', title: '在线' },
     el('span', { class: 'dot' }), el('b', null, a.id), el('span', { class: 'meta' }, a.role),
-    a.currentTask ? el('span', null, a.currentTask) : el('span', { class: 'meta' }, a.status === 'online' ? '空闲' : '掉线'),
-    el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`),
-  )) : [el('span', { class: 'meta' }, '还没有工人加入。打开 WorkBuddy 窗口，让它使用 ateam-worker skill。')]));
+    a.currentTask ? el('span', null, a.currentTask) : el('span', { class: 'meta' }, '空闲'),
+    el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`)));
+  if (offline.length) {
+    chips.push(el('span', { class: 'worker offline', title: offline.map((a) => `${a.id}（${a.role}）`).join('\n') },
+      el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
+  }
+  box.replaceChildren(...(agents.length ? chips : [el('span', { class: 'meta' }, '还没有工人加入。打开 WorkBuddy 窗口，让它使用 ateam-worker skill。')]));
 }
 
 function renderJobs() {

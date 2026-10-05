@@ -33,6 +33,7 @@ const USAGE = `用法：ateam <命令> [参数]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]...
   ateam task edit T3 [--title "..."] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
+  ateam cancel T3 ["<原因>"]
   ateam watch [--timeout 90] [--follow]
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
@@ -232,6 +233,13 @@ const commands = {
     const { task } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
     return `已修改任务 ${task.id}。${next}`;
+  },
+
+  async cancel({ positional }) {
+    const id = requireArg(positional[0], '任务编号', 'ateam cancel T3 "改由 backend 角色做，见 T12"');
+    const { task } = await request('POST', '/api/cancel', { id, text: positional[1] ?? '' });
+    const who = task.cancelledWhileHeld ? `；${task.assignee} 正在做，它下次调用命令时会收到通知` : '';
+    return `已作废 ${task.id}。它不再派发，也不计入进度和汇报${who}。`;
   },
 
   async release({ positional }) {

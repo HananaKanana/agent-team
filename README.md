@@ -190,6 +190,7 @@ rm -r ~/code/agent-team/.ateam
 ```bash
 ateam status        # 全局概况：项目目录、待处理事项、工人、各任务状态
 ateam show T3       # 某个任务的详情和完整历史
+ateam cancel T3 "原因"   # 作废任务：不再派发，看板上置灰放到最下面
 ateam help          # 全部命令
 ```
 

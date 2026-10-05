@@ -8,6 +8,7 @@ const STATUS = {
   submitted: '待 review',
   approved: '已通过',
   held: '已挂起',
+  cancelled: '已作废',
 };
 
 const JOB_STATUS = {
@@ -188,13 +189,16 @@ export function formatStatus(state, pending, jobId, root) {
   if (!jobs.length) lines.push(jobId ? `（找不到需求 ${jobId}）` : '（还没有需求）');
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id);
-    const done = tasks.filter((t) => t.status === 'approved').length;
-    lines.push(`### ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}] 已通过 ${done}/${tasks.length}`, '');
-    for (const t of tasks) {
+    const live = tasks.filter((t) => t.status !== 'cancelled');
+    const done = live.filter((t) => t.status === 'approved').length;
+    lines.push(`### ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}] 已通过 ${done}/${live.length}`, '');
+    for (const t of live) {
       const who = t.assignee ? `，${t.assignee}` : '';
       const flags = [t.handoff ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
       lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}${who}）${flags ? ` ${flags}` : ''}`);
     }
+    const cancelled = tasks.filter((t) => t.status === 'cancelled');
+    if (cancelled.length) lines.push(`- 已作废：${cancelled.map((t) => t.id).join('、')}`);
     lines.push('');
   }
   return lines.join('\n').trimEnd();

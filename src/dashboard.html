@@ -181,6 +181,14 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .c-pending { --c: var(--pending); } .c-working { --c: var(--working); } .c-rework { --c: var(--rework); }
 .c-asking { --c: var(--asking); } .c-submitted { --c: var(--submitted); } .c-approved { --c: var(--approved); }
 .c-held { --c: var(--held); }
+.c-cancelled { --c: var(--pending); }
+/* 已作废：放在看板最下面，置灰 */
+.cancelled-box { margin-top: 18px; }
+.cancelled-box h3 { font-size: 12.5px; font-weight: 600; color: var(--muted); margin: 0 0 8px; }
+.cancelled-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.card.cancelled { opacity: .5; filter: grayscale(1); margin-bottom: 0; }
+.card.cancelled .t { text-decoration: line-through; font-weight: 500; }
+.card.cancelled:hover { opacity: .8; }
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
@@ -219,13 +227,13 @@ const LANES = [
   { key: 'approved', label: '已通过' },
   { key: 'held', label: '已挂起' },
 ];
-const LANE_LABEL = Object.fromEntries(LANES.map((l) => [l.key, l.label]));
+const LANE_LABEL = { ...Object.fromEntries(LANES.map((l) => [l.key, l.label])), cancelled: '已作废' };
 const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收' };
 const HISTORY = {
   created: ['创建', 'pending'], claimed: ['领取', 'working'], progress: ['进度', 'working'],
   asked: ['提问', 'asking'], answered: ['答复', 'asking'], submitted: ['交付', 'submitted'],
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
-  held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'],
+  held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
 };
 
 let data = null;
@@ -347,7 +355,7 @@ function renderJobs() {
   const nav = document.getElementById('jobs');
   const { jobs, tasks } = data.state;
   const items = jobs.slice().reverse().map((j) => {
-    const jt = tasks.filter((t) => t.jobId === j.id);
+    const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const done = jt.filter((t) => t.status === 'approved').length;
     return el('button', {
       class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
@@ -367,7 +375,9 @@ function renderMain() {
     main.replaceChildren(el('p', { class: 'empty' }, data.state.jobs.length ? '在左侧选择一个需求，查看任务看板。' : '等待主管创建第一个需求。'));
     return;
   }
-  const tasks = data.state.tasks.filter((t) => t.jobId === job.id);
+  const all = data.state.tasks.filter((t) => t.jobId === job.id);
+  const tasks = all.filter((t) => t.status !== 'cancelled');
+  const cancelled = all.filter((t) => t.status === 'cancelled');
   const st = reviewStats(tasks);
   const head = el('div', { class: 'job-head' },
     el('h2', { class: 'job-title' }, `${job.id} ${job.title}`),
@@ -394,12 +404,16 @@ function renderMain() {
       cards.map((t) => card(t, lane.key)));
   }));
 
-  fill(main, head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。'));
+  const cancelledBox = cancelled.length ? el('section', { class: 'cancelled-box', 'aria-label': '已作废' },
+    el('h3', null, `已作废（${cancelled.length}）`),
+    el('div', { class: 'cancelled-list' }, cancelled.map((t) => card(t, 'cancelled')))) : null;
+
+  fill(main, head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。'), cancelledBox);
 }
 
 function card(t, lane) {
   const handedOff = t.history.some((h) => h.type === 'handoff');
-  return el('button', { class: `card c-${lane}`, onclick: () => { view.task = t.id; saveView(); renderDrawer(true); } },
+  return el('button', { class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}`, onclick: () => { view.task = t.id; saveView(); renderDrawer(true); } },
     el('div', { class: 'id' }, t.id),
     el('div', { class: 't' }, t.title),
     el('div', { class: 'm' },

@@ -63,6 +63,19 @@ description: 作为 agent-team 主管：把用户需求拆成任务派给工人 
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `worker_joined` `claimed` | 了解即可 |
 
+## 作废任务
+
+任务不再需要（拆错了、改由别的分类做、需求变了）时：
+
+```
+ateam cancel T5 "改由 backend 角色做，见 T12"
+```
+
+- 作废的任务不再派发，不计入进度和汇报，看板上置灰放在最下面。**不要用改标题的方式标记作废。**
+- 有别的任务依赖它时会被拒绝：先作废那些任务，或用 `ateam task edit <编号> --after ...` 去掉依赖。
+- 工人正在做的任务也可以作废，工人下次调用命令时会收到通知，停止这个任务。它在工作区留下的未提交改动需要你检查处理。
+- 已通过的任务不能作废。
+
 ## 4. review
 
 ```

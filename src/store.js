@@ -57,7 +57,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
   function checkDeps(dependsOn, selfId) {
     for (const dep of dependsOn) {
       if (dep === selfId) throw new AteamError('INVALID', `任务 ${selfId} 不能依赖自己。请修改 --after。`);
-      getTask(dep);
+      if (getTask(dep).status === 'cancelled') throw new AteamError('INVALID', `任务 ${dep} 已作废，不能依赖它。请修改 --after。`);
     }
   }
 
@@ -214,6 +214,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
   function workingTaskOf(agentId) {
     const agent = touch(agentId);
     if (!agent.currentTask) {
+      const cancelled = state.tasks.find((t) => t.assignee === agent.id && t.status === 'cancelled' && t.cancelledWhileHeld);
+      if (cancelled) {
+        throw new AteamError('BAD_STATE', `你手上的任务 ${cancelled.id} 已被主管作废${cancelled.cancelReason ? `（${cancelled.cancelReason}）` : ''}。停止这个任务，不要提交。请运行 ateam wait --as ${agent.id} 领取下一个任务。`);
+      }
       throw new AteamError('BAD_STATE', `你当前没有进行中的任务。请运行 ateam wait --as ${agent.id} 领取任务。`);
     }
     const task = getTask(agent.currentTask);
@@ -340,12 +344,35 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return task;
   }
 
+  // 作废：任务不再派发、不计入进度和汇报；已通过的任务不能作废
+  function cancel(taskId, reason = '') {
+    const task = getTask(taskId);
+    if (task.status === 'approved' || task.status === 'cancelled') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，不能作废。`);
+    }
+    const dependents = state.tasks.filter((t) => t.status !== 'cancelled' && t.dependsOn.includes(task.id));
+    if (dependents.length > 0) {
+      const ids = dependents.map((t) => t.id).join('、');
+      throw new AteamError('BAD_STATE', `任务 ${ids} 依赖 ${task.id}，不能直接作废。请先把它们也作废（ateam cancel），或用 ateam task edit <编号> --after ... 去掉这个依赖。`);
+    }
+    const agent = task.assignee && findAgent(task.assignee);
+    task.cancelledWhileHeld = !!(agent && agent.currentTask === task.id);
+    releaseAgentOf(task);
+    task.status = 'cancelled';
+    task.handoff = false;
+    task.pendingDelivery = null;
+    task.cancelReason = String(reason ?? '').trim();
+    addHistory(task, 'cancelled', 'lead', task.cancelReason || '作废');
+    changed();
+    return task;
+  }
+
   function report(jobId, markdown) {
     markdown = requireText(markdown, '汇报内容');
     const job = getJob(jobId);
-    const tasks = state.tasks.filter((t) => t.jobId === job.id);
+    const tasks = state.tasks.filter((t) => t.jobId === job.id && t.status !== 'cancelled');
     if (tasks.length === 0) {
-      throw new AteamError('BAD_STATE', `需求 ${job.id} 还没有任何任务，不能提交汇报。`);
+      throw new AteamError('BAD_STATE', `需求 ${job.id} 还没有任何有效任务（已作废的不算），不能提交汇报。`);
     }
     const unfinished = tasks.filter((t) => t.status !== 'approved');
     if (unfinished.length > 0) {
@@ -422,7 +449,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     createJob, addTask, editTask,
     join, touch,
     nextFor, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, report, sweep, noteActivity,
+    approve, reject, answer, release, cancel, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

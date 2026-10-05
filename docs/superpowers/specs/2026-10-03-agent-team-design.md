@@ -87,7 +87,7 @@ agent-team/
     description: "markdown",       // 含接口约定
     acceptance: ["...", "..."],    // 验收标准
     dependsOn: ["T1"],             // 依赖的任务全部 approved 后才可领取
-    status: "pending" | "working" | "asking" | "submitted" | "approved" | "held",
+    status: "pending" | "working" | "asking" | "submitted" | "approved" | "held" | "cancelled",
     assignee: null | "fe-7f3a",
     handoff: false,                // true = 上一任工人掉线，此任务等待接手
     rejectCount: 0,
@@ -105,7 +105,9 @@ agent-team/
 }
 ```
 
-`history.type` 的取值：`created` `claimed` `progress` `asked` `answered` `submitted` `approved` `rejected` `handoff` `held` `released` `edited`。看板上的任务时间线直接渲染 `history`。
+`history.type` 的取值：`created` `claimed` `progress` `asked` `answered` `submitted` `approved` `rejected` `handoff` `held` `released` `edited` `cancelled`。
+
+**作废**（`ateam cancel T3 ["原因"]`）：除 `approved` 外任何状态都可作废；仍有未作废的任务依赖它时拒绝。作废后不再派发，不计入进度和汇报；持有它的工人下次调用命令时收到「已被主管作废」的提示。看板上的任务时间线直接渲染 `history`。
 
 ## 4. 任务生命周期
 

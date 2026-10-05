@@ -165,6 +165,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     'POST /api/reject': (b) => ({ task: store.reject(requireId(b), b.text) }),
     'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
+    'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
     'GET /api/state': () => ({ state: store.state, pending: store.pendingActions(), root }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),

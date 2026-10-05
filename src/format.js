@@ -156,11 +156,12 @@ const PENDING_HINT = {
   held: (t) => `已打回 3 次：ateam task edit ${t.id} ... 后 ateam release ${t.id}，或自己修改后 ateam approve ${t.id}`,
 };
 
-export function formatStatus(state, pending, jobId) {
+export function formatStatus(state, pending, jobId, root) {
   const now = Date.now();
   const jobs = jobId ? state.jobs.filter((j) => j.id === jobId) : state.jobs;
   const jobIds = new Set(jobs.map((j) => j.id));
   const lines = ['# ateam 状态', ''];
+  if (root) lines.push(`项目目录：${root}`, '');
 
   const mine = pending.filter((t) => jobIds.has(t.jobId));
   lines.push(`## 待你处理（${mine.length}）`, '');

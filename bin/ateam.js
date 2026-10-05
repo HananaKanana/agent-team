@@ -158,7 +158,7 @@ const commands = {
     } catch (err) {
       fail(err.message);
     }
-    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）`;
+    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，工人的改动必须在这个目录里）`;
   },
 
   async join({ flags }) {
@@ -278,8 +278,8 @@ const commands = {
   },
 
   async status({ flags }) {
-    const { state, pending } = await request('GET', '/api/state');
-    return formatStatus(state, pending, flags.job);
+    const { state, pending, root } = await request('GET', '/api/state');
+    return formatStatus(state, pending, flags.job, root);
   },
 
   async show({ positional }) {

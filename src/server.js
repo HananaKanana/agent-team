@@ -144,7 +144,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
       if (!b.noChanges) {
         const result = await commitPaths(root, task.paths, `[${task.id}] ${b.summary.trim()}`);
         if (result.nothing) {
-          throw new AteamError('INVALID', `指定路径（${task.paths.join('、')}）下没有改动；如确实无需改代码，请加 --no-changes。`);
+          throw new AteamError('INVALID', `指定路径（${task.paths.join('、')}）下没有改动。服务的项目目录是 ${root}，路径相对于这个目录：如果你的改动在别的目录，说明服务起错了目录，请通知用户，不要挪动改动；如确实无需改代码，请加 --no-changes。`);
         }
         commit = result.sha;
       }
@@ -166,7 +166,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
-    'GET /api/state': () => ({ state: store.state, pending: store.pendingActions() }),
+    'GET /api/state': () => ({ state: store.state, pending: store.pendingActions(), root }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),
   };
 

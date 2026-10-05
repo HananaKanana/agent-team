@@ -114,11 +114,38 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .stats { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--muted); font-size: 13px; margin-bottom: 18px; }
 .stats b { color: var(--ink); font-weight: 600; }
 
-.report {
+/* 需求页上的汇报提示条：一行，点按钮进入阅读页 */
+.report-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
   background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--approved);
-  border-radius: 8px; padding: 6px 20px 14px; margin-bottom: 22px; max-width: 80ch;
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 20px;
 }
-.report-label { color: var(--approved); font-weight: 600; font-size: 13px; margin-top: 10px; }
+.report-bar .what { font-weight: 600; color: var(--approved); }
+.report-bar .when { color: var(--muted); font-size: 12.5px; margin-right: auto; }
+.btn.primary { background: var(--approved); border-color: var(--approved); color: #fff; font-weight: 600; padding: 4px 14px; }
+.btn.primary:hover { filter: brightness(1.08); border-color: var(--approved); }
+
+/* 汇报阅读页：全屏，正文居中 */
+.report-page { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; }
+.report-page[hidden] { display: none; }
+.report-top {
+  position: sticky; top: 0; display: flex; align-items: center; gap: 14px;
+  padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.report-top .crumb { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-sheet {
+  max-width: 760px; margin: 32px auto 80px; padding: 36px 48px 44px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+}
+.report-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 13px; padding-bottom: 18px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+.report-meta b { color: var(--ink); font-weight: 600; }
+.report-sheet .md { font-size: 15px; line-height: 1.8; }
+.report-sheet .md h1 { font-size: 24px; line-height: 1.35; margin: 18px 0 14px; }
+.report-sheet .md h2 { font-size: 18px; margin: 30px 0 10px; padding-top: 4px; }
+.report-sheet .md h3 { font-size: 15.5px; margin: 22px 0 8px; }
+.report-sheet .md li { margin: 4px 0; }
+.report-sheet .md code { font-size: 13px; }
+@media (max-width: 700px) { .report-sheet { margin: 0; border: none; border-radius: 0; padding: 20px 16px 40px; } }
 
 .board { display: grid; grid-template-columns: repeat(7, minmax(168px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
 .lane { background: var(--sunken); border-radius: 8px; padding: 8px; min-height: 120px; }
@@ -214,6 +241,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <main id="main"></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
+<div class="report-page" id="report" hidden role="dialog" aria-label="主管汇报"></div>
 
 <script>
 'use strict';
@@ -238,7 +266,7 @@ const HISTORY = {
 
 let data = null;
 let lastJson = '';
-let view = { job: null, task: null };
+let view = { job: null, task: null, report: false };
 let showPrompts = false;
 let copied = null; // 刚复制的提示词，用来显示「已复制」
 
@@ -359,7 +387,7 @@ function renderJobs() {
     const done = jt.filter((t) => t.status === 'approved').length;
     return el('button', {
       class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
-      onclick: () => { view.job = j.id; view.task = null; saveView(); render(); },
+      onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
     },
     el('div', { class: 'title' }, `${j.id} ${j.title}`),
     el('div', { class: 'sub' }, el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
@@ -392,9 +420,10 @@ function renderMain() {
 
   let report = null;
   if (job.status === 'awaiting_acceptance' && job.report) {
-    const body = el('div', { class: 'md' });
-    body.innerHTML = renderMarkdown(job.report); // renderMarkdown 先转义了 HTML
-    report = el('section', { class: 'report' }, el('div', { class: 'report-label' }, '主管汇报，等你验收'), body);
+    report = el('div', { class: 'report-bar' },
+      el('span', { class: 'what' }, '主管已提交汇报，等你验收'),
+      el('span', { class: 'when' }, `${fmtTime(job.updatedAt)} 提交`),
+      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'));
   }
 
   const board = el('div', { class: 'board' }, LANES.map((lane) => {
@@ -545,16 +574,65 @@ function render() {
   renderJobs();
   renderMain();
   renderDrawer(false);
+  renderReport();
+}
+
+function openReport() {
+  view.task = null;
+  view.report = true;
+  saveView();
+  render();
+  const page = document.getElementById('report');
+  page.scrollTop = 0;
+  page.querySelector('.btn')?.focus();
+}
+
+function closeReport() {
+  view.report = false;
+  saveView();
+  render();
+}
+
+function renderReport() {
+  const page = document.getElementById('report');
+  const job = data.state.jobs.find((j) => j.id === view.job);
+  if (!view.report || !job || !job.report) {
+    page.hidden = true;
+    page.replaceChildren();
+    document.body.style.overflow = '';
+    return;
+  }
+  const scroll = page.hidden ? 0 : page.scrollTop;
+  const tasks = data.state.tasks.filter((t) => t.jobId === job.id && t.status !== 'cancelled');
+  const st = reviewStats(tasks);
+  const body = el('div', { class: 'md' });
+  body.innerHTML = renderMarkdown(job.report); // renderMarkdown 先转义了 HTML
+  fill(page,
+    el('div', { class: 'report-top' },
+      el('button', { class: 'btn', onclick: closeReport }, '返回看板'),
+      el('span', { class: 'crumb' }, `${job.id} ${job.title}`)),
+    el('article', { class: 'report-sheet' },
+      el('div', { class: 'report-meta' },
+        el('span', null, '状态 ', el('b', null, JOB_STATUS[job.status] || job.status)),
+        el('span', null, '提交于 ', el('b', null, fmtTime(job.updatedAt))),
+        el('span', null, '任务 ', el('b', null, `${st.approved}/${tasks.length}`), ' 已通过'),
+        el('span', null, 'review ', el('b', null, st.reviews), ' 次'),
+        el('span', null, '一次通过率 ', el('b', null, st.rate))),
+      body));
+  page.hidden = false;
+  page.scrollTop = scroll;
+  document.body.style.overflow = 'hidden';
 }
 
 // 选中的需求和打开的任务记在地址栏 hash 里，刷新页面后保留
 function saveView() {
-  const hash = [view.job, view.task].filter(Boolean).join('/');
+  const hash = [view.job, view.report ? 'report' : view.task].filter(Boolean).join('/');
   history.replaceState(null, '', hash ? `#${hash}` : location.pathname);
 }
 function loadView() {
-  const [job, task] = location.hash.slice(1).split('/');
-  view = { job: job || null, task: task || null };
+  const [job, second] = location.hash.slice(1).split('/');
+  const report = second === 'report';
+  view = { job: job || null, task: report ? null : second || null, report };
 }
 
 async function poll() {
@@ -574,7 +652,11 @@ async function poll() {
   }
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && view.task) closeDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (view.report) closeReport();
+  else if (view.task) closeDrawer();
+});
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
   if (!view.task) return;

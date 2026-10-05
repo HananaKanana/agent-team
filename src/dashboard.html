@@ -225,7 +225,7 @@ function el(tag, attrs, ...children) {
     else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
     else node.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c == null || c === false) continue;
     node.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
@@ -363,7 +363,7 @@ function renderMain() {
       cards.map((t) => card(t, lane.key)));
   }));
 
-  main.replaceChildren(head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。'));
+  main.replaceChildren(...[head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。')].filter(Boolean));
 }
 
 function card(t, lane) {

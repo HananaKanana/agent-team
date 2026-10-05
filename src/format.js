@@ -108,15 +108,20 @@ function waitingLines(waiting) {
   ];
 }
 
-export function formatWait(result, agentId, waiting) {
+// round：这是第几次空等。下一条命令带上递增的 --round，让每次调用的命令和输出都不一样，
+// 避免 agent 平台把「同一条命令连续重复」判成死循环而强制停下。
+export function formatWait(result, agentId, waiting, round = 0) {
   if (!result) {
     const why = waitingLines(waiting);
+    const next = round + 1;
+    const d = new Date();
     return [
-      `暂无任务。请立即再次运行：ateam wait --as ${agentId}`,
+      `暂无任务（第 ${next} 轮等待，${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}）。`,
+      `请立即运行下一轮：ateam wait --as ${agentId} --round ${next}`,
       '',
       ...(why.length ? [...why, ''] : []),
       '这是正常的等待，不是工作结束：主管随时可能派任务、打回或答复。',
-      '不要结束本轮，不要向用户总结或提问，直接再次运行上面的命令。只有用户明确叫你停下时才停。',
+      '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
     ].join('\n');
   }
   const { kind, task, delivery } = result;

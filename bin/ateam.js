@@ -23,7 +23,7 @@ const USAGE = `用法：ateam <命令> [参数]
 
 worker
   ateam join --role <角色> [--name <名字>]
-  ateam wait --as <ID> [--timeout 90]
+  ateam wait --as <ID> [--timeout 90] [--round N]
   ateam progress --as <ID> "<笔记>"
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
@@ -177,7 +177,8 @@ const commands = {
   async wait({ flags }) {
     const as = requireAs(flags);
     const data = await request('POST', '/api/wait', { as }, holdSeconds(flags));
-    return formatWait(data?.result ?? null, as, data?.waiting);
+    const round = Number.parseInt(flags.round ?? '0', 10);
+    return formatWait(data?.result ?? null, as, data?.waiting, Number.isFinite(round) && round > 0 ? round : 0);
   },
 
   async progress({ flags, positional }) {

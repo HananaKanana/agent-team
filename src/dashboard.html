@@ -369,11 +369,11 @@ function renderWorkers() {
   const online = agents.filter((a) => a.status === 'online');
   const offline = agents.filter((a) => a.status !== 'online');
   const chips = online.map((a) => el('span', { class: 'worker online', title: '在线' },
-    el('span', { class: 'dot' }), el('b', null, a.id), el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
+    el('span', { class: 'dot' }), el('b', null, a.name || a.id), a.name ? el('span', { class: 'meta' }, a.id) : null, el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     a.currentTask ? el('span', null, a.currentTask) : el('span', { class: 'meta' }, '空闲'),
     el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`)));
   if (offline.length) {
-    chips.push(el('span', { class: 'worker offline', title: offline.map((a) => `${a.id}（${a.role}）`).join('\n') },
+    chips.push(el('span', { class: 'worker offline', title: offline.map((a) => `${agentLabel(a.id)}，${a.role}`).join('\n') },
       el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
   }
   box.replaceChildren(...(agents.length ? chips : [el('span', { class: 'meta' }, '还没有工人加入。打开 WorkBuddy 窗口，让它使用 ateam-worker skill。')]));
@@ -447,7 +447,7 @@ function card(t, lane) {
     el('div', { class: 't' }, t.title),
     el('div', { class: 'm' },
       el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role),
-      t.assignee ? el('span', { class: 'tag' }, t.assignee) : null,
+      t.assignee ? el('span', { class: 'tag', title: t.assignee }, agentName(t.assignee)) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null));
 }
@@ -466,7 +466,7 @@ function renderDrawer(fresh) {
     el('dl', { class: 'facts' },
       el('dt', null, '状态'), el('dd', { class: `c-${lane}` }, LANE_LABEL[lane]),
       el('dt', null, '角色'), el('dd', null, el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
-      el('dt', null, '处理人'), el('dd', null, t.assignee || '无'),
+      el('dt', null, '处理人'), el('dd', null, t.assignee ? agentLabel(t.assignee) : '无'),
       el('dt', null, '路径'), el('dd', null, t.paths.map((p, i) => [i ? '、' : '', el('code', null, p)])),
       el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
       el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
@@ -485,7 +485,7 @@ function renderDrawer(fresh) {
     el('ol', { class: 'timeline' }, t.history.map((h) => {
       const [label, color] = HISTORY[h.type] || [h.type, 'pending'];
       return el('li', { class: `c-${color}` },
-        el('div', null, el('span', { class: 'what' }, label), ' ', el('span', { class: 'when' }, `${fmtTime(h.ts)}  ${h.actor}`)),
+        el('div', null, el('span', { class: 'what' }, label), ' ', el('span', { class: 'when' }, `${fmtTime(h.ts)}  ${agentLabel(h.actor)}`)),
         h.text ? el('div', { class: 'text' }, h.text) : null,
         h.commit ? el('div', { class: 'when' }, '提交 ', el('code', null, h.commit)) : null);
     })));
@@ -498,6 +498,15 @@ function closeDrawer() {
   view.task = null;
   saveView();
   renderDrawer();
+}
+
+// 工人显示名：起了名字的显示名字，否则显示编号
+function agentName(id) {
+  return data.state.agents.find((a) => a.id === id)?.name || id;
+}
+function agentLabel(id) {
+  const name = data.state.agents.find((a) => a.id === id)?.name;
+  return name ? `${name}（${id}）` : id;
 }
 
 // 角色 → 颜色。常用名固定，其他按名字哈希，同一角色永远同一颜色
@@ -561,7 +570,7 @@ function renderNeeds() {
       el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); showPrompts = !showPrompts; render(); } },
         showPrompts ? '收起提示词' : '显示提示词')),
     showPrompts ? el('div', null,
-      el('p', { class: 'hint' }, '打开一个新的 WorkBuddy 窗口（可以换账号），工作目录选项目目录，把下面这句话发给它。它会自动接手，在已有改动上继续。'),
+      el('p', { class: 'hint' }, '打开一个新的 WorkBuddy 窗口（可以换账号），工作目录选项目目录，把下面这句话发给它。它会自动接手，在已有改动上继续。想给这个窗口起名字，就在第一行末尾加「，名字 账号B」。'),
       [...byRole.keys()].map((role) => promptBox(role))) : null);
   box.hidden = false;
 }

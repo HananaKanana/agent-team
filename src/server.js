@@ -132,7 +132,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
 
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
-    'POST /api/join': (b) => ({ agent: store.join(b.role) }),
+    'POST /api/join': (b) => ({ agent: store.join(b.role, b.name) }),
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),
     'POST /api/submit': (b) => serial(async () => {

@@ -199,7 +199,8 @@ export function formatStatus(state, pending, jobId, root) {
     for (const a of state.agents) {
       const online = a.status === 'online' ? '在线' : '掉线';
       const task = a.currentTask ? `，当前任务 ${a.currentTask}` : '，空闲';
-      lines.push(`- ${a.id}（${a.role}）${online}${task}，上次心跳 ${ago(a.lastSeenAt, now)}`);
+      const who = a.name ? `${a.name}（${a.id}）` : a.id;
+      lines.push(`- ${who}，角色 ${a.role}，${online}${task}，上次心跳 ${ago(a.lastSeenAt, now)}`);
     }
   } else {
     lines.push('（还没有工人加入）');
@@ -213,7 +214,8 @@ export function formatStatus(state, pending, jobId, root) {
     const done = live.filter((t) => t.status === 'approved').length;
     lines.push(`### ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}] 已通过 ${done}/${live.length}`, '');
     for (const t of live) {
-      const who = t.assignee ? `，${t.assignee}` : '';
+      const named = state.agents.find((a) => a.id === t.assignee)?.name;
+      const who = t.assignee ? `，${named ? `${named}（${t.assignee}）` : t.assignee}` : '';
       const flags = [t.handoff ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
       lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}${who}）${flags ? ` ${flags}` : ''}`);
     }

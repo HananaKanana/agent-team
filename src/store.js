@@ -138,12 +138,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
 
   // ---------- 工人 ----------
 
-  function join(role) {
+  // name：用户给窗口起的好记名字（比如「账号A」），只用于显示；编号 id 仍然唯一
+  function join(role, name = '') {
     role = requireText(role, '角色（--role）');
+    name = String(name ?? '').trim().slice(0, 40);
     const ts = now();
     const agent = { id: newAgentId(role), role, status: 'online', currentTask: null, joinedAt: ts, lastSeenAt: ts };
+    if (name) agent.name = name;
     state.agents.push(agent);
-    emit('worker_joined', { agentId: agent.id, text: `${agent.id}（${role}）加入` });
+    const who = name ? `${name}（${agent.id}）` : agent.id;
+    emit('worker_joined', { agentId: agent.id, text: `${who}，角色 ${role}，加入` });
     changed();
     return agent;
   }

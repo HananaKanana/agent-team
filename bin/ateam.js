@@ -22,7 +22,7 @@ const USAGE = `用法：ateam <命令> [参数]
   ateam serve [--port 7700] [--lease 15]
 
 工人
-  ateam join --role <角色>
+  ateam join --role <角色> [--name <名字>]
   ateam wait --as <ID> [--timeout 90]
   ateam progress --as <ID> "<笔记>"
   ateam ask --as <ID> "<问题>"
@@ -164,9 +164,10 @@ const commands = {
 
   async join({ flags }) {
     const role = requireArg(flags.role, '角色', 'ateam join --role frontend');
-    const { agent } = await request('POST', '/api/join', { role });
+    const { agent } = await request('POST', '/api/join', { role, name: flags.name ?? '' });
+    const named = agent.name ? `，名字 ${agent.name}` : '';
     return [
-      `已加入团队。你的工人编号是 **${agent.id}**（角色 ${agent.role}）。之后每条命令都要带 --as ${agent.id}。`,
+      `已加入团队。你的工人编号是 **${agent.id}**（角色 ${agent.role}${named}）。之后每条命令都要带 --as ${agent.id}。`,
       '',
       `下一步：ateam wait --as ${agent.id}`,
     ].join('\n');

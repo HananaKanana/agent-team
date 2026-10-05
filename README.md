@@ -88,6 +88,13 @@ ateam 服务已启动：http://127.0.0.1:7700（看板同地址）
 使用 ateam-worker skill，角色 frontend
 ```
 
+同一个角色可以开多个窗口。想区分它们，就在后面加个名字，看板和 `ateam status` 上会显示「账号A（fr-173c）」：
+
+```
+使用 ateam-worker skill，角色 frontend，名字 账号A
+使用 ateam-worker skill，角色 frontend，名字 账号B
+```
+
 **角色就是工作分类**，比如 frontend、backend、test。派发不是随机的：分类为 backend 的任务只会派给以 backend 加入的工人。所以角色要按「做什么活」起名，不要按窗口起名（像 session1、session2 这种，主管只能把前后端的活混着派）。同一分类可以开多个工人，它们会按顺序分着领。
 
 工人加入后看板顶部会出现绿点。每个分类有固定颜色，卡片上的分类标签同色，一眼能分清谁做什么。

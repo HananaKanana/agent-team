@@ -31,6 +31,12 @@ description: 作为 agent-team 的工人加入团队、领取并完成开发任�
 ateam join --role <角色>
 ```
 
+用户还给了名字（比如「角色 frontend，名字 账号A」）就带上 `--name`，方便用户在看板上认出你；没给就不带，不要自己起：
+
+```
+ateam join --role frontend --name 账号A
+```
+
 输出里有你的工人编号，比如 `fr-7f3a`。记住它，之后**每条命令都要带 `--as <编号>`**。
 
 ## 2. 主循环

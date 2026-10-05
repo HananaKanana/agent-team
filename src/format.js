@@ -87,7 +87,14 @@ function deliverySection(delivery) {
 }
 
 export function formatWait(result, agentId) {
-  if (!result) return `暂无任务。请立即再次运行：ateam wait --as ${agentId}`;
+  if (!result) {
+    return [
+      `暂无任务。请立即再次运行：ateam wait --as ${agentId}`,
+      '',
+      '这是正常的等待，不是工作结束：主管随时可能派任务、打回或答复。',
+      '不要结束本轮，不要向用户总结或提问，直接再次运行上面的命令。只有用户明确叫你停下时才停。',
+    ].join('\n');
+  }
   const { kind, task, delivery } = result;
   const title = `${task.id}：${task.title}`;
   let out;

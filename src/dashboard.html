@@ -236,6 +236,11 @@ let copied = null; // 刚复制的提示词，用来显示「已复制」
 
 // ---------- 小工具 ----------
 
+// 用一组子节点替换 node 的内容；嵌套数组会展开，null/false 跳过，字符串转成文本
+function fill(node, ...children) {
+  node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
+}
+
 function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -389,7 +394,7 @@ function renderMain() {
       cards.map((t) => card(t, lane.key)));
   }));
 
-  main.replaceChildren(...[head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。')].filter(Boolean));
+  fill(main, head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。'));
 }
 
 function card(t, lane) {
@@ -410,7 +415,8 @@ function renderDrawer(fresh) {
   if (!t) { drawer.hidden = true; drawer.replaceChildren(); return; }
   const scroll = fresh ? 0 : drawer.scrollTop;
   const lane = laneOf(t);
-  drawer.replaceChildren(
+  // 子节点里有条件出现的数组和 null：走 fill，与 el() 一样展开并过滤
+  fill(drawer,
     el('button', { class: 'close', onclick: closeDrawer }, '关闭'),
     el('div', { class: 'id mono' }, `${t.id}，属于需求 ${t.jobId}`),
     el('h2', null, t.title),
@@ -505,7 +511,7 @@ function renderNeeds() {
   const byRole = rolesNeedingWorkers();
   if (byRole.size === 0) { box.hidden = true; box.replaceChildren(); return; }
   const summary = [...byRole].map(([role, ts]) => `${role}（${ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、')}）`).join('，');
-  box.replaceChildren(
+  fill(box,
     el('div', { class: 'needs-row' },
       el('b', null, '有任务没人做'),
       el('span', null, `缺少这些角色的在线工人：${summary}`),

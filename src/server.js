@@ -166,6 +166,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
     'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),
+    'POST /api/agents/hide': (b) => ({ hidden: store.hideAgents(b.ids) }),
     'POST /api/reclaim': (b) => {
       const { task, agentId } = store.reclaim(requireId(b), b.text ?? '');
       // 原工人若正挂在 wait 上，立即告诉它租约已失效

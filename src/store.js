@@ -434,6 +434,19 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return { task, agentId: agent?.id ?? null };
   }
 
+  // 从看板和 status 里移除掉线的工人。记录保留（标记 hidden），历史里的编号和名字照常显示。
+  function hideAgents(ids) {
+    const want = new Set(Array.isArray(ids) ? ids : []);
+    let count = 0;
+    for (const agent of state.agents) {
+      if (!want.has(agent.id) || agent.status === 'online' || agent.hidden) continue;
+      agent.hidden = true;
+      count += 1;
+    }
+    if (count > 0) changed();
+    return count;
+  }
+
   function sweep(isWaiting) {
     let count = 0;
     for (const agent of state.agents) {
@@ -496,7 +509,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     createJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, cancel, reclaim, report, sweep, noteActivity,
+    approve, reject, answer, release, cancel, reclaim, hideAgents, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

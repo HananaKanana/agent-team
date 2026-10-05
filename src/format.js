@@ -198,8 +198,9 @@ export function formatStatus(state, pending, jobId, root) {
   if (undelivered) lines.push('', `另有 ${undelivered} 条未读事件：ateam watch`);
 
   lines.push('', '## 工人', '');
-  if (state.agents.length) {
-    for (const a of state.agents) {
+  const agents = state.agents.filter((a) => !a.hidden);
+  if (agents.length) {
+    for (const a of agents) {
       const online = a.status === 'online' ? '在线' : '掉线';
       const task = a.currentTask ? `，当前任务 ${a.currentTask}` : '，空闲';
       const who = a.name ? `${a.name}（${a.id}）` : a.id;

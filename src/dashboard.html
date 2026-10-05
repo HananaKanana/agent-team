@@ -86,6 +86,9 @@ button.worker:hover { border-color: var(--muted); }
 .helper h4:first-of-type { margin-top: 4px; }
 .helper .who { font-weight: 600; margin-top: 10px; }
 .helper .who.focus { color: var(--asking); }
+.offline-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.offline-row > span:first-child { margin-right: auto; }
+.helper .drawer-tools .btn { padding: 2px 10px; }
 .worker.offline .dot { background: var(--pending); }
 .worker .meta { color: var(--muted); }
 .banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
@@ -393,7 +396,7 @@ function renderWorkers() {
   const agents = data.state.agents;
   // 掉线的工人不再占位：只显示在线的，掉线的折叠成一个灰色计数，鼠标悬停可看编号
   const online = agents.filter((a) => a.status === 'online');
-  const offline = agents.filter((a) => a.status !== 'online');
+  const offline = agents.filter((a) => a.status !== 'online' && !a.hidden);
   const chips = online.map((a) => {
     return el('button', {
       type: 'button',
@@ -406,10 +409,12 @@ function renderWorkers() {
   );
   });
   if (offline.length) {
-    chips.push(el('span', { class: 'worker offline', title: offline.map((a) => `${agentLabel(a.id)}，${a.role}`).join('\n') },
-      el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
+    chips.push(el('button', {
+      type: 'button', class: 'worker offline', title: '点击查看和移除掉线的工人',
+      onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
+    }, el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
   }
-  box.replaceChildren(...(agents.length ? chips : [el('span', { class: 'meta' }, '还没有工人加入。点右边「提示词」，复制给新开的 WorkBuddy 窗口。')]));
+  box.replaceChildren(...(chips.length ? chips : [el('span', { class: 'meta' }, '还没有工人加入。点右边「提示词」，复制给新开的 WorkBuddy 窗口。')]));
   renderHelper();
 }
 
@@ -440,9 +445,34 @@ function copyRow(text) {
     }, copied === text ? '已复制' : '复制'));
 }
 
+async function hideAgents(ids) {
+  try {
+    await fetch('/api/agents/hide', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }) });
+  } catch {}
+  await poll();
+}
+
+function renderOfflinePanel(panel) {
+  const offline = data.state.agents.filter((a) => a.status !== 'online' && !a.hidden);
+  const close = () => { helper = { open: false, focus: null }; renderHelper(); };
+  if (!offline.length) { close(); return; }
+  fill(panel,
+    el('div', { class: 'drawer-tools' },
+      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
+      el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); close(); } }, '关闭')),
+    el('h4', null, `已掉线的工人（${offline.length}）`),
+    el('p', { class: 'hint' }, '移除只是不再显示，任务时间线里的记录保留。'),
+    offline.map((a) => el('div', { class: 'offline-row' },
+      el('span', null, el('b', null, agentLabel(a.id)), ' ', el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role)),
+      el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`),
+      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents([a.id]); } }, '移除'))));
+  panel.hidden = false;
+}
+
 function renderHelper() {
   const panel = document.getElementById('helper');
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
+  if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;
   const online = agents.filter((a) => a.status === 'online');
   // 角色：在线工人的角色 + 还没完成的任务的角色

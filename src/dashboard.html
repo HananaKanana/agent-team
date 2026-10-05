@@ -70,6 +70,16 @@ header.top h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .0
 .worker .meta { color: var(--muted); }
 .banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
 .banner[hidden] { display: none; }
+.needs { padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--line); border-left: 4px solid var(--asking); }
+.needs[hidden] { display: none; }
+.needs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.needs-row + .needs-row { margin-top: 8px; }
+.needs b { font-weight: 600; }
+.prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.prompt code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; user-select: all; white-space: pre-wrap; }
+.btn { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 13px; }
+.btn:hover { border-color: var(--ink); }
+.hint { color: var(--muted); font-size: 12.5px; }
 
 .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: calc(100vh - 56px); }
 nav.jobs { border-right: 1px solid var(--line); padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; }
@@ -183,6 +193,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <h1>ateam 调度台</h1>
   <div class="workers" id="workers"></div>
 </header>
+<section class="needs" id="needs" hidden aria-label="需要工人"></section>
 <div class="banner" id="banner" hidden>连不上 ateam 服务，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
 <div class="layout">
   <nav class="jobs" id="jobs" aria-label="需求列表"></nav>
@@ -214,6 +225,8 @@ const HISTORY = {
 let data = null;
 let lastJson = '';
 let view = { job: null, task: null };
+let showPrompts = false;
+let copied = null; // 刚复制的提示词，用来显示「已复制」
 
 // ---------- 小工具 ----------
 
@@ -402,6 +415,11 @@ function renderDrawer(fresh) {
       el('dt', null, '路径'), el('dd', null, t.paths.map((p, i) => [i ? '、' : '', el('code', null, p)])),
       el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
       el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
+    t.status === 'pending' ? [
+      el('h4', null, t.handoff ? '让新工人接手' : '找工人来做'),
+      el('p', { class: 'hint' }, '在新的 WorkBuddy 窗口（可以换账号）里发这句话。已有同角色工人在线时不用开新窗口，它做完手上的会自动领。'),
+      promptBox(t.role),
+    ] : null,
     el('h4', null, '验收标准'),
     t.acceptance.length ? el('ol', null, t.acceptance.map((a) => el('li', null, a))) : el('p', { class: 'meta' }, '未填写'),
     el('h4', null, '描述'),
@@ -427,8 +445,62 @@ function closeDrawer() {
   renderDrawer();
 }
 
+// 提示词：在新的 WorkBuddy 窗口里对工人说的话
+function workerPrompt(role) {
+  const dir = data.root ? `\n项目目录：${data.root}` : '';
+  return `使用 ateam-worker skill，角色 ${role}${dir}`;
+}
+
+function promptBox(role) {
+  const text = workerPrompt(role);
+  return el('div', { class: 'prompt' },
+    el('code', null, text),
+    el('button', {
+      class: 'btn',
+      onclick: async (e) => {
+        e.stopPropagation();
+        try { await navigator.clipboard.writeText(text); copied = text; } catch { copied = null; }
+        render();
+        setTimeout(() => { if (copied === text) { copied = null; render(); } }, 2000);
+      },
+    }, copied === text ? '已复制' : '复制'));
+}
+
+// 待领取、依赖已满足、但没有同角色在线工人的任务 → 需要有人开新窗口接手
+function rolesNeedingWorkers() {
+  const { tasks, agents } = data.state;
+  const approved = new Set(tasks.filter((t) => t.status === 'approved').map((t) => t.id));
+  const onlineRoles = new Set(agents.filter((a) => a.status === 'online').map((a) => a.role.trim().toLowerCase()));
+  const byRole = new Map();
+  for (const t of tasks) {
+    if (t.status !== 'pending' || !t.dependsOn.every((d) => approved.has(d))) continue;
+    if (onlineRoles.has(t.role.trim().toLowerCase())) continue;
+    if (!byRole.has(t.role)) byRole.set(t.role, []);
+    byRole.get(t.role).push(t);
+  }
+  return byRole;
+}
+
+function renderNeeds() {
+  const box = document.getElementById('needs');
+  const byRole = rolesNeedingWorkers();
+  if (byRole.size === 0) { box.hidden = true; box.replaceChildren(); return; }
+  const summary = [...byRole].map(([role, ts]) => `${role}（${ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、')}）`).join('，');
+  box.replaceChildren(
+    el('div', { class: 'needs-row' },
+      el('b', null, '有任务没人做'),
+      el('span', null, `缺少这些角色的在线工人：${summary}`),
+      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); showPrompts = !showPrompts; render(); } },
+        showPrompts ? '收起提示词' : '显示提示词')),
+    showPrompts ? el('div', null,
+      el('p', { class: 'hint' }, '打开一个新的 WorkBuddy 窗口（可以换账号），工作目录选项目目录，把下面这句话发给它。它会自动接手，在已有改动上继续。'),
+      [...byRole.keys()].map((role) => promptBox(role))) : null);
+  box.hidden = false;
+}
+
 function render() {
   if (!data) return;
+  renderNeeds();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
   renderWorkers();
   renderJobs();

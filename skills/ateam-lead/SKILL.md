@@ -25,7 +25,9 @@ description: 作为 agent-team 主管：把用户需求拆成任务派给工人 
    ateam task add --job J1 --role frontend --paths web/ --after T1 --title "登录页" --desc-file t2.md --accept "..."
    ```
 
-   - `role` 必须和工人加入时的角色一致。
+   - `role` 必须和工人加入时的角色一致。角色是**工作分类**（frontend、backend、test……），任务按分类派：同一分类的任务只会派给这个分类的工人。
+   - 每个任务只属于一个分类。一个功能既有前端又有后端，就拆成两个任务（前端任务 `--after` 后端任务）。
+   - 如果工人的角色名看不出分类（比如 session1、session2），先请用户让工人按分类重新加入，不要按窗口名拆任务。
    - **同时进行的任务 `paths` 不能重叠。** 服务只提交任务路径内的改动，这是隔离的唯一手段。
    - 验收标准要能逐条核对。
    - 有先后关系就用 `--after`，依赖的任务通过后才会派发。

@@ -20,6 +20,8 @@
   --approved: #2f7d4f;
   --held: #8a3b5c;
   --focus: #2d5d9f;
+  /* 角色色：按角色名固定分配，前端/后端等常用名有固定颜色 */
+  --role-0: #1d6f8c; --role-1: #9c4f1c; --role-2: #5b6b1e; --role-3: #7a3f8f; --role-4: #a3324a; --role-5: #3d5a99;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -38,6 +40,7 @@
     --approved: #5fbf86;
     --held: #d27a9f;
     --focus: #6d9be0;
+    --role-0: #5cb8d6; --role-1: #e39a62; --role-2: #a9bd5a; --role-3: #c58ad8; --role-4: #e57890; --role-5: #8ea9e8;
     color-scheme: dark;
   }
 }
@@ -133,6 +136,9 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .card .t { font-weight: 600; margin: 2px 0 6px; overflow-wrap: anywhere; }
 .card .m { display: flex; flex-wrap: wrap; gap: 4px; font-size: 11.5px; }
 .tag { padding: 0 6px; border-radius: 4px; background: var(--sunken); color: var(--muted); }
+.role { color: #fff; background: var(--rc); font-weight: 600; }
+@media (prefers-color-scheme: dark) { .role { color: #101512; } }
+.role-text { color: var(--rc); font-weight: 600; }
 .tag.warn { background: var(--rework); color: #fff; }
 .tag.handoff { background: var(--asking); color: #fff; }
 
@@ -322,7 +328,7 @@ function renderWorkers() {
   const online = agents.filter((a) => a.status === 'online');
   const offline = agents.filter((a) => a.status !== 'online');
   const chips = online.map((a) => el('span', { class: 'worker online', title: '在线' },
-    el('span', { class: 'dot' }), el('b', null, a.id), el('span', { class: 'meta' }, a.role),
+    el('span', { class: 'dot' }), el('b', null, a.id), el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     a.currentTask ? el('span', null, a.currentTask) : el('span', { class: 'meta' }, '空闲'),
     el('span', { class: 'meta' }, `心跳 ${ago(a.lastSeenAt)}`)));
   if (offline.length) {
@@ -392,7 +398,7 @@ function card(t, lane) {
     el('div', { class: 'id' }, t.id),
     el('div', { class: 't' }, t.title),
     el('div', { class: 'm' },
-      el('span', { class: 'tag' }, t.role),
+      el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role),
       t.assignee ? el('span', { class: 'tag' }, t.assignee) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null));
@@ -410,7 +416,7 @@ function renderDrawer(fresh) {
     el('h2', null, t.title),
     el('dl', { class: 'facts' },
       el('dt', null, '状态'), el('dd', { class: `c-${lane}` }, LANE_LABEL[lane]),
-      el('dt', null, '角色'), el('dd', null, t.role),
+      el('dt', null, '角色'), el('dd', null, el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
       el('dt', null, '处理人'), el('dd', null, t.assignee || '无'),
       el('dt', null, '路径'), el('dd', null, t.paths.map((p, i) => [i ? '、' : '', el('code', null, p)])),
       el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
@@ -443,6 +449,19 @@ function closeDrawer() {
   view.task = null;
   saveView();
   renderDrawer();
+}
+
+// 角色 → 颜色。常用名固定，其他按名字哈希，同一角色永远同一颜色
+const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, docs: 3, 文档: 3 };
+function roleStyle(role) {
+  const key = String(role).trim().toLowerCase();
+  let i = ROLE_FIXED[key];
+  if (i === undefined) {
+    let h = 0;
+    for (const ch of key) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+    i = h % 6;
+  }
+  return `--rc: var(--role-${i})`;
 }
 
 // 提示词：在新的 WorkBuddy 窗口里对工人说的话

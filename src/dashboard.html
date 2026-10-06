@@ -452,6 +452,15 @@ async function hideAgents(ids) {
   await poll();
 }
 
+let reconnectOpen = null; // 展开了重连提示词的掉线 worker 编号
+
+// 掉线的 worker 窗口还在时，发给它的那句话：旧编号已失效，重新加入后接着主循环
+function reconnectPrompt(a) {
+  const name = a.name ? ` --name ${a.name}` : '';
+  const dir = data.root ? `项目目录是 ${data.root}。` : '';
+  return `继续。你之前是 ateam worker ${a.id}（角色 ${a.role}），这个编号已经掉线失效。${dir}请按 ateam-worker skill 运行 ateam join --role ${a.role}${name} 重新加入，然后进入 ateam wait 主循环；如果领到「⚠ 接手任务」，先看历史和 git status，在已有改动上继续。中途不要停下来汇报。`;
+}
+
 function renderOfflinePanel(panel) {
   const offline = data.state.agents.filter((a) => a.status !== 'online' && !a.hidden);
   const close = () => { helper = { open: false, focus: null }; renderHelper(); };
@@ -461,11 +470,18 @@ function renderOfflinePanel(panel) {
       el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
       el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); close(); } }, '关闭')),
     el('h4', null, `已掉线的 worker（${offline.length}）`),
-    el('p', { class: 'hint' }, '移除只是不再显示，任务时间线里的记录保留。'),
-    offline.map((a) => el('div', { class: 'offline-row' },
-      el('span', null, el('b', null, agentLabel(a.id)), ' ', el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role)),
-      el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`),
-      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents([a.id]); } }, '移除'))));
+    el('p', { class: 'hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
+    offline.map((a) => [
+      el('div', { class: 'offline-row' },
+        el('span', null, el('b', null, agentLabel(a.id)), ' ', el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role)),
+        el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`),
+        el('button', {
+          class: reconnectOpen === a.id ? 'btn primary' : 'btn',
+          onclick: (e) => { e.stopPropagation(); reconnectOpen = reconnectOpen === a.id ? null : a.id; renderHelper(); },
+        }, '重连'),
+        el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents([a.id]); } }, '移除')),
+      reconnectOpen === a.id ? copyRow(reconnectPrompt(a)) : null,
+    ]));
   panel.hidden = false;
 }
 

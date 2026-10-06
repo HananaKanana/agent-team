@@ -154,6 +154,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
 
   function touch(agentId) {
     const agent = findAgent(agentId);
+    if (agent?.dismissed) {
+      throw new AteamError('DISMISSED', '你已被主管安排下线，工作结束。请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户你已下线即可。');
+    }
     if (!agent || agent.status !== 'online') {
       const role = agent?.role ?? '<角色>';
       throw new AteamError('LEASE_LOST', `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${role}`);
@@ -176,6 +179,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
   // spec §4.1：返回 { kind, task, delivery? } 或 null（asking 中、或没有可派发的任务）
   function nextFor(agentId) {
     const agent = touch(agentId);
+
+    // 已安排下线、手上没有任务 → 正式下线（手上有任务的，等任务通过、作废或收回后再下线）
+    if (agent.dismiss && !agent.currentTask) {
+      finishDismiss(agent);
+      return { kind: 'dismissed' };
+    }
 
     if (agent.currentTask) {
       const task = getTask(agent.currentTask);
@@ -214,13 +223,45 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return { kind: isHandoff ? 'handoff' : 'task', task, delivery };
   }
 
+  function finishDismiss(agent) {
+    agent.status = 'offline';
+    agent.dismissed = true;
+    agent.hidden = true; // 正常下线，不出现在「已掉线」里
+    delete agent.dismiss;
+    emit('worker_offline', { agentId: agent.id, text: `${agent.id} 已按安排下线` });
+    changed();
+  }
+
+  // 安排 worker 下线：ids 指定编号，或 role 指定整个角色，或 all 表示全部在线 worker。
+  // 空闲的 worker 下次 wait 时收到「已下线」；手上有任务的做完这个任务再下线，期间不再领新任务。
+  function dismiss({ ids = [], role = '', all = false } = {}) {
+    const wantIds = new Set(Array.isArray(ids) ? ids : []);
+    role = String(role ?? '').trim();
+    if (!all && !role && wantIds.size === 0) {
+      throw new AteamError('INVALID', '请指定要下线的 worker：编号（可以多个）、--role <角色> 或 --all。');
+    }
+    for (const id of wantIds) {
+      const agent = findAgent(id);
+      if (!agent) throw new AteamError('NOT_FOUND', `找不到 worker ${id}。请运行 ateam status 查看在线的 worker。`);
+    }
+    const picked = state.agents.filter((a) => a.status === 'online'
+      && (all || wantIds.has(a.id) || (role && sameRole(a.role, role))));
+    const result = [];
+    for (const agent of picked) {
+      agent.dismiss = true;
+      result.push({ id: agent.id, holding: agent.currentTask });
+    }
+    if (result.length > 0) changed();
+    return result;
+  }
+
   // 「暂无任务」时告诉 worker 在等什么：本角色还有哪些任务在等依赖、等的是谁
   function waitingInfo(agentId) {
     const agent = findAgent(agentId);
     if (!agent) return null;
     if (agent.currentTask) {
       const task = state.tasks.find((t) => t.id === agent.currentTask);
-      return task ? { holding: { id: task.id, status: task.status } } : null;
+      return task ? { holding: { id: task.id, status: task.status }, dismissing: !!agent.dismiss } : null;
     }
     const blocked = state.tasks
       .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && !depsMet(t))
@@ -466,6 +507,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
         }
         agent.currentTask = null;
       }
+      if (agent.dismiss) {
+        agent.dismissed = true;
+        agent.hidden = true;
+        delete agent.dismiss;
+      }
       emit('worker_offline', {
         agentId: agent.id, taskId: reclaimed ?? undefined,
         text: reclaimed ? `${agent.id} 掉线，任务 ${reclaimed} 已收回，等待接手` : `${agent.id} 掉线`,
@@ -509,7 +555,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     createJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, cancel, reclaim, hideAgents, report, sweep, noteActivity,
+    approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

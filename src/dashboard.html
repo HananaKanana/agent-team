@@ -406,6 +406,7 @@ function renderWorkers() {
     },
     el('span', { class: 'dot' }), el('b', null, a.name || a.id), el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     el('span', { class: 'task' }, a.currentTask || '空闲'),
+    a.dismiss ? el('span', { class: 'task' }, '待下线') : null,
   );
   });
   if (offline.length) {
@@ -425,6 +426,7 @@ function isStale(a) {
 }
 
 let helper = { open: false, focus: null };
+let dismissAllArm = false; // 「全部下线」两步确认
 
 function wakePrompt(a) {
   const doing = a.currentTask ? `继续做 ${a.currentTask}，做完提交后` : '';
@@ -443,6 +445,14 @@ function copyRow(text) {
         setTimeout(() => { if (copied === text) { copied = null; renderHelper(); } }, 2000);
       },
     }, copied === text ? '已复制' : '复制'));
+}
+
+async function dismissAgents(body) {
+  try {
+    await fetch('/api/dismiss', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {}
+  await poll();
+  renderHelper();
 }
 
 async function hideAgents(ids) {
@@ -501,11 +511,27 @@ function renderHelper() {
   fill(panel,
     el('div', { class: 'drawer-tools' }, el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); } }, '关闭')),
     el('h4', null, '叫醒停住的 worker'),
+    online.length ? el('div', { class: 'prompt' },
+      el('span', { class: 'hint' }, '活都干完了？'),
+      el('button', {
+        class: dismissAllArm ? 'btn primary' : 'btn',
+        onclick: (e) => {
+          e.stopPropagation();
+          if (!dismissAllArm) { dismissAllArm = true; renderHelper(); return; }
+          dismissAllArm = false;
+          dismissAgents({ all: true });
+        },
+      }, dismissAllArm ? '确认全部下线' : '全部下线'),
+      dismissAllArm ? el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); dismissAllArm = false; renderHelper(); } }, '取消') : null,
+      el('span', { class: 'hint' }, '空闲的马上下线；手上有任务的做完这个再下线。')) : null,
     el('p', { class: 'hint' }, 'worker 停下来不动时，在它自己的 agent 窗口里发这句话。'),
     ordered.length ? ordered.map((a) => [
       el('div', { class: `who${a.id === helper.focus ? ' focus' : ''}` },
         `${agentLabel(a.id)}，${a.role}${a.currentTask ? `，${a.currentTask}` : '，空闲'}，心跳 ${ago(a.lastSeenAt)}${isStale(a) ? '，可能停了' : ''}`),
       copyRow(wakePrompt(a)),
+      el('div', { class: 'prompt' }, a.dismiss
+        ? el('span', { class: 'hint' }, '已安排下线，手上的任务结束后下线。')
+        : el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); dismissAgents({ ids: [a.id] }); } }, '安排它下线')),
     ]) : el('p', { class: 'hint' }, '没有在线的 worker。'),
     offline.length ? [
       el('h4', null, '重连掉线的 worker'),

@@ -124,6 +124,16 @@ ateam report --job J1 --file report.md
 
 然后在对话里把汇报内容告诉用户，请用户测试验收。
 
+**让 worker 下线**：所有需求都做完、近期也没有新任务时，让 worker 收工，免得它们一直空转等待：
+
+```
+ateam dismiss --all              # 全部在线 worker
+ateam dismiss --role frontend    # 某个角色
+ateam dismiss fr-173c ba-de66    # 指定编号
+```
+
+空闲的 worker 马上收到「已下线」并停止；手上有任务的会做完这个任务（通过、作废或被收回）再下线，期间不再领新任务。用户说「让大家收工」时也这样做。之后要再开工，请用户重新打开 worker 窗口。
+
 ## 6. 会话重开
 
 上下文满了或会话重开时：先运行 `ateam status`，按「待你处理」列表继续（待 review、等待答复、已挂起），再重新启动 `ateam watch --follow` 的后台监听。事件不是唯一的事实来源，`status` 不会漏掉需要处理的事。

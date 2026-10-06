@@ -99,7 +99,9 @@ function waitingLines(waiting) {
   if (!waiting) return [];
   if (waiting.holding) {
     const why = HOLDING_REASON[waiting.holding.status] ?? waiting.holding.status;
-    return [`你手上的任务 ${waiting.holding.id} ${why}。`];
+    const lines = [`你手上的任务 ${waiting.holding.id} ${why}。`];
+    if (waiting.dismissing) lines.push('主管已安排你下线：这个任务结束后（通过、作废或被收回）你就下线，不会再领新任务。在那之前继续正常等待。');
+    return lines;
   }
   if (!waiting.blocked?.length) return ['你这个角色目前没有待领取的任务，等主管派新任务。'];
   return [
@@ -122,6 +124,15 @@ export function formatWait(result, agentId, waiting, round = 0) {
       ...(why.length ? [...why, ''] : []),
       '这是正常的等待，不是工作结束：主管随时可能派任务、打回或答复。',
       '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
+    ].join('\n');
+  }
+  if (result.kind === 'dismissed') {
+    return [
+      '# 已下线',
+      '',
+      '主管安排你下线，工作结束。',
+      '',
+      '现在请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户「已下线」就可以结束本轮了。',
     ].join('\n');
   }
   const { kind, task, delivery } = result;
@@ -206,7 +217,7 @@ export function formatStatus(state, pending, jobId, root) {
   const agents = state.agents.filter((a) => !a.hidden);
   if (agents.length) {
     for (const a of agents) {
-      const online = a.status === 'online' ? '在线' : '掉线';
+      const online = a.status === 'online' ? (a.dismiss ? '在线（已安排下线）' : '在线') : (a.dismissed ? '已下线' : '掉线');
       const task = a.currentTask ? `，当前任务 ${a.currentTask}` : '，空闲';
       const who = a.name ? `${a.name}（${a.id}）` : a.id;
       lines.push(`- ${who}，角色 ${a.role}，${online}${task}，上次心跳 ${ago(a.lastSeenAt, now)}`);

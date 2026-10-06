@@ -13,7 +13,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
@@ -35,6 +35,7 @@ worker
   ateam release T3
   ateam cancel T3 ["<原因>"]
   ateam reclaim T3 ["<原因>"]
+  ateam dismiss <编号>... | --role <角色> | --all
   ateam watch [--timeout 90] [--follow]
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
@@ -236,6 +237,21 @@ const commands = {
     const { task } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
     return `已修改任务 ${task.id}。${next}`;
+  },
+
+  async dismiss({ flags, positional }) {
+    const body = { ids: positional, role: flags.role ?? '', all: !!flags.all };
+    if (!body.all && !body.role && body.ids.length === 0) {
+      fail('请指定要下线的 worker。示例：ateam dismiss fr-173c ／ ateam dismiss --role frontend ／ ateam dismiss --all');
+    }
+    const { dismissed } = await request('POST', '/api/dismiss', body);
+    if (dismissed.length === 0) return '没有符合条件的在线 worker。';
+    const idle = dismissed.filter((d) => !d.holding).map((d) => d.id);
+    const busy = dismissed.filter((d) => d.holding).map((d) => `${d.id}（${d.holding}）`);
+    const lines = [`已安排 ${dismissed.length} 个 worker 下线。`];
+    if (idle.length) lines.push(`- 空闲的马上下线：${idle.join('、')}`);
+    if (busy.length) lines.push(`- 手上有任务的，任务结束（通过、作废或收回）后下线，期间不再领新任务：${busy.join('、')}`);
+    return lines.join('\n');
   },
 
   async reclaim({ positional }) {

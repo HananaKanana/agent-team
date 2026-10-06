@@ -491,10 +491,12 @@ function renderHelper() {
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;
   const online = agents.filter((a) => a.status === 'online');
-  // 角色：在线 worker 的角色 + 还没完成的任务的角色
+  const offline = agents.filter((a) => a.status !== 'online' && !a.hidden)
+    .sort((x, y) => y.lastSeenAt - x.lastSeenAt);
+  // 角色：还没完成的任务的角色 + 所有（未移除的）worker 用过的角色
   const roles = new Map();
   for (const t of tasks) if (t.status !== 'approved' && t.status !== 'cancelled') roles.set(t.role.trim().toLowerCase(), t.role);
-  for (const a of online) roles.set(a.role.trim().toLowerCase(), a.role);
+  for (const a of agents) if (!a.hidden) roles.set(a.role.trim().toLowerCase(), a.role);
   const ordered = online.slice().sort((x, y) => (y.id === helper.focus) - (x.id === helper.focus) || isStale(y) - isStale(x));
   fill(panel,
     el('div', { class: 'drawer-tools' }, el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); } }, '关闭')),
@@ -505,6 +507,14 @@ function renderHelper() {
         `${agentLabel(a.id)}，${a.role}${a.currentTask ? `，${a.currentTask}` : '，空闲'}，心跳 ${ago(a.lastSeenAt)}${isStale(a) ? '，可能停了' : ''}`),
       copyRow(wakePrompt(a)),
     ]) : el('p', { class: 'hint' }, '没有在线的 worker。'),
+    offline.length ? [
+      el('h4', null, '重连掉线的 worker'),
+      el('p', { class: 'hint' }, '窗口还在、只是掉线了：把这句话发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。'),
+      offline.map((a) => [
+        el('div', { class: 'who' }, `${agentLabel(a.id)}，${a.role}，最后心跳 ${ago(a.lastSeenAt)}`),
+        copyRow(reconnectPrompt(a)),
+      ]),
+    ] : null,
     el('h4', null, '新开一个 worker'),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发下面对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
     roles.size ? [...roles.values()].map((role) => [el('div', { class: 'who' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)), copyRow(workerPrompt(role))])

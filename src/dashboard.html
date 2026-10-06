@@ -82,13 +82,18 @@ button.worker:hover { border-color: var(--muted); }
   box-shadow: 0 12px 32px rgba(15, 25, 20, .22); padding: 14px 16px 16px;
 }
 .helper[hidden] { display: none; }
-.helper h4 { font-size: 13px; color: var(--muted); margin: 14px 0 4px; font-weight: 600; }
-.helper h4:first-of-type { margin-top: 4px; }
-.helper .who { font-weight: 600; margin-top: 10px; }
-.helper .who.focus { color: var(--asking); }
-.offline-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
-.offline-row > span:first-child { margin-right: auto; }
-.helper .drawer-tools .btn { padding: 2px 10px; }
+.helper-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.helper-head b { font-size: 15px; }
+.helper-sec { display: flex; align-items: center; gap: 8px; margin: 18px 0 2px; }
+.helper-sec h4 { font-size: 13px; color: var(--muted); margin: 0; font-weight: 600; margin-right: auto; }
+.helper .hint { margin: 2px 0 0; }
+/* 每个 worker 一张卡片：上面一行信息 + 操作，下面是提示词 */
+.wcard { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin-top: 10px; }
+.wcard.focus { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+.wcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.wcard-head .grow { margin-right: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.pill { padding: 1px 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: color-mix(in srgb, var(--asking) 18%, transparent); color: var(--asking); }
+
 .worker.offline .dot { background: var(--pending); }
 .worker .meta { color: var(--muted); }
 .banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
@@ -99,9 +104,24 @@ button.worker:hover { border-color: var(--muted); }
 .needs-row + .needs-row { margin-top: 8px; }
 .needs b { font-weight: 600; }
 .prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
-.prompt code { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; user-select: all; white-space: pre-wrap; }
-.btn { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 13px; }
-.btn:hover { border-color: var(--ink); }
+/* 提示词块：文字铺满，复制按钮嵌在右上角 */
+.pblock { position: relative; margin-top: 8px; }
+.pblock code {
+  display: block; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 64px 10px 12px; user-select: all; white-space: pre-wrap; line-height: 1.6; font-size: 12.5px;
+}
+.pblock .btn { position: absolute; top: 6px; right: 6px; }
+/* 按钮：统一高度；primary 实色，ghost 无边框 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  height: 28px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--ink); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: var(--sunken); }
+.btn.sm { height: 24px; padding: 0 9px; font-size: 12px; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--sunken); color: var(--ink); }
+.btn.done { border-color: var(--approved); color: var(--approved); }
 .hint { color: var(--muted); font-size: 12.5px; }
 
 .layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: calc(100vh - 56px); }
@@ -142,8 +162,10 @@ main { padding: 20px 24px 40px; min-width: 0; }
 }
 .report-bar .what { font-weight: 600; color: var(--approved); }
 .report-bar .when { color: var(--muted); font-size: 12.5px; margin-right: auto; }
-.btn.primary { background: var(--approved); border-color: var(--approved); color: #fff; font-weight: 600; padding: 4px 14px; }
-.btn.primary:hover { filter: brightness(1.08); border-color: var(--approved); }
+.btn.primary { background: var(--approved); border-color: var(--approved); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: var(--approved); filter: brightness(1.08); }
+.btn.warn { background: var(--rework); border-color: var(--rework); color: #fff; font-weight: 600; }
+.btn.warn:hover { background: var(--rework); filter: brightness(1.08); }
 
 /* 汇报阅读页：全屏，正文居中 */
 .report-page { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; }
@@ -433,19 +455,6 @@ function wakePrompt(a) {
   return `继续。你是 ateam worker ${a.id}（角色 ${a.role}）。${doing}运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。如果提示租约已失效，就重新 ateam join --role ${a.role}${a.name ? ` --name ${a.name}` : ''}。`;
 }
 
-function copyRow(text) {
-  return el('div', { class: 'prompt' },
-    el('code', null, text),
-    el('button', {
-      class: 'btn',
-      onclick: async (e) => {
-        e.stopPropagation();
-        try { await navigator.clipboard.writeText(text); copied = text; } catch { copied = null; }
-        renderHelper();
-        setTimeout(() => { if (copied === text) { copied = null; renderHelper(); } }, 2000);
-      },
-    }, copied === text ? '已复制' : '复制'));
-}
 
 async function dismissAgents(body) {
   try {
@@ -472,26 +481,29 @@ function reconnectPrompt(a) {
 }
 
 function renderOfflinePanel(panel) {
-  const offline = data.state.agents.filter((a) => a.status !== 'online' && !a.hidden);
+  const offline = data.state.agents.filter((a) => a.status !== 'online' && !a.hidden)
+    .sort((x, y) => y.lastSeenAt - x.lastSeenAt);
   const close = () => { helper = { open: false, focus: null }; renderHelper(); };
   if (!offline.length) { close(); return; }
   fill(panel,
-    el('div', { class: 'drawer-tools' },
-      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
-      el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); close(); } }, '关闭')),
-    el('h4', null, `已掉线的 worker（${offline.length}）`),
+    el('div', { class: 'helper-head' },
+      el('b', null, `掉线的 worker（${offline.length}）`),
+      el('span', { class: 'prompt', style: 'margin: 0' },
+        el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
+        el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); close(); } }, '关闭'))),
     el('p', { class: 'hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
-    offline.map((a) => [
-      el('div', { class: 'offline-row' },
-        el('span', null, el('b', null, agentLabel(a.id)), ' ', el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role)),
-        el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`),
+    offline.map((a) => el('div', { class: 'wcard' },
+      el('div', { class: 'wcard-head' },
+        el('span', { class: 'grow' },
+          el('b', null, agentLabel(a.id)),
+          el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
+          el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`)),
         el('button', {
-          class: reconnectOpen === a.id ? 'btn primary' : 'btn',
+          class: reconnectOpen === a.id ? 'btn primary sm' : 'btn sm',
           onclick: (e) => { e.stopPropagation(); reconnectOpen = reconnectOpen === a.id ? null : a.id; renderHelper(); },
         }, '重连'),
-        el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); hideAgents([a.id]); } }, '移除')),
-      reconnectOpen === a.id ? copyRow(reconnectPrompt(a)) : null,
-    ]));
+        el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); hideAgents([a.id]); } }, '移除')),
+      reconnectOpen === a.id ? promptBlock(reconnectPrompt(a), renderHelper) : null)));
   panel.hidden = false;
 }
 
@@ -508,43 +520,54 @@ function renderHelper() {
   for (const t of tasks) if (t.status !== 'approved' && t.status !== 'cancelled') roles.set(t.role.trim().toLowerCase(), t.role);
   for (const a of agents) if (!a.hidden) roles.set(a.role.trim().toLowerCase(), a.role);
   const ordered = online.slice().sort((x, y) => (y.id === helper.focus) - (x.id === helper.focus) || isStale(y) - isStale(x));
+  const closeBtn = el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; dismissAllArm = false; renderHelper(); } }, '关闭');
+  const dismissAll = online.length ? [
+    dismissAllArm ? el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissAllArm = false; renderHelper(); } }, '取消') : null,
+    el('button', {
+      class: dismissAllArm ? 'btn warn sm' : 'btn sm',
+      title: '空闲的马上下线；手上有任务的做完这个再下线',
+      onclick: (e) => {
+        e.stopPropagation();
+        if (!dismissAllArm) { dismissAllArm = true; renderHelper(); return; }
+        dismissAllArm = false;
+        dismissAgents({ all: true });
+      },
+    }, dismissAllArm ? '确认全部下线' : '全部下线'),
+  ] : null;
   fill(panel,
-    el('div', { class: 'drawer-tools' }, el('button', { class: 'close', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); } }, '关闭')),
-    el('h4', null, '叫醒停住的 worker'),
-    online.length ? el('div', { class: 'prompt' },
-      el('span', { class: 'hint' }, '活都干完了？'),
-      el('button', {
-        class: dismissAllArm ? 'btn primary' : 'btn',
-        onclick: (e) => {
-          e.stopPropagation();
-          if (!dismissAllArm) { dismissAllArm = true; renderHelper(); return; }
-          dismissAllArm = false;
-          dismissAgents({ all: true });
-        },
-      }, dismissAllArm ? '确认全部下线' : '全部下线'),
-      dismissAllArm ? el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); dismissAllArm = false; renderHelper(); } }, '取消') : null,
-      el('span', { class: 'hint' }, '空闲的马上下线；手上有任务的做完这个再下线。')) : null,
-    el('p', { class: 'hint' }, 'worker 停下来不动时，在它自己的 agent 窗口里发这句话。'),
-    ordered.length ? ordered.map((a) => [
-      el('div', { class: `who${a.id === helper.focus ? ' focus' : ''}` },
-        `${agentLabel(a.id)}，${a.role}${a.currentTask ? `，${a.currentTask}` : '，空闲'}，心跳 ${ago(a.lastSeenAt)}${isStale(a) ? '，可能停了' : ''}`),
-      copyRow(wakePrompt(a)),
-      el('div', { class: 'prompt' }, a.dismiss
-        ? el('span', { class: 'hint' }, '已安排下线，手上的任务结束后下线。')
-        : el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); dismissAgents({ ids: [a.id] }); } }, '安排它下线')),
-    ]) : el('p', { class: 'hint' }, '没有在线的 worker。'),
+    el('div', { class: 'helper-head' }, el('b', null, '提示词'), closeBtn),
+    el('div', { class: 'helper-sec' }, el('h4', null, `在线的 worker（${online.length}）`), dismissAll),
+    el('p', { class: 'hint' }, dismissAllArm
+      ? '确认后：空闲的马上下线；手上有任务的做完这个再下线。'
+      : 'worker 停下来不动时，复制它的叫醒话，发到它自己的 agent 窗口。'),
+    ordered.length ? ordered.map((a) => el('div', { class: `wcard${a.id === helper.focus ? ' focus' : ''}` },
+      el('div', { class: 'wcard-head' },
+        el('span', { class: 'grow' },
+          el('b', null, agentLabel(a.id)),
+          el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
+          el('span', { class: 'hint' }, `${a.currentTask || '空闲'}，心跳 ${ago(a.lastSeenAt)}`),
+          isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null),
+        a.dismiss
+          ? el('span', { class: 'hint' }, '待下线')
+          : el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissAgents({ ids: [a.id] }); } }, '安排下线')),
+      promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '没有在线的 worker。'),
     offline.length ? [
-      el('h4', null, '重连掉线的 worker'),
-      el('p', { class: 'hint' }, '窗口还在、只是掉线了：把这句话发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。'),
-      offline.map((a) => [
-        el('div', { class: 'who' }, `${agentLabel(a.id)}，${a.role}，最后心跳 ${ago(a.lastSeenAt)}`),
-        copyRow(reconnectPrompt(a)),
-      ]),
+      el('div', { class: 'helper-sec' }, el('h4', null, `掉线的 worker（${offline.length}）`)),
+      el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。'),
+      offline.map((a) => el('div', { class: 'wcard' },
+        el('div', { class: 'wcard-head' },
+          el('span', { class: 'grow' },
+            el('b', null, agentLabel(a.id)),
+            el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
+            el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`))),
+        promptBlock(reconnectPrompt(a), renderHelper))),
     ] : null,
-    el('h4', null, '新开一个 worker'),
-    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发下面对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
-    roles.size ? [...roles.values()].map((role) => [el('div', { class: 'who' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)), copyRow(workerPrompt(role))])
-      : copyRow(workerPrompt('<角色，比如 frontend>')));
+    el('div', { class: 'helper-sec' }, el('h4', null, '新开一个 worker')),
+    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
+    roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
+      el('div', { class: 'wcard-head' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)),
+      promptBlock(workerPrompt(role), renderHelper)))
+      : promptBlock(workerPrompt('<角色，比如 frontend>'), renderHelper));
   panel.hidden = false;
 }
 
@@ -743,18 +766,23 @@ function workerPrompt(role) {
 }
 
 function promptBox(role) {
-  const text = workerPrompt(role);
-  return el('div', { class: 'prompt' },
+  return promptBlock(workerPrompt(role), render);
+}
+
+// 一段可复制的提示词；rerender 用来刷新「已复制」状态
+function promptBlock(text, rerender) {
+  const done = copied === text;
+  return el('div', { class: 'pblock' },
     el('code', null, text),
     el('button', {
-      class: 'btn',
+      class: `btn sm${done ? ' done' : ''}`,
       onclick: async (e) => {
         e.stopPropagation();
         try { await navigator.clipboard.writeText(text); copied = text; } catch { copied = null; }
-        render();
-        setTimeout(() => { if (copied === text) { copied = null; render(); } }, 2000);
+        rerender();
+        setTimeout(() => { if (copied === text) { copied = null; rerender(); } }, 2000);
       },
-    }, copied === text ? '已复制' : '复制'));
+    }, done ? '已复制' : '复制'));
 }
 
 // 待领取、依赖已满足、但没有同角色在线 worker 的任务 → 需要有人开新窗口接手

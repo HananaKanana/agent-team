@@ -541,16 +541,16 @@ function renderHelper() {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = helper.tab === 'lead' ? 'lead' : 'worker';
+  const tab = ['lead', 'install'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
     onclick: (e) => { e.stopPropagation(); helper = { ...helper, tab: key }; dismissAllArm = false; renderHelper(); },
   }, label);
   fill(panel,
     el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader')),
+    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装')),
     el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
-    tab === 'worker' ? [
+    tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
     roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
@@ -786,6 +786,34 @@ function roleStyle(role) {
 
 // 提示词：在新的 agent 窗口里对 worker 说的话
 // leader 的提示词：在项目目录里开一个 Claude Code 会话发给它
+// 「安装」页：一次性安装步骤，命令里的路径用服务所在的真实目录
+function installGuide() {
+  const tool = (data.toolDir || '~/code/agent-team').replace(/^\/Users\/[^/]+/, '~');
+  const project = (data.root || '<你的项目>').replace(/^\/Users\/[^/]+/, '~');
+  const port = data.port || 7700;
+  const step = (title, hint, cmd) => el('div', { class: 'wcard' },
+    el('div', { class: 'wcard-head' }, el('b', null, title)),
+    hint ? el('p', { class: 'hint' }, hint) : null,
+    cmd ? promptBlock(cmd, renderHelper) : null);
+  return [
+    el('p', { class: 'hint' }, '只需要做一次。命令在终端里运行。'),
+    step('① 注册 ateam 命令', '能打印出命令列表就成功了。',
+      `cd ${tool}\nnpm link\nateam help`),
+    step('提示找不到 ateam？', 'npm 的全局目录不在 PATH 里。运行下面这行把它加进 ~/.zshrc，然后开一个新终端再试。',
+      'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
+    step('② 安装两份 skill（软链，推荐）', 'leader skill 给 Claude Code，worker skill 给 WorkBuddy。软链之后，skill 更新了自动生效。',
+      `mkdir -p ~/.claude/skills ~/.workbuddy/skills\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ~/.workbuddy/skills/ateam-worker`),
+    step('或者：复制安装', '以后 skill 更新了，要再运行一次。',
+      `mkdir -p ~/.claude/skills ~/.workbuddy/skills\ncp -R ${tool}/skills/ateam-lead   ~/.claude/skills/\ncp -R ${tool}/skills/ateam-worker ~/.workbuddy/skills/`),
+    el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
+    step('③ 在项目根目录启动服务', '项目必须是 git 仓库。这个终端窗口一直开着；看到「项目目录」那一行是你要开发的项目就对了。',
+      `cd ${project}\nateam serve`),
+    step('同时开第二个项目？', '换一个端口，并让这个项目里的 leader 和 worker 都带上同样的 ATEAM_URL。',
+      `ateam serve --port ${port + 1}\nexport ATEAM_URL=http://127.0.0.1:${port + 1}`),
+    el('p', { class: 'hint' }, '装好之后：切到「leader」页开 leader，切到「worker」页开 worker。'),
+  ];
+}
+
 // leader 的加入提示词：不带需求，先就位；新开会话和会话重开都用这一句
 function leadPrompt() {
   const dir = data.root ? `\n项目目录：${data.root}` : '';

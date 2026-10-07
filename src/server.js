@@ -9,6 +9,8 @@ import { loadState, saveState } from './persist.js';
 import { commitPaths, ensureGitignore, ensureGitRepo, latestChangeTime } from './git.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
+// agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
+const TOOL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
 const DEFAULT_HOLD_SEC = 90;
 const MAX_HOLD_SEC = 110;
@@ -178,7 +180,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
       return { task, agentId };
     },
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
-    'GET /api/state': () => ({ state: store.state, pending: store.pendingActions(), root }),
+    'GET /api/state': () => ({ state: store.state, pending: store.pendingActions(), root, toolDir: TOOL_DIR, port }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),
   };
 

@@ -237,7 +237,7 @@ rm -r ~/code/agent-team/.ateam
 
 ### leader 会话重开了（上下文满了）
 
-在新会话里说「使用 ateam-lead skill，继续」。它会先运行 `ateam status`，从「待你处理」列表接着做。
+在新会话里发看板「使用说明」→「leader」里的那句加入的话（或者说「使用 ateam-lead skill，继续」）。它会先运行 `ateam status`，从「待你处理」列表接着做。
 
 ### 更新了 agent-team 的代码之后
 

@@ -279,7 +279,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 <header class="top">
   <h1>ateam 调度台</h1>
   <div class="workers" id="workers"></div>
-  <button class="btn helper-btn" id="helper-btn" type="button">提示词</button>
+  <button class="btn helper-btn" id="helper-btn" type="button">使用说明</button>
 </header>
 <section class="needs" id="needs" hidden aria-label="需要 worker"></section>
 <div class="banner" id="banner" hidden>连不上 ateam 服务，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
@@ -437,7 +437,7 @@ function renderWorkers() {
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
     }, el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
   }
-  box.replaceChildren(...(chips.length ? chips : [el('span', { class: 'meta' }, '还没有 worker 加入。点右边「提示词」，复制给新开的 agent 窗口。')]));
+  box.replaceChildren(...(chips.length ? chips : [el('span', { class: 'meta' }, '还没有 worker 加入。点右边「使用说明」，按步骤开主管和 worker。')]));
   renderHelper();
 }
 
@@ -535,8 +535,31 @@ function renderHelper() {
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
   fill(panel,
-    el('div', { class: 'helper-head' }, el('b', null, '提示词'), closeBtn),
-    el('div', { class: 'helper-sec' }, el('h4', null, `在线的 worker（${online.length}）`), dismissAll),
+    el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
+    el('p', { class: 'hint' }, data.root
+      ? `服务已在 ${data.root} 运行。按顺序：先开一个主管，再按角色开 worker；干活中 worker 停住或掉线，在下面找到它复制对应的话。每段话都发到对应的 agent 窗口里。`
+      : '按顺序：先开一个主管，再按角色开 worker；干活中 worker 停住或掉线，在下面找到它复制对应的话。'),
+    (() => {
+      const lead = leadPrompts();
+      return [
+        el('div', { class: 'helper-sec' }, el('h4', null, '① 开主管')),
+        el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面的话。主管只需要一个。'),
+        el('div', { class: 'wcard' },
+          el('div', { class: 'wcard-head' }, el('b', null, '开始新需求'), el('span', { class: 'hint' }, '把 <在这里写需求> 换成你的需求')),
+          promptBlock(lead.start, renderHelper)),
+        el('div', { class: 'wcard' },
+          el('div', { class: 'wcard-head' }, el('b', null, '主管会话重开了'),
+            el('span', { class: 'hint' }, lead.hasWork ? '还有没做完的需求，用这个接着干' : '上下文满了或换了会话时用')),
+          promptBlock(lead.resume, renderHelper)),
+      ];
+    })(),
+    el('div', { class: 'helper-sec' }, el('h4', null, '② 开 worker')),
+    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
+    roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
+      el('div', { class: 'wcard-head' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)),
+      promptBlock(workerPrompt(role), renderHelper)))
+      : promptBlock(workerPrompt('<角色，比如 frontend>'), renderHelper),
+    el('div', { class: 'helper-sec' }, el('h4', null, `③ 干活中：在线的 worker（${online.length}）`), dismissAll),
     el('p', { class: 'hint' }, dismissAllArm
       ? '确认后：空闲的马上下线；手上有任务的做完这个再下线。'
       : 'worker 停下来不动时，复制它的叫醒话，发到它自己的 agent 窗口。'),
@@ -552,7 +575,7 @@ function renderHelper() {
           : el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissAgents({ ids: [a.id] }); } }, '安排下线')),
       promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '没有在线的 worker。'),
     offline.length ? [
-      el('div', { class: 'helper-sec' }, el('h4', null, `掉线的 worker（${offline.length}）`)),
+      el('div', { class: 'helper-sec' }, el('h4', null, `④ 掉线了：重连（${offline.length}）`)),
       el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。'),
       offline.map((a) => el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' },
@@ -562,12 +585,9 @@ function renderHelper() {
             el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`))),
         promptBlock(reconnectPrompt(a), renderHelper))),
     ] : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '新开一个 worker')),
-    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
-    roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
-      el('div', { class: 'wcard-head' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)),
-      promptBlock(workerPrompt(role), renderHelper)))
-      : promptBlock(workerPrompt('<角色，比如 frontend>'), renderHelper));
+    el('div', { class: 'helper-sec' }, el('h4', null, '⑤ 收工')),
+    el('p', { class: 'hint' }, '需求都做完了：在 ③ 里点「全部下线」，worker 会自己停下。主管那边对它说「让大家收工」也一样。'),
+  );
   panel.hidden = false;
 }
 
@@ -760,6 +780,23 @@ function roleStyle(role) {
 }
 
 // 提示词：在新的 agent 窗口里对 worker 说的话
+// 主管的提示词：在项目目录里开一个 Claude Code 会话发给它
+function leadPrompts() {
+  const dir = data.root ? `\n项目目录：${data.root}` : '';
+  const online = data.state.agents.filter((a) => a.status === 'online');
+  const byRole = new Map();
+  for (const a of online) byRole.set(a.role, (byRole.get(a.role) ?? 0) + 1);
+  const team = byRole.size
+    ? `\n现在在线的 worker：${[...byRole].map(([role, n]) => `${role} ${n} 个`).join('、')}。`
+    : '\n现在还没有 worker 在线，拆完任务后告诉我需要开几个什么角色的 worker。';
+  const hasWork = data.state.jobs.some((j) => j.status !== 'awaiting_acceptance');
+  return {
+    start: `使用 ateam-lead skill，带团队做这个需求：<在这里写需求>${dir}${team}`,
+    resume: `使用 ateam-lead skill，继续。先运行 ateam status，按「待你处理」接着做，并重新启动 ateam watch --follow 后台监听。${dir}`,
+    hasWork,
+  };
+}
+
 function workerPrompt(role) {
   const dir = data.root ? `\n项目目录：${data.root}` : '';
   return `使用 ateam-worker skill，角色 ${role}${dir}`;

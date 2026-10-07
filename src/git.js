@@ -21,7 +21,7 @@ function run(root, args) {
   });
 }
 
-// index.lock 冲突（比如主管同时在执行 git）时短暂等待后重试
+// index.lock 冲突（比如 leader 同时在执行 git）时短暂等待后重试
 async function git(root, args) {
   for (let attempt = 0; ; attempt++) {
     try {

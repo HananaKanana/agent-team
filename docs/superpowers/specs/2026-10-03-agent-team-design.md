@@ -5,13 +5,13 @@
 
 ## 1. 目标
 
-让一个「主管 agent」（Claude Code）带领若干「worker」（agent 窗口，目前用 WorkBuddy + DeepSeek V4.1 Flash）在同一台电脑、同一个项目目录里协作开发。
+让一个「leader」（Claude Code）带领若干「worker」（agent 窗口，目前用 WorkBuddy + DeepSeek V4.1 Flash）在同一台电脑、同一个项目目录里协作开发。
 
-- 用户只和主管对话：提需求 → 主管拆任务 → 派给 worker → worker 完成后回报 → 主管 review（不通过则打回）→ 全部通过后主管向用户汇报 → 用户测试验收。
-- worker 是用户手动打开的常驻 agent 窗口。worker 随时可能因 token 用完而中途消失，用户换账号开新窗口后，新 worker 要能接着干，由主管负责重新安排。
+- 用户只和 leader 对话：提需求 → leader 拆任务 → 派给 worker → worker 完成后回报 → leader review（不通过则打回）→ 全部通过后 leader 向用户汇报 → 用户测试验收。
+- worker 是用户手动打开的常驻 agent 窗口。worker 随时可能因 token 用完而中途消失，用户换账号开新窗口后，新 worker 要能接着干，由 leader 负责重新安排。
 - 用户通过网页看板全局查看：做了哪些工作、完成情况、review 情况。
 
-名词定义见 README 的「名词」一节：agent 指一个 AI 编程程序的窗口；主管和 worker 都是 agent，主管带团队，worker 干活。
+名词定义见 README 的「名词」一节：agent 指一个 AI 编程程序的窗口；leader 和 worker 都是 agent，leader 带团队，worker 干活。
 
 **成功标准**
 
@@ -30,7 +30,7 @@
 ## 2. 组成部分
 
 ```
-用户 ──对话──▶ Claude Code（主管，加载 ateam-lead skill）
+用户 ──对话──▶ Claude Code（leader，加载 ateam-lead skill）
                    │  ateam 命令行
                    ▼
             ┌──────────────────────────┐
@@ -46,9 +46,9 @@
 | 组成 | 职责 |
 |---|---|
 | `ateam serve` | 在项目根目录启动服务。HTTP + 长轮询，默认端口 7700；托管看板页面；状态持久化到 `.ateam/state.json` |
-| `ateam` 命令行 | 主管和 worker 与服务交互的**唯一**方式。输出是给大模型读的 markdown 文本 |
+| `ateam` 命令行 | leader 和 worker 与服务交互的**唯一**方式。输出是给大模型读的 markdown 文本 |
 | `ateam-worker` skill | 教 worker：加入 → 等任务 → 干活 → 写进度 → 提交 → 再等 |
-| `ateam-lead` skill | 教主管：建需求 → 拆任务 → 监听事件 → review → 回答提问 → 写汇报 |
+| `ateam-lead` skill | 教 leader：建需求 → 拆任务 → 监听事件 → review → 回答提问 → 写汇报 |
 | 看板 | 单个 HTML 文件 + 原生 JS，每 3 秒拉取一次 `/api/state` |
 
 ### 2.1 代码结构
@@ -109,7 +109,7 @@ agent-team/
 
 `history.type` 的取值：`created` `claimed` `progress` `asked` `answered` `submitted` `approved` `rejected` `handoff` `held` `released` `edited` `cancelled`。
 
-**作废**（`ateam cancel T3 ["原因"]`）：除 `approved` 外任何状态都可作废；仍有未作废的任务依赖它时拒绝。作废后不再派发，不计入进度和汇报；持有它的 worker 下次调用命令时收到「已被主管作废」的提示。看板上的任务时间线直接渲染 `history`。
+**作废**（`ateam cancel T3 ["原因"]`）：除 `approved` 外任何状态都可作废；仍有未作废的任务依赖它时拒绝。作废后不再派发，不计入进度和汇报；持有它的 worker 下次调用命令时收到「已被 leader 作废」的提示。看板上的任务时间线直接渲染 `history`。
 
 ## 4. 任务生命周期
 
@@ -121,10 +121,10 @@ agent-team/
     └────────────────────────────┘  │                 ▼
                      ask ▼          │        原 worker 在线 → working（带打回意见）
                        asking ──answer        原 worker 掉线 → pending（handoff=true）
-                                              第 3 次打回 → held（等主管处理）
+                                              第 3 次打回 → held（等 leader 处理）
 ```
 
-需求状态：没有任务时为 `planning`，有任务时为 `active`，主管提交汇报后为 `awaiting_acceptance`。只有该需求下所有任务都 `approved`，才能提交汇报。
+需求状态：没有任务时为 `planning`，有任务时为 `active`，leader 提交汇报后为 `awaiting_acceptance`。只有该需求下所有任务都 `approved`，才能提交汇报。
 
 ### 4.1 派发规则（worker 调用 `wait` 时）
 
@@ -150,10 +150,10 @@ agent-team/
 
 ### 4.3 打回上限
 
-`reject` 时 `rejectCount` 加 1。达到 3 次时，任务转为 `held`，不再自动派发，并发出 `task_held` 事件。主管可以选择：
+`reject` 时 `rejectCount` 加 1。达到 3 次时，任务转为 `held`，不再自动派发，并发出 `task_held` 事件。leader 可以选择：
 
 - `ateam task edit T3 ...`：改写描述或验收标准，然后 `ateam release T3` 重新放回 `pending`，`rejectCount` 清零。
-- 主管自己改代码后直接 `ateam approve T3`。
+- leader 自己改代码后直接 `ateam approve T3`。
 
 ## 5. 命令行
 
@@ -189,10 +189,10 @@ git commit -m "[T3] <总结>" -- <paths...>
 带路径的 `git commit` 只提交这些路径，即使别的 worker 在暂存区里放了东西，也不会被一起提交。提交完成后，把提交号记到任务上，任务转为 `submitted`，发出 `submitted` 事件。
 
 - 指定路径下没有任何改动时报错。如果确实不需要改代码（比如只是回答问题后确认无需改动），可以加 `--no-changes`。
-- 服务单进程按顺序处理请求，两个 worker 的提交自然排队，不会互相冲突。如果主管恰好也在执行 git 命令导致 `index.lock` 冲突，服务会短暂等待后重试，最多 3 次。
+- 服务单进程按顺序处理请求，两个 worker 的提交自然排队，不会互相冲突。如果 leader 恰好也在执行 git 命令导致 `index.lock` 冲突，服务会短暂等待后重试，最多 3 次。
 - 由服务来提交，而不是让 worker 自己敲 git 命令：一是**强制**路径隔离，二是 worker 的工作目录不一定是项目根目录，三是减少模型出错。
 
-### 5.3 主管
+### 5.3 leader
 
 | 命令 | 说明 |
 |---|---|
@@ -211,13 +211,13 @@ git commit -m "[T3] <总结>" -- <paths...>
 
 事件类型：`worker_joined` `worker_offline` `claimed`（包括接手）`question` `submitted` `task_held`。
 
-**事件不是唯一的事实来源**：`watch` 返回事件后就把它们标记为已送达。如果主管会话因为上下文满了而重开，可以用 `ateam status` 里的「待你处理」列表恢复，所以不会漏掉任何需要处理的事。
+**事件不是唯一的事实来源**：`watch` 返回事件后就把它们标记为已送达。如果 leader 会话因为上下文满了而重开，可以用 `ateam status` 里的「待你处理」列表恢复，所以不会漏掉任何需要处理的事。
 
 ## 6. 代码隔离
 
-- 所有 agent 在同一个项目目录下工作。主管拆任务时，保证同时进行的任务 `paths` 互不重叠，典型做法是前端 `web/`、后端 `server/`。
-- `submit` 只提交任务 `paths` 内的改动（§5.2），所以每个提交都只属于一个任务，主管用 `git show <sha>` review 时看到的就是这个任务的改动。
-- 越界改动（worker 改了 `paths` 以外的文件）不会被提交，会留在工作区。主管 review 时用 `git status` 能发现。skill 里明令禁止越界。
+- 所有 agent 在同一个项目目录下工作。leader 拆任务时，保证同时进行的任务 `paths` 互不重叠，典型做法是前端 `web/`、后端 `server/`。
+- `submit` 只提交任务 `paths` 内的改动（§5.2），所以每个提交都只属于一个任务，leader 用 `git show <sha>` review 时看到的就是这个任务的改动。
+- 越界改动（worker 改了 `paths` 以外的文件）不会被提交，会留在工作区。leader review 时用 `git status` 能发现。skill 里明令禁止越界。
 - 以后如果需要更强的隔离，可以给任务加一个 `workdir` 字段，指向独立的 worktree，协议不用变。
 
 ## 7. Skills
@@ -278,7 +278,7 @@ git commit -m "[T3] <总结>" -- <paths...>
 | 端口被占用 | `serve` 报错退出，提示用 `--port` 换端口，并设置 `ATEAM_URL` |
 | 两个 worker 同时提交 | 服务按顺序执行 git，自然排队（§5.2） |
 | 并发请求 | 单进程按顺序处理，不存在重复派发 |
-| 主管会话重开 | `ateam status` 的「待你处理」列表 + 未送达的事件 |
+| leader 会话重开 | `ateam status` 的「待你处理」列表 + 未送达的事件 |
 
 ## 10. 已确认事项（agent 环境）
 

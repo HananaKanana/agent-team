@@ -155,7 +155,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
   function touch(agentId) {
     const agent = findAgent(agentId);
     if (agent?.dismissed) {
-      throw new AteamError('DISMISSED', '你已被主管安排下线，工作结束。请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户你已下线即可。');
+      throw new AteamError('DISMISSED', '你已被 leader 安排下线，工作结束。请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户你已下线即可。');
     }
     if (!agent || agent.status !== 'online') {
       const role = agent?.role ?? '<角色>';
@@ -281,13 +281,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     if (!agent.currentTask) {
       const cancelled = state.tasks.find((t) => t.assignee === agent.id && t.status === 'cancelled' && t.cancelledWhileHeld);
       if (cancelled) {
-        throw new AteamError('BAD_STATE', `你手上的任务 ${cancelled.id} 已被主管作废${cancelled.cancelReason ? `（${cancelled.cancelReason}）` : ''}。停止这个任务，不要提交。请运行 ateam wait --as ${agent.id} 领取下一个任务。`);
+        throw new AteamError('BAD_STATE', `你手上的任务 ${cancelled.id} 已被 leader 作废${cancelled.cancelReason ? `（${cancelled.cancelReason}）` : ''}。停止这个任务，不要提交。请运行 ateam wait --as ${agent.id} 领取下一个任务。`);
       }
       throw new AteamError('BAD_STATE', `你当前没有进行中的任务。请运行 ateam wait --as ${agent.id} 领取任务。`);
     }
     const task = getTask(agent.currentTask);
     if (task.status === 'asking') {
-      throw new AteamError('BAD_STATE', `任务 ${task.id} 正在等待主管答复。请运行 ateam wait --as ${agent.id} 等待答复。`);
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 正在等待 leader 答复。请运行 ateam wait --as ${agent.id} 等待答复。`);
     }
     if (task.status !== 'working') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，不能执行此操作。请运行 ateam wait --as ${agent.id} 等待下一步。`);
@@ -452,7 +452,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
 
   // ---------- 租约 ----------
 
-  // 主管（或用户在看板上）确认原窗口没了，立即收回任务交给别人接手，不必等租约过期。
+  // leader（或用户在看板上）确认原窗口没了，立即收回任务交给别人接手，不必等租约过期。
   // 同时把原 worker 标记为掉线：原窗口万一又活过来，会收到「租约已失效」并重新加入，不会和接手的人抢同一个任务。
   function reclaim(taskId, reason = '') {
     const task = getTask(taskId);

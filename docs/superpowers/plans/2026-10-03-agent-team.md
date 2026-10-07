@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 做一个本地任务协调服务 `ateam`（服务 + 命令行 + 看板 + 两份 skill），让 Claude Code 主管带 worker 协作开发，支持掉线接手和 review 闭环。
+**Goal:** 做一个本地任务协调服务 `ateam`（服务 + 命令行 + 看板 + 两份 skill），让 Claude Code leader 带 worker 协作开发，支持掉线接手和 review 闭环。
 
 **Architecture:** `src/store.js` 是纯逻辑状态机（时钟可注入，不碰网络和磁盘）；`src/server.js` 用 Node 内置 `http` 把它暴露成 JSON 接口，负责长轮询、租约扫描、落盘和 git 提交；`bin/ateam.js` 是唯一的客户端，把 JSON 渲染成给大模型读的 markdown；看板是一个静态 HTML 文件，轮询 `/api/state`。
 
@@ -32,7 +32,7 @@
 1. **任务路径在首次提交时还不存在，或者部分路径不存在**（比如 `paths: ["web/", "shared/types.ts"]` 而 `shared/` 没建）→ `git add` 报 pathspec 不匹配时，应该跳过不存在的路径，用存在的路径正常提交，而不是整个提交失败。
 2. **同一个 worker 有两个挂起的 `wait`**（命令行重试或模型重复调用）→ 新连接替换旧连接，旧连接立即返回「暂无任务」，同一个任务不能送达两次。
 3. **worker 的 `wait` 连接被客户端断开**（agent 窗口关闭、进程被杀）→ 服务在连接 `close` 时移除这个挂起，否则会被一直当作在线，永远不掉线。
-4. **主管 `approve` 了一个被别人依赖的任务**，而依赖它的 worker 正挂在 `wait` 上 → 挂起的 worker 必须立即被唤醒并领到任务，不能等到 90 秒超时。
+4. **leader `approve` 了一个被别人依赖的任务**，而依赖它的 worker 正挂在 `wait` 上 → 挂起的 worker 必须立即被唤醒并领到任务，不能等到 90 秒超时。
 5. **服务重启时有 worker 正挂在 `wait` 上**（连接被重置）→ 命令行把 `ECONNRESET` 和 `ECONNREFUSED` 一样当作可重试错误，服务回来后自动重新挂起。
 
 ---
@@ -51,7 +51,7 @@
 | `bin/ateam.js` | 命令行：参数解析、HTTP 调用、重试、退出码 |
 | `src/dashboard.html` | 看板 |
 | `skills/ateam-worker/SKILL.md` | worker skill |
-| `skills/ateam-lead/SKILL.md` | 主管 skill |
+| `skills/ateam-lead/SKILL.md` | leader skill |
 | `README.md` | 安装与使用 |
 
 ---
@@ -245,8 +245,8 @@ git commit -m "feat: state persistence and path-scoped git commit"
 - [x] **Step 2: 一次性探测**
 
   在 scratchpad 里写 `probe4.mjs`：在临时 git 仓库上 `startServer({ root, port: 7799, leaseMin: 0.05 })`，用 `fetch` 验证：
-  1. 两个 worker 加入；fe 挂起 `wait`；主管建需求和任务后，fe 的 `wait` 在 1 秒内返回任务（不必等超时）
-  2. 主管 `watch` 能收到 `claimed`
+  1. 两个 worker 加入；fe 挂起 `wait`；leader 建需求和任务后，fe 的 `wait` 在 1 秒内返回任务（不必等超时）
+  2. leader `watch` 能收到 `claimed`
   3. 写文件后 `submit` 返回 sha
   4. 同一个 worker 并发两个 `wait`，第一个立即得到 `null`
   5. 用 `AbortController` 中止一个 `wait` 后，等待超过租约时长，该 worker 变为 `offline`
@@ -386,7 +386,7 @@ git commit -m "feat: read-only dashboard"
 **`ateam-lead/SKILL.md`**
 - frontmatter：
   - `name: ateam-lead`
-  - `description: 作为 agent-team 主管：把用户需求拆成任务派给 worker，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。`
+  - `description: 作为 agent-team leader：把用户需求拆成任务派给 worker，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。`
 - 正文覆盖 spec §7.2 的 6 条，另加：
   - 用 Monitor 工具运行 `ateam watch --follow` 做后台监听（`timeout_ms` 设为最大值，到期后重新启动）
   - 写任务描述的模板：背景、接口约定、要做的事、不要做的事、验收标准
@@ -417,13 +417,13 @@ git commit -m "docs: worker/lead skills and README"
 
 - [x] **Step 1: 端到端模拟**
 
-  在 scratchpad 写 `e2e.sh`：新建临时 git 仓库，运行 `ateam serve --lease 0.1`；用 3 个 shell 角色（主管、fe、be）只通过 `ateam` 命令行完成以下流程：
+  在 scratchpad 写 `e2e.sh`：新建临时 git 仓库，运行 `ateam serve --lease 0.1`；用 3 个 shell 角色（leader、fe、be）只通过 `ateam` 命令行完成以下流程：
   1. 建需求，加任务：T1 后端；T2 前端，依赖 T1。T2 的 `paths` 包含一个不存在的目录（Review Focus #1）
-  2. be 领 T1、写文件、提交；主管打回；be 收到 `# 打回` 后修改再提交；主管通过
+  2. be 领 T1、写文件、提交；leader 打回；be 收到 `# 打回` 后修改再提交；leader 通过
   3. fe 此前一直挂在 `wait` 上，应在 T1 通过后立刻领到 T2（Review Focus #4）
-  4. fe 提问；主管回答；fe 收到 `# 答复`
+  4. fe 提问；leader 回答；fe 收到 `# 答复`
   5. fe 停止调用命令，等待超过租约时长；`ateam status` 显示 T2 退回待领取；新 worker `join` 后 `wait` 得到 `# ⚠ 接手任务`
-  6. 新 worker 提交；主管通过；`report` 成功
+  6. 新 worker 提交；leader 通过；`report` 成功
   7. 另建一个任务，连续打回 3 次后状态为 `held`
   8. 在 fe 挂起 `wait` 时重启服务，`wait` 自动重连，不报错（Review Focus #5）
   9. `git log --oneline` 里每个提交都以 `[T` 开头，且只包含对应任务的路径

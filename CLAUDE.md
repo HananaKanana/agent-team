@@ -1,6 +1,6 @@
 # agent-team
 
-本地任务协调服务 `ateam`：Claude Code 当主管，带领若干 worker（agent 窗口，目前用 WorkBuddy + DeepSeek V4.1 Flash），在同一台电脑、同一个项目目录里协作开发。主管负责拆任务、派任务、review、汇报，worker 负责领任务、干活、提交。worker 可能因为 token 用完而中途掉线，用户换账号开新窗口后，新 worker 接手继续。
+本地任务协调服务 `ateam`：Claude Code 当 leader，带领若干 worker（agent 窗口，目前用 WorkBuddy + DeepSeek V4.1 Flash），在同一台电脑、同一个项目目录里协作开发。leader 负责拆任务、派任务、review、汇报，worker 负责领任务、干活、提交。worker 可能因为 token 用完而中途掉线，用户换账号开新窗口后，新 worker 接手继续。
 
 ## 文档
 

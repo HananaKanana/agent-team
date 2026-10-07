@@ -296,7 +296,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
-<div class="report-page" id="report" hidden role="dialog" aria-label="主管汇报"></div>
+<div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 
 <script>
 'use strict';
@@ -444,7 +444,7 @@ function renderWorkers() {
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
     }, el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
   }
-  box.replaceChildren(...(chips.length ? chips : [el('span', { class: 'meta' }, '还没有 worker 加入。点右边「使用说明」，按步骤开主管和 worker。')]));
+  box.replaceChildren(...(chips.length ? chips : [el('span', { class: 'meta' }, '还没有 worker 加入。点右边「使用说明」，按步骤开 leader 和 worker。')]));
   renderHelper();
 }
 
@@ -548,7 +548,7 @@ function renderHelper() {
   }, label);
   fill(panel,
     el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', '主管')),
+    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader')),
     el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
     tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
@@ -584,17 +584,17 @@ function renderHelper() {
         promptBlock(reconnectPrompt(a), renderHelper))),
     ] : null,
     el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
-    el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会自己停下。主管那边对它说「让大家收工」也一样。'),
+    el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会自己停下。leader 那边对它说「让大家收工」也一样。'),
     ] : [
     (() => {
       const lead = leadPrompts();
       return [
-        el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面的话。主管只需要一个。'),
+        el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面的话。leader 只需要一个。'),
         el('div', { class: 'wcard' },
           el('div', { class: 'wcard-head' }, el('b', null, '开始新需求'), el('span', { class: 'hint' }, '把 <在这里写需求> 换成你的需求')),
           promptBlock(lead.start, renderHelper)),
         el('div', { class: 'wcard' },
-          el('div', { class: 'wcard-head' }, el('b', null, '主管会话重开了'),
+          el('div', { class: 'wcard-head' }, el('b', null, 'leader 会话重开了'),
             el('span', { class: 'hint' }, lead.hasWork ? '还有没做完的需求，用这个接着干' : '上下文满了或换了会话时用')),
           promptBlock(lead.resume, renderHelper)),
       ];
@@ -618,14 +618,14 @@ function renderJobs() {
     el('div', { class: 'sub' }, el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
     jt.length ? strip(jt, false) : null);
   });
-  nav.replaceChildren(el('h2', null, '需求'), ...(items.length ? items : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，主管会在这里建立任务。')]));
+  nav.replaceChildren(el('h2', null, '需求'), ...(items.length ? items : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，leader 会在这里建立任务。')]));
 }
 
 function renderMain() {
   const main = document.getElementById('main');
   const job = data.state.jobs.find((j) => j.id === view.job);
   if (!job) {
-    main.replaceChildren(el('p', { class: 'empty' }, data.state.jobs.length ? '在左侧选择一个需求，查看任务看板。' : '等待主管创建第一个需求。'));
+    main.replaceChildren(el('p', { class: 'empty' }, data.state.jobs.length ? '在左侧选择一个需求，查看任务看板。' : '等待 leader 创建第一个需求。'));
     return;
   }
   const all = data.state.tasks.filter((t) => t.jobId === job.id);
@@ -646,7 +646,7 @@ function renderMain() {
   let report = null;
   if (job.status === 'awaiting_acceptance' && job.report) {
     report = el('div', { class: 'report-bar' },
-      el('span', { class: 'what' }, '主管已提交汇报，等你验收'),
+      el('span', { class: 'what' }, 'leader 已提交汇报，等你验收'),
       el('span', { class: 'when' }, `${fmtTime(job.updatedAt)} 提交`),
       el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'));
   }
@@ -662,7 +662,7 @@ function renderMain() {
     el('h3', null, `已作废（${cancelled.length}）`),
     el('div', { class: 'cancelled-list' }, cancelled.map((t) => card(t, 'cancelled')))) : null;
 
-  fill(main, head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, '主管还在拆分任务。'), cancelledBox);
+  fill(main, head, stats, report, tasks.length ? board : el('p', { class: 'empty' }, 'leader 还在拆分任务。'), cancelledBox);
 }
 
 function card(t, lane) {
@@ -793,7 +793,7 @@ function roleStyle(role) {
 }
 
 // 提示词：在新的 agent 窗口里对 worker 说的话
-// 主管的提示词：在项目目录里开一个 Claude Code 会话发给它
+// leader 的提示词：在项目目录里开一个 Claude Code 会话发给它
 function leadPrompts() {
   const dir = data.root ? `\n项目目录：${data.root}` : '';
   const online = data.state.agents.filter((a) => a.status === 'online');

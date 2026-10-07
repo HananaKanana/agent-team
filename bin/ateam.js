@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ateam 命令行：主管和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
+// ateam 命令行：leader 和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,7 +28,7 @@ worker
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
 
-主管
+leader
   ateam job new "<标题>" [--desc-file f.md]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]...
   ateam task edit T3 [--title "..."] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
@@ -193,7 +193,7 @@ const commands = {
     const as = requireAs(flags);
     const text = requireArg(positional[0], '问题', `ateam ask --as ${as} "接口返回的日期用什么格式？"`);
     const { task } = await request('POST', '/api/ask', { as, text });
-    return `已就 ${task.id} 向主管提问。请运行 ateam wait --as ${as} 等待答复，不要猜。`;
+    return `已就 ${task.id} 向 leader 提问。请运行 ateam wait --as ${as} 等待答复，不要猜。`;
   },
 
   async submit({ flags, positional }) {
@@ -201,7 +201,7 @@ const commands = {
     const summary = requireArg(positional[0], '提交总结', `ateam submit --as ${as} "完成登录页，手工验证了表单校验"`);
     const { task, commit } = await request('POST', '/api/submit', { as, summary, noChanges: !!flags['no-changes'] });
     const what = commit ? `提交 ${commit}` : '无代码改动';
-    return `已提交 ${task.id}（${what}），等待主管 review。请运行：ateam wait --as ${as}`;
+    return `已提交 ${task.id}（${what}），等待 leader review。请运行：ateam wait --as ${as}`;
   },
 
   async 'job new'({ flags, positional }) {

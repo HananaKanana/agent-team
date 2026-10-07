@@ -71,7 +71,7 @@ export function formatTask(task) {
   return lines.join('\n');
 }
 
-const DELIVERY_LABEL = { rejected: '打回意见', answer: '主管答复' };
+const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复' };
 
 function footer(agentId) {
   return [
@@ -91,8 +91,8 @@ function deliverySection(delivery) {
 }
 
 const HOLDING_REASON = {
-  submitted: '已提交，等主管 review',
-  asking: '已提问，等主管答复',
+  submitted: '已提交，等 leader review',
+  asking: '已提问，等 leader 答复',
 };
 
 function waitingLines(waiting) {
@@ -100,10 +100,10 @@ function waitingLines(waiting) {
   if (waiting.holding) {
     const why = HOLDING_REASON[waiting.holding.status] ?? waiting.holding.status;
     const lines = [`你手上的任务 ${waiting.holding.id} ${why}。`];
-    if (waiting.dismissing) lines.push('主管已安排你下线：这个任务结束后（通过、作废或被收回）你就下线，不会再领新任务。在那之前继续正常等待。');
+    if (waiting.dismissing) lines.push('leader 已安排你下线：这个任务结束后（通过、作废或被收回）你就下线，不会再领新任务。在那之前继续正常等待。');
     return lines;
   }
-  if (!waiting.blocked?.length) return ['你这个角色目前没有待领取的任务，等主管派新任务。'];
+  if (!waiting.blocked?.length) return ['你这个角色目前没有待领取的任务，等 leader 派新任务。'];
   return [
     '你这个角色的任务都在等依赖完成：',
     ...waiting.blocked.map((t) => `- ${t.id} ${t.title}：等 ${t.waitingFor.map((d) => `${d.id}（${STATUS[d.status] ?? d.status}）`).join('、')}`),
@@ -122,7 +122,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
       `请立即运行下一轮：ateam wait --as ${agentId} --round ${next}`,
       '',
       ...(why.length ? [...why, ''] : []),
-      '这是正常的等待，不是工作结束：主管随时可能派任务、打回或答复。',
+      '这是正常的等待，不是工作结束：leader 随时可能派任务、打回或答复。',
       '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
     ].join('\n');
   }
@@ -130,7 +130,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
     return [
       '# 已下线',
       '',
-      '主管安排你下线，工作结束。',
+      'leader 安排你下线，工作结束。',
       '',
       '现在请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户「已下线」就可以结束本轮了。',
     ].join('\n');

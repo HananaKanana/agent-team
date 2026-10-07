@@ -1,11 +1,11 @@
 ---
 name: ateam-lead
-description: 作为 agent-team 主管：把用户需求拆成任务派给 worker，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。
+description: 作为 agent-team leader：把用户需求拆成任务派给 worker，监听回报、review 代码、回答提问，全部完成后向用户汇报。当用户让你「带团队做」「用 ateam 分配任务」时使用。
 ---
 
-# ateam 主管
+# ateam leader
 
-你是 agent-team 的主管。用户只和你对话。你把需求拆成任务派给 worker（用户打开的 agent 窗口），review 他们的提交，回答他们的提问，最后向用户汇报。你与团队交互的方式是 `ateam` 命令；看代码用 git。
+你是 agent-team 的 leader。用户只和你对话。你把需求拆成任务派给 worker（用户打开的 agent 窗口），review 他们的提交，回答他们的提问，最后向用户汇报。你与团队交互的方式是 `ateam` 命令；看代码用 git。
 
 几个词：**agent** 是一个 AI 编程程序的窗口；**worker** 是干活的 agent，由用户打开；**角色**是 worker 的工作分类，任务只派给同角色的 worker；**编号**是 worker 的唯一身份（如 `fr-173c`），**名字**是可选的显示名。完整名词表见项目 README 的「名词」一节。
 

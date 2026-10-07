@@ -1,8 +1,8 @@
 # agent-team（ateam）
 
-让 Claude Code 当主管，带几个 worker，在同一个项目里分工写代码。
+让 Claude Code 当 leader，带几个 worker，在同一个项目里分工写代码。
 
-- 你只和主管说话：提需求 → 主管拆成任务派给 worker → worker 写代码、提交 → 主管 review，不合格就打回 → 全部通过后主管向你汇报 → 你验收。
+- 你只和 leader 说话：提需求 → leader 拆成任务派给 worker → worker 写代码、提交 → leader review，不合格就打回 → 全部通过后 leader 向你汇报 → 你验收。
 - worker 的 token 用完、窗口停了也没关系：你换个账号开新窗口，新 worker 会接着上一个的改动继续做。
 - 浏览器里有一个看板，随时能看每个任务做到哪了、review 了几轮。
 
@@ -14,8 +14,8 @@
 
 | 名词 | 含义 |
 |---|---|
-| agent | 一个 AI 编程程序的窗口。目前主管用 Claude Code，worker 用 WorkBuddy；也可以换成别的，只要能运行 shell 命令、能加载 skill |
-| 主管 | 带团队的那个 agent（Claude Code，加载 `ateam-lead` skill）。你只和它对话：它拆任务、派任务、review、回答提问、写汇报 |
+| agent | 一个 AI 编程程序的窗口。目前 leader 用 Claude Code，worker 用 WorkBuddy；也可以换成别的，只要能运行 shell 命令、能加载 skill |
+| leader | 带团队的那个 agent（Claude Code，加载 `ateam-lead` skill）。你只和它对话：它拆任务、派任务、review、回答提问、写汇报 |
 | worker | 干活的 agent（加载 `ateam-worker` skill）。领任务、写代码、提交。一个 worker 就是一个 agent 窗口，同一时间只做一个任务 |
 | 角色 | worker 的工作分类，比如 frontend、backend、test。任务只派给同角色的 worker。按「做什么活」起名，不要按窗口起名 |
 | 编号 | worker 加入时服务分配的唯一身份，比如 `fr-173c`（角色前两个字母 + 4 位随机码）。worker 的每条命令都带 `--as <编号>` |
@@ -25,11 +25,11 @@
 
 | 名词 | 含义 |
 |---|---|
-| 需求 | 你提的一件事，编号 `J1`、`J2`……主管把它拆成若干任务 |
+| 需求 | 你提的一件事，编号 `J1`、`J2`……leader 把它拆成若干任务 |
 | 任务 | 一个 worker 一次能做完的活，编号 `T1`、`T2`……包含角色、允许改动的路径、描述、验收标准、依赖 |
 | 允许改动的路径 | 任务里写明的目录或文件（`--paths`）。提交时只提交这些路径里的改动，路径外的改动不会被提交 |
 | 依赖 | 任务 A 依赖任务 B：B 通过之后 A 才能被领取 |
-| 验收标准 | 主管 review 时逐条核对的条目 |
+| 验收标准 | leader review 时逐条核对的条目 |
 | 项目目录 | 运行 `ateam serve` 的目录，也就是要开发的项目。任务路径都相对于这里 |
 
 **任务流程**
@@ -38,11 +38,11 @@
 |---|---|
 | 领取 | worker 调用 `ateam wait` 时，服务把一个能做的任务派给它 |
 | 提交 | worker 做完后运行 `ateam submit`，服务替它 `git commit` 任务路径里的改动 |
-| review | 主管检查提交：通过，或者打回 |
+| review | leader 检查提交：通过，或者打回 |
 | 打回 | review 不通过，修改意见送回给原 worker 重做 |
-| 挂起 | 同一个任务被打回 3 次，停止自动派发，等主管改写任务或自己动手 |
+| 挂起 | 同一个任务被打回 3 次，停止自动派发，等 leader 改写任务或自己动手 |
 | 作废 | 不再需要的任务（`ateam cancel`）。不再派发、不计入进度，看板上置灰放在最下面 |
-| 汇报 | 需求的所有任务都通过后，主管写给你的总结；需求进入「待你验收」 |
+| 汇报 | 需求的所有任务都通过后，leader 写给你的总结；需求进入「待你验收」 |
 
 **在线与掉线**
 
@@ -52,7 +52,7 @@
 | 租约 | 多久没有心跳就判为掉线，默认 15 分钟 |
 | 掉线 | 超过租约没有心跳。worker 手上的任务退回「待领取」，等别人接手；这个编号作废，回来要重新加入 |
 | 接手 | 新 worker 领到上一个 worker 留下的任务，收到「⚠ 接手任务」，在已有改动上继续，不从头做起 |
-| 下线 | 主管或你主动让 worker 收工（看板「使用说明」面板里的「全部下线」「安排下线」，或 `ateam dismiss`）。空闲的马上停止；手上有任务的做完这个再停。和「掉线」不同，下线是正常结束 |
+| 下线 | leader 或你主动让 worker 收工（看板「使用说明」面板里的「全部下线」「安排下线」，或 `ateam dismiss`）。空闲的马上停止；手上有任务的做完这个再停。和「掉线」不同，下线是正常结束 |
 | 收回 | 确认原窗口没了时，立即把任务从它手上拿回来交给别人接手，不必等租约过期（看板上的「收回任务」或 `ateam reclaim`） |
 | 叫醒话 | worker 窗口还在但停住了不动时，发给它让它继续的那句话。点看板顶部的 worker 标签就能复制 |
 
@@ -62,8 +62,8 @@
 |---|---|
 | 服务 | `ateam serve` 启动的本地程序，保存所有状态，负责派发、计时、提交。只监听本机 |
 | 看板 | 浏览器打开 <http://127.0.0.1:7700> 看到的页面，每 3 秒刷新 |
-| skill | 教 agent 怎么当主管或 worker 的说明文件（`SKILL.md`）。`ateam-lead` 给主管，`ateam-worker` 给 worker |
-| 提示词 | 你发给 agent 窗口的那句话，比如「使用 ateam-worker skill，角色 frontend」。点看板右上角「使用说明」，主管和 worker 的提示词都按步骤列在里面，可以直接复制 |
+| skill | 教 agent 怎么当 leader 或 worker 的说明文件（`SKILL.md`）。`ateam-lead` 给 leader，`ateam-worker` 给 worker |
+| 提示词 | 你发给 agent 窗口的那句话，比如「使用 ateam-worker skill，角色 frontend」。点看板右上角「使用说明」，leader 和 worker 的提示词都按步骤列在里面，可以直接复制 |
 
 ---
 
@@ -89,7 +89,7 @@ export PATH="$HOME/.npm-global/bin:$PATH"
 
 | skill | 给谁用 | 放到哪里 |
 |---|---|---|
-| [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（主管） | `~/.claude/skills/ateam-lead/SKILL.md` |
+| [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（leader） | `~/.claude/skills/ateam-lead/SKILL.md` |
 | [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | agent（worker） | `~/.workbuddy/skills/ateam-worker/SKILL.md` |
 
 两种装法，选一种：
@@ -152,13 +152,13 @@ ateam 服务已启动：http://127.0.0.1:7700（看板同地址）
 使用 ateam-worker skill，角色 frontend，名字 账号B
 ```
 
-**角色就是工作分类**，比如 frontend、backend、test。派发不是随机的：分类为 backend 的任务只会派给以 backend 加入的 worker。所以角色要按「做什么活」起名，不要按窗口起名（像 session1、session2 这种，主管只能把前后端的活混着派）。同一分类可以开多个 worker，它们会按顺序分着领。
+**角色就是工作分类**，比如 frontend、backend、test。派发不是随机的：分类为 backend 的任务只会派给以 backend 加入的 worker。所以角色要按「做什么活」起名，不要按窗口起名（像 session1、session2 这种，leader 只能把前后端的活混着派）。同一分类可以开多个 worker，它们会按顺序分着领。
 
 worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡片上的分类标签同色，一眼能分清谁做什么。
 
-> 记不住这些话也没关系：服务启动后，点看板右上角「使用说明」，主管和 worker 该发的话都按顺序列在里面，带项目目录，点「复制」就行。
+> 记不住这些话也没关系：服务启动后，点看板右上角「使用说明」，leader 和 worker 该发的话都按顺序列在里面，带项目目录，点「复制」就行。
 
-### 4. 让主管开工
+### 4. 让 leader 开工
 
 在**同一个项目目录**开一个 Claude Code 会话，说：
 
@@ -166,7 +166,7 @@ worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡�
 使用 ateam-lead skill，需求是：……
 ```
 
-告诉它现在有哪些角色的 worker。之后主管会自己拆任务、派发、review，全部完成后在对话里给你汇报。
+告诉它现在有哪些角色的 worker。之后 leader 会自己拆任务、派发、review，全部完成后在对话里给你汇报。
 
 ---
 
@@ -181,13 +181,13 @@ worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡�
   | 待领取 | 等 worker 来领；带「接手」标记的是上一个 worker 掉线留下的 |
   | 进行中 | worker 正在做 |
   | 返工中 | 被打回过，worker 在改 |
-  | 等待答复 | worker 提了问题，等主管回答 |
-  | 待 review | worker 已提交，等主管审 |
+  | 等待答复 | worker 提了问题，等 leader 回答 |
+  | 待 review | worker 已提交，等 leader 审 |
   | 已通过 | 完成 |
-  | 已挂起 | 打回 3 次还不行，等主管处理 |
+  | 已挂起 | 打回 3 次还不行，等 leader 处理 |
 
 - **点卡片**：右边弹出详情（验收标准、描述、提交记录、完整时间线）。点抽屉外任意地方、点「关闭」或按 Esc 关闭；点另一张卡片直接切换。
-- **汇报**：需求全部完成后，主管的汇报显示在需求顶部。
+- **汇报**：需求全部完成后，leader 的汇报显示在需求顶部。
 - 页面每 3 秒自动刷新。
 
 ---
@@ -206,7 +206,7 @@ worker 超过租约时长（默认 15 分钟）没有动静，就会被判为掉
 
 原来的 worker 如果其实还活着，下次调用命令会收到「租约已失效」，它会自己重新加入。
 
-**不想等 15 分钟**：确认原窗口已经没了，就在看板上点开它的任务卡片，在「原窗口没了？」下点「收回任务」，再点「确认收回」（或者让主管运行 `ateam reclaim T3`）。任务立即退回待领取，同角色的空闲 worker 马上以「接手任务」领走。
+**不想等 15 分钟**：确认原窗口已经没了，就在看板上点开它的任务卡片，在「原窗口没了？」下点「收回任务」，再点「确认收回」（或者让 leader 运行 `ateam reclaim T3`）。任务立即退回待领取，同角色的空闲 worker 马上以「接手任务」领走。
 
 **原窗口还在、只是停住了**：不用收回。点顶部那个 worker 的标签，把「叫醒话」复制到它自己的窗口里。
 
@@ -215,7 +215,7 @@ worker 超过租约时长（默认 15 分钟）没有动静，就会被判为掉
 先看错误信息里的「服务的项目目录」：
 
 - **不是你要开发的项目**：服务起错了目录。按下面「服务起错了目录」处理，worker 的改动不要动。
-- **是对的**：说明 worker 确实没在允许的路径里改文件，让主管看一下。
+- **是对的**：说明 worker 确实没在允许的路径里改文件，让 leader 看一下。
 
 ### 服务起错了目录
 
@@ -233,7 +233,7 @@ rm -r ~/code/agent-team/.ateam
 
 整个过程尽量在 1 分钟内完成：服务断开超过约 60 秒，worker 会收到「服务不可达」并停下。如果停了，对它说「继续」即可。
 
-### 主管会话重开了（上下文满了）
+### leader 会话重开了（上下文满了）
 
 在新会话里说「使用 ateam-lead skill，继续」。它会先运行 `ateam status`，从「待你处理」列表接着做。
 
@@ -250,12 +250,12 @@ rm -r ~/code/agent-team/.ateam
 | 设置 | 说明 | 默认 |
 |---|---|---|
 | `ateam serve --port 7701` | 换端口（7700 被占用时） | `7700` |
-| `ATEAM_URL` | 换了端口后，主管和 worker 都要设置，例如 `http://127.0.0.1:7701` | `http://127.0.0.1:7700` |
+| `ATEAM_URL` | 换了端口后，leader 和 worker 都要设置，例如 `http://127.0.0.1:7701` | `http://127.0.0.1:7700` |
 | `ateam serve --lease 5` 或 `ATEAM_LEASE_MIN` | 租约时长（分钟）：多久没动静判为掉线。测试掉线接手时可以设短一点，正常干活用默认值 | `15` |
 
 ## 六、命令速查
 
-一般不用你手动敲命令，主管和 worker 会自己调用。需要排查时可以用：
+一般不用你手动敲命令，leader 和 worker 会自己调用。需要排查时可以用：
 
 ```bash
 ateam status        # 全局概况：项目目录、待处理事项、worker、各任务状态

@@ -586,19 +586,11 @@ function renderHelper() {
     el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
     el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会自己停下。leader 那边对它说「让大家收工」也一样。'),
     ] : [
-    (() => {
-      const lead = leadPrompts();
-      return [
-        el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面的话。leader 只需要一个。'),
-        el('div', { class: 'wcard' },
-          el('div', { class: 'wcard-head' }, el('b', null, '开始新需求'), el('span', { class: 'hint' }, '把 <在这里写需求> 换成你的需求')),
-          promptBlock(lead.start, renderHelper)),
-        el('div', { class: 'wcard' },
-          el('div', { class: 'wcard-head' }, el('b', null, 'leader 会话重开了'),
-            el('span', { class: 'hint' }, lead.hasWork ? '还有没做完的需求，用这个接着干' : '上下文满了或换了会话时用')),
-          promptBlock(lead.resume, renderHelper)),
-      ];
-    })(),
+    el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面这句话。leader 只需要一个。'),
+    el('div', { class: 'wcard' },
+      el('div', { class: 'wcard-head' }, el('b', null, '加入'), el('span', { class: 'hint' }, '新开会话、或者上下文满了重开会话，都用这一句')),
+      promptBlock(leadPrompt(), renderHelper)),
+    el('p', { class: 'hint' }, '加入后直接在对话里跟 leader 说需求，比如「需求是……」。它会拆任务、派给 worker，并告诉你需要开几个什么角色的 worker。'),
     ],
   );
   panel.hidden = false;
@@ -794,20 +786,12 @@ function roleStyle(role) {
 
 // 提示词：在新的 agent 窗口里对 worker 说的话
 // leader 的提示词：在项目目录里开一个 Claude Code 会话发给它
-function leadPrompts() {
+// leader 的加入提示词：不带需求，先就位；新开会话和会话重开都用这一句
+function leadPrompt() {
   const dir = data.root ? `\n项目目录：${data.root}` : '';
-  const online = data.state.agents.filter((a) => a.status === 'online');
-  const byRole = new Map();
-  for (const a of online) byRole.set(a.role, (byRole.get(a.role) ?? 0) + 1);
-  const team = byRole.size
-    ? `\n现在在线的 worker：${[...byRole].map(([role, n]) => `${role} ${n} 个`).join('、')}。`
-    : '\n现在还没有 worker 在线，拆完任务后告诉我需要开几个什么角色的 worker。';
-  const hasWork = data.state.jobs.some((j) => j.status !== 'awaiting_acceptance');
-  return {
-    start: `使用 ateam-lead skill，带团队做这个需求：<在这里写需求>${dir}${team}`,
-    resume: `使用 ateam-lead skill，继续。先运行 ateam status，按「待你处理」接着做，并重新启动 ateam watch --follow 后台监听。${dir}`,
-    hasWork,
-  };
+  return `使用 ateam-lead skill，作为 leader 加入这个项目的团队。${dir}
+先运行 ateam status 了解现状，再用 Monitor 后台启动 ateam watch --follow 监听。
+如果「待你处理」里有事，先接着处理；没有的话，简单告诉我现状（有哪些 worker 在线、有没有没做完的需求），然后等我说需求。不要自己找活干。`;
 }
 
 function workerPrompt(role) {

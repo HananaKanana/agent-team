@@ -13,7 +13,9 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 
 1. `ateam status`：确认服务在运行、有哪些 worker 在线。服务不可达就请用户在项目根目录运行 `ateam serve`。
 2. 用 Monitor 工具后台运行 `ateam watch --follow`，`timeout_ms` 设为最大值，到期后重新启动。每个事件会以一行文字通知你。
-3. 没有 worker 在线时，告诉用户需要几个什么角色的 worker，请用户打开 agent 窗口并对它说「使用 ateam-worker skill，角色 frontend」。
+3. 看 `ateam status` 的「待你处理」：有事就先接着处理（见第 6 节）。
+4. 用户还没说需求时（比如只说了「加入团队」），简单汇报现状——在线的 worker、没做完的需求——然后**等用户说需求**，不要自己找活干、不要自己建需求。
+5. 拆完任务后，如果对应角色没有 worker 在线，告诉用户需要几个什么角色的 worker，请用户打开 agent 窗口并对它说「使用 ateam-worker skill，角色 frontend」（看板右上角「使用说明」里有现成的话可以复制）。
 
 ## 2. 拆任务
 

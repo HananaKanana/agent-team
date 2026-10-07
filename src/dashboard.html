@@ -71,6 +71,11 @@ header.top h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .0
 .worker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--approved); flex: none; }
 .worker .task { color: var(--muted); }
 .worker.offline { color: var(--muted); opacity: .6; }
+/* leader 标签：放在最前面，和 worker 之间留一道间隔；未连接时红点 */
+.leader-chip { margin-right: 6px; }
+.leader-chip.offline-lead { border-color: color-mix(in srgb, var(--rework) 45%, var(--line)); }
+.leader-chip.offline-lead .dot { background: var(--rework); }
+.leader-chip.offline-lead .task { color: var(--rework); }
 button.worker { cursor: pointer; }
 button.worker:hover { border-color: var(--muted); }
 .helper-btn { margin-left: auto; }
@@ -426,7 +431,16 @@ function renderWorkers() {
   // 掉线的 worker 不再占位：只显示在线的，掉线的折叠成一个灰色计数，鼠标悬停可看编号
   const online = agents.filter((a) => a.status === 'online');
   const offline = agents.filter((a) => a.status !== 'online' && !a.hidden);
-  const chips = online.map((a) => {
+  const leader = data.leader || {};
+  const leaderChip = el('button', {
+    type: 'button',
+    class: `worker leader-chip ${leader.online ? 'online' : 'offline-lead'}`,
+    title: leader.online
+      ? (leader.watching ? 'leader 在线，正在监听事件。点击查看 leader 的提示词' : `leader ${ago(leader.lastSeenAt)}操作过，但没有在监听事件。点击查看提示词`)
+      : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
+    onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
+  }, el('span', { class: 'dot' }), el('b', null, 'leader'), el('span', { class: 'task' }, leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
+  const chips = [leaderChip, ...online.map((a) => {
     return el('button', {
       type: 'button',
       class: 'worker online',
@@ -437,14 +451,15 @@ function renderWorkers() {
     el('span', { class: 'task' }, a.currentTask || '空闲'),
     a.dismiss ? el('span', { class: 'task' }, '待下线') : null,
   );
-  });
+  })];
   if (offline.length) {
     chips.push(el('button', {
       type: 'button', class: 'worker offline', title: '点击查看和移除掉线的 worker',
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
     }, el('span', { class: 'dot' }), `${offline.length} 个已掉线`));
   }
-  box.replaceChildren(...(chips.length ? chips : [el('span', { class: 'meta' }, '还没有 worker 加入。点右边「使用说明」，按步骤开 leader 和 worker。')]));
+  if (chips.length === 1) chips.push(el('span', { class: 'meta' }, '还没有 worker 加入。点右边「使用说明」，按步骤开 leader 和 worker。'));
+  box.replaceChildren(...chips);
   renderHelper();
 }
 

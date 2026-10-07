@@ -126,7 +126,8 @@ async function request(method, path, body, holdSec) {
     try {
       const res = await fetch(BASE + path, {
         method,
-        headers: body ? { 'content-type': 'application/json' } : undefined,
+        // x-ateam-cli：让服务区分命令行和看板（leader 是否在线只看命令行的活动）
+        headers: body ? { 'content-type': 'application/json', 'x-ateam-cli': '1' } : { 'x-ateam-cli': '1' },
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await res.json();

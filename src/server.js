@@ -14,6 +14,7 @@ const TOOL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
 const DEFAULT_HOLD_SEC = 90;
 const MAX_HOLD_SEC = 110;
+const LEADER_FRESH_MS = 3 * 60 * 1000;
 
 function holdMs(timeout) {
   const sec = Number(timeout);
@@ -69,6 +70,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
   const leaseMs = leaseMin * 60 * 1000;
   const waiters = new Map(); // agentId -> { res, timer }
   const watchers = new Set(); // { res, timer }
+  let leaderSeenAt = null; // leader 最近一次用命令行操作的时间（只在内存里，重启后等 leader 下次操作）
   let waking = false;
   let wakeScheduled = false;
 
@@ -180,7 +182,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
       return { task, agentId };
     },
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
-    'GET /api/state': () => ({ state: store.state, pending: store.pendingActions(), root, toolDir: TOOL_DIR, port }),
+    'GET /api/state': () => ({
+      state: store.state, pending: store.pendingActions(), root, toolDir: TOOL_DIR, port,
+      // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
+      leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: watchers.size > 0 || (leaderSeenAt !== null && Date.now() - leaderSeenAt < LEADER_FRESH_MS) },
+    }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),
   };
 
@@ -248,6 +254,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
         return;
       }
       const body = req.method === 'POST' ? await readBody(req) : {};
+      // 命令行发来、且不带 --as 的请求都是 leader 的（worker 的命令都带 --as）
+      if (req.headers['x-ateam-cli'] && !body.as && key !== 'POST /api/join') leaderSeenAt = Date.now();
       if (key === 'POST /api/wait') return handleWait(body, res);
       if (key === 'POST /api/watch') return handleWatch(body, res);
       const route = routes[key];

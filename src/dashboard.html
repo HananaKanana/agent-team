@@ -84,6 +84,13 @@ button.worker:hover { border-color: var(--muted); }
 .helper[hidden] { display: none; }
 .helper-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .helper-head b { font-size: 15px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 8px 0 10px; }
+.tab {
+  appearance: none; border: none; background: none; cursor: pointer; font: inherit; font-size: 13px;
+  color: var(--muted); padding: 6px 14px; margin-bottom: -1px; border-bottom: 2px solid transparent;
+}
+.tab:hover { color: var(--ink); }
+.tab.on { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
 .helper-sec { display: flex; align-items: center; gap: 8px; margin: 18px 0 2px; }
 .helper-sec h4 { font-size: 13px; color: var(--muted); margin: 0; font-weight: 600; margin-right: auto; }
 .helper .hint { margin: 2px 0 0; }
@@ -534,32 +541,23 @@ function renderHelper() {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
+  const tab = helper.tab === 'lead' ? 'lead' : 'worker';
+  const tabBtn = (key, label) => el('button', {
+    type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
+    onclick: (e) => { e.stopPropagation(); helper = { ...helper, tab: key }; dismissAllArm = false; renderHelper(); },
+  }, label);
   fill(panel,
     el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-    el('p', { class: 'hint' }, data.root
-      ? `服务已在 ${data.root} 运行。按顺序：先开一个主管，再按角色开 worker；干活中 worker 停住或掉线，在下面找到它复制对应的话。每段话都发到对应的 agent 窗口里。`
-      : '按顺序：先开一个主管，再按角色开 worker；干活中 worker 停住或掉线，在下面找到它复制对应的话。'),
-    (() => {
-      const lead = leadPrompts();
-      return [
-        el('div', { class: 'helper-sec' }, el('h4', null, '① 开主管')),
-        el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面的话。主管只需要一个。'),
-        el('div', { class: 'wcard' },
-          el('div', { class: 'wcard-head' }, el('b', null, '开始新需求'), el('span', { class: 'hint' }, '把 <在这里写需求> 换成你的需求')),
-          promptBlock(lead.start, renderHelper)),
-        el('div', { class: 'wcard' },
-          el('div', { class: 'wcard-head' }, el('b', null, '主管会话重开了'),
-            el('span', { class: 'hint' }, lead.hasWork ? '还有没做完的需求，用这个接着干' : '上下文满了或换了会话时用')),
-          promptBlock(lead.resume, renderHelper)),
-      ];
-    })(),
-    el('div', { class: 'helper-sec' }, el('h4', null, '② 开 worker')),
+    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', '主管')),
+    el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
+    tab === 'worker' ? [
+    el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
     roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)),
       promptBlock(workerPrompt(role), renderHelper)))
       : promptBlock(workerPrompt('<角色，比如 frontend>'), renderHelper),
-    el('div', { class: 'helper-sec' }, el('h4', null, `③ 干活中：在线的 worker（${online.length}）`), dismissAll),
+    el('div', { class: 'helper-sec' }, el('h4', null, `② 干活中：在线的 worker（${online.length}）`), dismissAll),
     el('p', { class: 'hint' }, dismissAllArm
       ? '确认后：空闲的马上下线；手上有任务的做完这个再下线。'
       : 'worker 停下来不动时，复制它的叫醒话，发到它自己的 agent 窗口。'),
@@ -575,7 +573,7 @@ function renderHelper() {
           : el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissAgents({ ids: [a.id] }); } }, '安排下线')),
       promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '没有在线的 worker。'),
     offline.length ? [
-      el('div', { class: 'helper-sec' }, el('h4', null, `④ 掉线了：重连（${offline.length}）`)),
+      el('div', { class: 'helper-sec' }, el('h4', null, `③ 掉线了：重连（${offline.length}）`)),
       el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。'),
       offline.map((a) => el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' },
@@ -585,8 +583,23 @@ function renderHelper() {
             el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`))),
         promptBlock(reconnectPrompt(a), renderHelper))),
     ] : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '⑤ 收工')),
-    el('p', { class: 'hint' }, '需求都做完了：在 ③ 里点「全部下线」，worker 会自己停下。主管那边对它说「让大家收工」也一样。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
+    el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会自己停下。主管那边对它说「让大家收工」也一样。'),
+    ] : [
+    (() => {
+      const lead = leadPrompts();
+      return [
+        el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面的话。主管只需要一个。'),
+        el('div', { class: 'wcard' },
+          el('div', { class: 'wcard-head' }, el('b', null, '开始新需求'), el('span', { class: 'hint' }, '把 <在这里写需求> 换成你的需求')),
+          promptBlock(lead.start, renderHelper)),
+        el('div', { class: 'wcard' },
+          el('div', { class: 'wcard-head' }, el('b', null, '主管会话重开了'),
+            el('span', { class: 'hint' }, lead.hasWork ? '还有没做完的需求，用这个接着干' : '上下文满了或换了会话时用')),
+          promptBlock(lead.resume, renderHelper)),
+      ];
+    })(),
+    ],
   );
   panel.hidden = false;
 }

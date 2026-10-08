@@ -81,10 +81,10 @@ npm link
 ateam help          # 能打印出命令列表就成功了
 ```
 
-如果提示找不到 `ateam`，说明 npm 的全局目录不在 PATH 里。用 `npm prefix -g` 查出目录（比如 `~/.npm-global`），然后把它的 `bin` 加进 `~/.zshrc`：
+如果提示找不到 `ateam`，说明 npm 的全局目录不在 PATH 里。运行下面这行把它加进 `~/.zshrc`，然后开一个新终端再试：
 
 ```bash
-export PATH="$HOME/.npm-global/bin:$PATH"
+echo "export PATH=\"$(npm prefix -g)/bin:\$PATH\"" >> ~/.zshrc
 ```
 
 ### 2. 安装两份 skill
@@ -94,7 +94,7 @@ export PATH="$HOME/.npm-global/bin:$PATH"
 | skill | 给谁用 | 放到哪里 |
 |---|---|---|
 | [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（leader） | `~/.claude/skills/ateam-lead/SKILL.md` |
-| [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | agent（worker） | `~/.workbuddy/skills/ateam-worker/SKILL.md` |
+| [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | WorkBuddy（worker） | `~/.workbuddy/skills/ateam-worker/SKILL.md` |
 
 两种装法，选一种：
 
@@ -140,9 +140,23 @@ ateam 服务已启动：http://127.0.0.1:7700（看板同地址）
 
 浏览器打开 <http://127.0.0.1:7700>（只能用 `127.0.0.1` 或 `localhost`）。
 
-### 3. 打开 worker
+### 3. 开 leader
 
-按需要开几个 agent 窗口，**工作目录选同一个项目**，分别对它们说：
+在**同一个项目目录**开一个 Claude Code 会话，说：
+
+```
+使用 ateam-lead skill，作为 leader 加入这个项目的团队
+```
+
+它会先看一下现状（在线的 worker、没做完的需求），然后等你。接着在对话里跟它说需求就行，比如「需求是……」。leader 拆完任务会告诉你需要开几个什么角色的 worker，按下一步去开。之后它自己派发、review，全部完成后在对话里给你汇报。
+
+上下文满了、重开 leader 会话时，也发同一句话：它会先接着处理没做完的事。
+
+leader 在线时，看板顶部最前面是绿点「leader 在线」。
+
+### 4. 开 worker
+
+按 leader 说的角色和数量开 WorkBuddy 窗口，**工作目录选同一个项目**，分别对它们说：
 
 ```
 使用 ateam-worker skill，角色 backend
@@ -161,18 +175,6 @@ ateam 服务已启动：http://127.0.0.1:7700（看板同地址）
 worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡片上的分类标签同色，一眼能分清谁做什么。
 
 > 记不住这些话也没关系：服务启动后，点看板右上角「使用说明」，leader 和 worker 该发的话都按顺序列在里面，带项目目录，点「复制」就行。
-
-### 4. 让 leader 开工
-
-在**同一个项目目录**开一个 Claude Code 会话，说：
-
-```
-使用 ateam-lead skill，作为 leader 加入这个项目的团队
-```
-
-它会先看一下现状（在线的 worker、没做完的需求），然后等你。接着在对话里跟它说需求就行，比如「需求是……」。之后 leader 会自己拆任务、派发、review，告诉你需要开几个什么角色的 worker，全部完成后在对话里给你汇报。
-
-上下文满了、重开 leader 会话时，也发同一句话：它会先接着处理没做完的事。
 
 ---
 
@@ -211,7 +213,7 @@ worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡�
 
 ### worker 等了一会儿就自己停了
 
-worker 应该一直循环等任务。如果它停下来问你「要继续等吗」，对它说一句「继续」就行。
+worker 应该一直循环等任务。如果它停下来问你「要继续等吗」，或者交完一个任务就停了：点看板顶部它的标签，把「叫醒话」复制到它自己的窗口里（直接说「继续」通常也行）。
 
 ### worker 掉线、换号接手
 
@@ -219,7 +221,7 @@ worker 超过租约时长（默认 15 分钟）没有动静，就会被判为掉
 
 接手：换个账号开新的 agent 窗口，说同样的话（`使用 ateam-worker skill，角色 xxx`）。新 worker 会收到「⚠ 接手任务」，在已有改动上继续做。
 
-原来的 worker 如果其实还活着，下次调用命令会收到「租约已失效」，它会自己重新加入。
+原来的 worker 如果其实还活着，下次调用命令会收到「租约已失效」，它会自己重新加入。它要是停住了，点看板顶部「N 个已掉线」，把它的「重连」话复制到它的窗口里。
 
 **不想等 15 分钟**：确认原窗口已经没了，就在看板上点开它的任务卡片，在「原窗口没了？」下点「收回任务」，再点「确认收回」（或者让 leader 运行 `ateam reclaim T3`）。任务立即退回待领取，同角色的空闲 worker 马上以「接手任务」领走。
 
@@ -248,15 +250,22 @@ rm -r ~/code/agent-team/.ateam
 
 整个过程尽量在 1 分钟内完成：服务断开超过约 60 秒，worker 会收到「服务不可达」并停下。如果停了，对它说「继续」即可。
 
+### 活都干完了，让 worker 收工
+
+worker 没活时会一直挂着等任务。所有需求做完后：点看板右上角「使用说明」→「worker」页里的「全部下线」，或者对 leader 说「让大家收工」。空闲的 worker 马上停下；手上有任务的做完这个再停。之后要再开工，重新开 worker 窗口即可。
+
 ### leader 会话重开了（上下文满了）
 
 在新会话里发看板「使用说明」→「leader」里的那句加入的话（或者说「使用 ateam-lead skill，继续」）。它会先运行 `ateam status`，从「待你处理」列表接着做。
 
 ### 更新了 agent-team 的代码之后
 
-- 改了 `src/` 里的服务端代码：重启 `ateam serve`。
-- 改了 skill：如果是复制装的，再复制一次；worker 窗口要新开才会读到新 skill。
-- 只改了看板：刷新浏览器即可。
+- 改了服务端代码（`src/` 下的 `.js` 文件）：重启 `ateam serve`。状态不会丢，worker 和 leader 会在约 60 秒内自动重连。
+- 改了命令行（`bin/ateam.js`、`src/format.js` 的输出文字）：下一条命令就生效；`src/format.js` 有一部分输出由服务生成，稳妥起见也重启一下服务。
+- 只改了看板（`src/dashboard.html`）：刷新浏览器即可。
+- 改了 skill：如果是复制装的，再复制一次；agent 窗口要新开才会读到新 skill。
+
+**看板上的新功能不生效、或者显示不对**（比如 leader 明明在线却显示「未连接」）：多半是看板已经是新的，服务还是旧的。重启 `ateam serve` 再刷新。
 
 ---
 
@@ -276,6 +285,8 @@ rm -r ~/code/agent-team/.ateam
 ateam status        # 全局概况：项目目录、待处理事项、worker、各任务状态
 ateam show T3       # 某个任务的详情和完整历史
 ateam cancel T3 "原因"   # 作废任务：不再派发，看板上置灰放到最下面
+ateam reclaim T3         # 原窗口没了：立即收回任务，交给同角色的 worker 接手
+ateam job edit J1 --desc-file job.md   # 改需求的说明（或 --title 改标题）
 ateam dismiss --all      # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号）
 ateam help          # 全部命令
 ```

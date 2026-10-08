@@ -8,7 +8,7 @@
 
 需要 Node ≥ 18 和 git，没有其他依赖。
 
-![ateam 看板：顶部是 leader 和 worker 的在线状态，左边是需求列表，中间是按状态分列的任务看板](docs/1.png)
+![ateam 看板：顶部是 leader 和 worker 的在线状态，左边是需求列表，中间是按状态分列的任务看板](docs/dashboard.png)
 
 ## 名词
 

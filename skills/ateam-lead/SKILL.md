@@ -20,7 +20,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 ## 2. 拆任务
 
 1. 先定**接口约定**：接口路径、请求和响应格式、共享的类型和常量。写进每个相关任务的描述。
-2. 建需求：`ateam job new "<标题>" --desc-file job.md`
+2. 建需求：`ateam job new "<标题>" --desc-file job.md`。需求说明只写几句概要（用户选了什么、任务顺序、计划文件在哪），细节写进各任务的描述，不要把整份计划塞进来。写错了用 `ateam job edit J1 [--title "..."] [--desc-file job.md]` 改
 3. 加任务：
 
    ```

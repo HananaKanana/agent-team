@@ -30,6 +30,7 @@ worker
 
 leader
   ateam job new "<标题>" [--desc-file f.md]
+  ateam job edit J1 [--title "..."] [--desc-file f.md]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]...
   ateam task edit T3 [--title "..."] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
@@ -210,6 +211,16 @@ const commands = {
     const description = flags['desc-file'] ? readTextFile(flags['desc-file'], '--desc-file') : '';
     const { job } = await request('POST', '/api/jobs', { title, description });
     return `已创建需求 ${job.id}：${job.title}\n\n下一步：ateam task add --job ${job.id} --role <角色> --paths <路径> --title "..." --desc-file <文件> --accept "..."`;
+  },
+
+  async 'job edit'({ flags, positional }) {
+    const jobId = requireArg(positional[0], '需求编号', 'ateam job edit J1 --desc-file job.md');
+    const body = { jobId };
+    if (flags.title !== undefined) body.title = flags.title;
+    if (flags['desc-file'] !== undefined) body.description = readTextFile(flags['desc-file'], '--desc-file');
+    if (body.title === undefined && body.description === undefined) fail('请提供 --title 或 --desc-file。示例：ateam job edit J1 --desc-file job.md');
+    const { job } = await request('POST', '/api/jobs/edit', body);
+    return `已修改需求 ${job.id}：${job.title}（说明 ${job.description.length} 字）`;
   },
 
   async 'task add'({ flags }) {

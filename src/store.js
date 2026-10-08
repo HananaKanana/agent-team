@@ -84,6 +84,18 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return job;
   }
 
+  // 修改需求的标题或说明，任何状态都可以改（只是文字，不影响派发）
+  function editJob(jobId, patch = {}) {
+    const job = getJob(jobId);
+    let touched = false;
+    if (patch.title !== undefined) { job.title = requireText(patch.title, '需求标题'); touched = true; }
+    if (patch.description !== undefined) { job.description = String(patch.description ?? ''); touched = true; }
+    if (!touched) throw new AteamError('INVALID', '没有要修改的内容。请提供 --title 或 --desc-file。');
+    job.updatedAt = now();
+    changed();
+    return job;
+  }
+
   function addTask({ jobId, title, role, paths, description = '', acceptance = [], dependsOn = [] } = {}) {
     const job = getJob(jobId);
     title = requireText(title, '任务标题');
@@ -552,7 +564,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
   return {
     get state() { return state; },
     leaseMs,
-    createJob, addTask, editTask,
+    createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, report, sweep, noteActivity,

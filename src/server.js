@@ -155,6 +155,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
       return { task: store.recordSubmit(b.as, b.summary, commit), commit };
     }),
     'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description }) }),
+    'POST /api/jobs/edit': (b) => {
+      const { jobId, ...patch } = b;
+      return { job: store.editJob(jobId, patch) };
+    },
     'POST /api/tasks': (b) => ({
       task: store.addTask({
         jobId: b.jobId, title: b.title, role: b.role, paths: b.paths,

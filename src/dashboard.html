@@ -242,7 +242,8 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .drawer .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; font-size: 13px; }
 .drawer .facts dt { color: var(--muted); }
 .drawer .facts dd { margin: 0; overflow-wrap: anywhere; }
-.drawer .descbox { white-space: pre-wrap; background: var(--bg); border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+.drawer .descbox { background: var(--bg); border-radius: 6px; padding: 4px 14px; font-size: 13px; line-height: 1.65; }
+.drawer .descbox.md pre, .drawer .descbox.md code { background: var(--surface); }
 .drawer ol, .drawer ul.commits { margin: 0; padding-left: 20px; }
 code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
 .timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
@@ -262,6 +263,14 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .md pre { background: var(--bg); padding: 10px 12px; border-radius: 6px; overflow-x: auto; }
 .md code { background: var(--bg); padding: 0 4px; border-radius: 3px; }
 .md pre code { background: none; padding: 0; }
+.md li { margin: 2px 0; }
+.md ul ul, .md ol ul, .md ul ol, .md ol ol { margin: 2px 0; }
+.md blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.md table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+.md a { color: var(--focus); }
+.job-head .desc.md { white-space: normal; }
+.job-head .desc.md p { margin: 2px 0; }
 
 .c-pending { --c: var(--pending); } .c-working { --c: var(--working); } .c-rework { --c: var(--rework); }
 .c-asking { --c: var(--asking); } .c-submitted { --c: var(--submitted); } .c-approved { --c: var(--approved); }
@@ -377,29 +386,66 @@ function escapeHtml(s) {
 }
 
 // 极简 markdown：先转义 HTML，再处理标题、列表、代码块、行内代码、粗体
+// 极简 markdown：先转义 HTML，再处理标题、（可嵌套的）列表、代码块、表格、引用、行内代码、粗体、链接
 function renderMarkdown(src) {
-  const lines = escapeHtml(src).split('\n');
+  const lines = escapeHtml(String(src ?? '').replace(/\t/g, '  ')).split('\n');
   const out = [];
-  let list = null;
-  let code = null;
-  const inline = (s) => s.replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
-  for (const line of lines) {
-    if (code !== null) {
-      if (/^```/.test(line)) { out.push(`<pre><code>${code.join('\n')}</code></pre>`); code = null; }
-      else code.push(line);
+  const stack = []; // 打开的列表：{ tag, indent }
+  let para = [];
+  const inline = (t) => t
+    .replace(/`([^`]+)`/g, (_, c) => `<code>${c.replace(/\*/g, '&#42;')}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const flushPara = () => { if (para.length) { out.push(`<p>${para.map(inline).join('<br>')}</p>`); para = []; } };
+  const closeLists = (indent = -1) => {
+    while (stack.length && stack[stack.length - 1].indent > indent) out.push(`</li></${stack.pop().tag}>`);
+  };
+  const closeAll = () => { flushPara(); closeLists(); };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let m;
+    if ((m = line.match(/^(\s*)```/))) {
+      closeAll();
+      const code = [];
+      while (++i < lines.length && !/^\s*```/.test(lines[i])) code.push(lines[i].slice(m[1].length));
+      out.push(`<pre><code>${code.join('\n')}</code></pre>`);
       continue;
     }
-    if (/^```/.test(line)) { closeList(); code = []; continue; }
-    let m;
-    if ((m = line.match(/^(#{1,3})\s+(.*)$/))) { closeList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
-    if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
-    if ((m = line.match(/^\s*\d+\.\s+(.*)$/))) { if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
-    closeList();
-    if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+    if (!line.trim()) { flushPara(); continue; }
+    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { closeAll(); const n = Math.min(m[1].length, 3); out.push(`<h${n}>${inline(m[2])}</h${n}>`); continue; }
+    if ((m = line.match(/^\s*&gt;\s?(.*)$/))) { closeAll(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
+    if (/^\s*\|.*\|\s*$/.test(line)) {
+      closeAll();
+      const rows = [];
+      for (; i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i]); i++) rows.push(lines[i]);
+      i--;
+      const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const body = rows.filter((r) => !/^\s*\|[\s:|-]+\|\s*$/.test(r));
+      const head = rows.length > 1 && /^\s*\|[\s:|-]+\|\s*$/.test(rows[1]) ? body.shift() : null;
+      out.push(`<table>${head ? `<thead><tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join('')}</tr></thead>` : ''}<tbody>${body.map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+      continue;
+    }
+    if ((m = line.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/))) {
+      flushPara();
+      const indent = m[1].length;
+      const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+      closeLists(indent);
+      const top = stack[stack.length - 1];
+      if (top && top.indent === indent && top.tag === tag) out.push('</li><li>');
+      else {
+        if (top && top.indent === indent) out.push(`</li></${stack.pop().tag}>`);
+        out.push(`<${tag}><li>`);
+        stack.push({ tag, indent });
+      }
+      out.push(inline(m[3]));
+      continue;
+    }
+    // 列表项下面缩进的续行，归到当前列表项
+    if (stack.length && /^\s+/.test(line)) { out.push(`<br>${inline(line.trim())}`); continue; }
+    closeLists();
+    para.push(line.trim());
   }
-  if (code !== null) out.push(`<pre><code>${code.join('\n')}</code></pre>`);
-  closeList();
+  closeAll();
   return out.join('\n');
 }
 
@@ -641,7 +687,11 @@ function renderMain() {
   const st = reviewStats(tasks);
   const head = el('div', { class: 'job-head' },
     el('h2', { class: 'job-title' }, `${job.id} ${job.title}`),
-    job.description ? el('p', { class: 'desc' }, job.description) : null,
+    job.description ? (() => {
+      const box = el('div', { class: 'desc md' });
+      box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
+      return box;
+    })() : null,
     tasks.length ? strip(tasks, true) : null);
   const stats = el('div', { class: 'stats' },
     el('span', null, '状态 ', el('b', null, JOB_STATUS[job.status] || job.status)),
@@ -723,7 +773,12 @@ function renderDrawer(fresh) {
     el('h4', null, '验收标准'),
     t.acceptance.length ? el('ol', null, t.acceptance.map((a) => el('li', null, a))) : el('p', { class: 'meta' }, '未填写'),
     el('h4', null, '描述'),
-    el('div', { class: 'descbox' }, t.description || '（无）'),
+    (() => {
+      const box = el('div', { class: 'descbox md' });
+      if (t.description?.trim()) box.innerHTML = renderMarkdown(t.description); // renderMarkdown 先转义了 HTML
+      else box.textContent = '（无）';
+      return box;
+    })(),
     el('h4', null, '提交'),
     t.commits.length ? el('ul', { class: 'commits' }, t.commits.map((c) => el('li', null, el('code', null, c)))) : el('p', { class: 'meta' }, '暂无'),
     el('h4', null, '时间线'),

@@ -493,7 +493,11 @@ function renderWorkers() {
       title: `${agentLabel(a.id)}，心跳 ${ago(a.lastSeenAt)}。点击查看提示词`,
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: a.id }; renderHelper(); },
     },
-    el('span', { class: 'dot' }), el('b', null, a.name || a.id), el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
+    el('span', { class: 'dot' }),
+    // 新编号本身带角色（frontend-2），就不再单独写角色，只按角色上色；老编号（fr-cbb7）照旧显示角色
+    el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
+    a.name ? el('span', { class: 'task' }, a.id) : null,
+    idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     el('span', { class: 'task' }, a.currentTask || '空闲'),
     a.dismiss ? el('span', { class: 'task' }, '待下线') : null,
   );
@@ -830,6 +834,11 @@ function reclaimBox(t) {
       armed ? el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); reclaimArm = null; renderDrawer(false); } }, '取消') : null,
       reclaimError ? el('span', { class: 'hint' }, reclaimError) : null),
   ];
+}
+
+function idHasRole(a) {
+  const slug = a.role.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
+  return a.id.startsWith(`${slug}-`);
 }
 
 // worker 显示名：起了名字的显示名字，否则显示编号

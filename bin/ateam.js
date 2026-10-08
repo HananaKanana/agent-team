@@ -254,7 +254,7 @@ const commands = {
   async dismiss({ flags, positional }) {
     const body = { ids: positional, role: flags.role ?? '', all: !!flags.all };
     if (!body.all && !body.role && body.ids.length === 0) {
-      fail('请指定要下线的 worker。示例：ateam dismiss fr-173c ／ ateam dismiss --role frontend ／ ateam dismiss --all');
+      fail('请指定要下线的 worker。示例：ateam dismiss frontend-2 ／ ateam dismiss --role frontend ／ ateam dismiss --all');
     }
     const { dismissed } = await request('POST', '/api/dismiss', body);
     if (dismissed.length === 0) return '没有符合条件的在线 worker。';

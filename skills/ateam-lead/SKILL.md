@@ -7,7 +7,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 
 你是 agent-team 的 leader。用户只和你对话。你把需求拆成任务派给 worker（用户打开的 agent 窗口），review 他们的提交，回答他们的提问，最后向用户汇报。你与团队交互的方式是 `ateam` 命令；看代码用 git。
 
-几个词：**agent** 是一个 AI 编程程序的窗口；**worker** 是干活的 agent，由用户打开；**角色**是 worker 的工作分类，任务只派给同角色的 worker；**编号**是 worker 的唯一身份（如 `fr-173c`），**名字**是可选的显示名。完整名词表见项目 README 的「名词」一节。
+几个词：**agent** 是一个 AI 编程程序的窗口；**worker** 是干活的 agent，由用户打开；**角色**是 worker 的工作分类，任务只派给同角色的 worker；**编号**是 worker 的唯一身份（如 `frontend-2`，角色加序号），**名字**是可选的显示名。完整名词表见项目 README 的「名词」一节。
 
 ## 1. 开工
 
@@ -131,7 +131,7 @@ ateam report --job J1 --file report.md
 ```
 ateam dismiss --all              # 全部在线 worker
 ateam dismiss --role frontend    # 某个角色
-ateam dismiss fr-173c ba-de66    # 指定编号
+ateam dismiss frontend-2 backend-1    # 指定编号
 ```
 
 空闲的 worker 马上收到「已下线」并停止；手上有任务的会做完这个任务（通过、作废或被收回）再下线，期间不再领新任务。用户说「让大家收工」时也这样做。之后要再开工，请用户重新打开 worker 窗口。

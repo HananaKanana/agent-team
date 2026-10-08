@@ -1,5 +1,4 @@
 // 纯逻辑状态机：需求、任务、worker、事件。不碰网络和磁盘，时钟可注入。
-import { randomBytes } from 'node:crypto';
 import { AteamError } from './errors.js';
 
 const KEEP_DELIVERED_EVENTS = 200;
@@ -61,12 +60,23 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     }
   }
 
+  // 编号 = 角色 + 序号，比如 frontend-1、frontend-2。序号按角色递增、永不复用：
+  // 掉线后重新加入会拿到新序号，时间线里的编号始终指同一个窗口。
+  function roleSlug(role) {
+    return role.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '') || 'worker';
+  }
+
   function newAgentId(role) {
-    const prefix = role.replace(/\s+/g, '').slice(0, 2).toLowerCase() || 'wk';
-    for (;;) {
-      const id = `${prefix}-${randomBytes(2).toString('hex')}`;
-      if (!findAgent(id)) return id;
+    const slug = roleSlug(role);
+    state.seq.agents ??= {};
+    let n = state.seq.agents[slug] ?? 0;
+    for (const a of state.agents) {
+      const m = a.id.match(/^(.*)-(\d+)$/);
+      if (m && m[1] === slug) n = Math.max(n, Number(m[2]));
     }
+    n += 1;
+    state.seq.agents[slug] = n;
+    return `${slug}-${n}`;
   }
 
   // ---------- 需求与任务 ----------

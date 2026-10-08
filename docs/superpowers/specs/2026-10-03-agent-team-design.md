@@ -90,7 +90,7 @@ agent-team/
     acceptance: ["...", "..."],    // 验收标准
     dependsOn: ["T1"],             // 依赖的任务全部 approved 后才可领取
     status: "pending" | "working" | "asking" | "submitted" | "approved" | "held" | "cancelled",
-    assignee: null | "fe-7f3a",
+    assignee: null | "frontend-1",
     handoff: false,                // true = 上一任 worker 掉线，此任务等待接手
     rejectCount: 0,
     commits: ["a1b2c3d", ...],     // 历次提交
@@ -98,7 +98,7 @@ agent-team/
     history: [{ ts, type, actor, text, commit? }]
   }],
   agents: [{
-    id: "fe-7f3a", role: "frontend",
+    id: "frontend-1", role: "frontend",
     status: "online" | "offline",
     currentTask: null | "T3",
     joinedAt, lastSeenAt
@@ -173,7 +173,7 @@ agent-team/
 
 | 命令 | 说明 |
 |---|---|
-| `ateam join --role <role>` | 返回 worker 编号，比如 `fe-7f3a`，前缀取角色的前两个字母 |
+| `ateam join --role <role>` | 返回 worker 编号，比如 `frontend-1`：角色 + 序号，序号按角色递增、不复用（重新加入拿新序号）。可选 `--name` 起显示名 |
 | `ateam wait --as ID [--timeout 90]` | 按 §4.1 返回内容 |
 | `ateam progress --as ID "<笔记>"` | 写进度笔记，同时刷新心跳 |
 | `ateam ask --as ID "<问题>"` | 任务转为 `asking`，发出 `question` 事件 |

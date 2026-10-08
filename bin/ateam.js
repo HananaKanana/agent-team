@@ -32,7 +32,7 @@ leader
   ateam job new "<标题>" [--desc-file f.md]
   ateam job edit J1 [--title "..."] [--desc-file f.md]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]...
-  ateam task edit T3 [--title "..."] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
+  ateam task edit T3 [--title "..."] [--role <角色>] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
   ateam cancel T3 ["<原因>"]
   ateam reclaim T3 ["<原因>"]
@@ -242,6 +242,7 @@ const commands = {
     const id = requireArg(positional[0], '任务编号', 'ateam task edit T3 --desc-file t.md');
     const body = { id };
     if (flags.title !== undefined) body.title = flags.title;
+    if (flags.role !== undefined) body.role = flags.role;
     if (flags['desc-file'] !== undefined) body.description = readTextFile(flags['desc-file'], '--desc-file');
     if (flags.accept !== undefined) body.acceptance = flags.accept;
     if (flags.paths !== undefined) body.paths = splitList(flags.paths);

@@ -138,6 +138,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     }
     const changes = [];
     if (patch.title !== undefined) { task.title = requireText(patch.title, '任务标题'); changes.push('标题'); }
+    if (patch.role !== undefined) {
+      const role = requireText(patch.role, '角色（--role）');
+      if (role !== task.role) { changes.push(`角色（${task.role} → ${role}）`); task.role = role; }
+    }
     if (patch.description !== undefined) { task.description = String(patch.description ?? ''); changes.push('描述'); }
     if (patch.acceptance !== undefined) { task.acceptance = cleanList(patch.acceptance, '验收标准'); changes.push('验收标准'); }
     if (patch.paths !== undefined) {
@@ -152,7 +156,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
       task.dependsOn = deps;
       changes.push('依赖');
     }
-    if (changes.length === 0) throw new AteamError('INVALID', '没有要修改的内容。请至少提供 --title、--desc-file、--accept、--paths、--after 中的一项。');
+    if (changes.length === 0) throw new AteamError('INVALID', '没有要修改的内容。请至少提供 --title、--role、--desc-file、--accept、--paths、--after 中的一项。');
     addHistory(task, 'edited', 'lead', `修改了${changes.join('、')}`);
     changed();
     return task;

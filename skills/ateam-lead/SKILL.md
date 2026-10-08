@@ -32,6 +32,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
    - `role` 必须和 worker 加入时的角色一致。角色是**工作分类**（frontend、backend、test……），任务按分类派：同一分类的任务只会派给这个分类的 worker。
    - 每个任务只属于一个分类。一个功能既有前端又有后端，就拆成两个任务（前端任务 `--after` 后端任务）。
    - 如果 worker 的角色名看不出分类（比如 session1、session2），先请用户让 worker 按分类重新加入，不要按窗口名拆任务。
+   - 角色标错了：`ateam task edit T3 --role backend` 改（只有待领取或已挂起的任务能改）。
    - **同时进行的任务 `paths` 不能重叠。** 服务只提交任务路径内的改动，这是隔离的唯一手段。
    - 验收标准要能逐条核对。
    - 有先后关系就用 `--after`，依赖的任务通过后才会派发。

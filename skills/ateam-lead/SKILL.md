@@ -90,6 +90,10 @@ git show <sha>         # 这个任务的改动
 git status --short     # 有没有越界的残留改动（任务路径以外的未提交文件）
 ```
 
+**多仓库模式**（`ateam status` 第一行写着「多仓库模式」，比如项目目录 pan/ 下有 pan_web/、pan_api/ 两个仓库）：
+- 任务路径写成「仓库目录/子路径」：`--paths pan_api/`、`--paths pan_web/src/`。一个任务尽量只碰一个仓库；跨两个仓库也行，会在每个仓库各提交一次。
+- 提交号形如 `pan_api@a1b2c3d`，review 用 `git -C pan_api show a1b2c3d`；检查越界要在每个仓库里看：`git -C pan_web status --short`、`git -C pan_api status --short`。
+
 1. 逐条核对验收标准。
 2. 跑项目已有的测试或构建命令。
 3. 检查越界：`git status --short` 里出现任务路径以外的改动，要在打回意见里指出。

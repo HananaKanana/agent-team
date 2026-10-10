@@ -158,12 +158,17 @@ const commands = {
     const leaseMin = Number(flags.lease ?? process.env.ATEAM_LEASE_MIN ?? 15);
     if (!Number.isInteger(port) || port <= 0 || port > 65535) fail('--port 必须是 1-65535 的整数。');
     if (!Number.isFinite(leaseMin) || leaseMin <= 0) fail('--lease 必须是正数（分钟）。');
+    let server;
     try {
-      await startServer({ root: process.cwd(), port, leaseMin });
+      server = await startServer({ root: process.cwd(), port, leaseMin });
     } catch (err) {
       fail(err.message);
     }
-    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）`;
+    const layout = server.ateamLayout;
+    const repos = layout?.mode === 'multi'
+      ? `\n多仓库模式，包含 git 仓库：${layout.repos.join('、')}（任务路径写成「仓库目录/子路径」，比如 ${layout.repos[0]}/src/）`
+      : '';
+    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}`;
   },
 
   async join({ flags }) {
@@ -324,8 +329,8 @@ const commands = {
   },
 
   async status({ flags }) {
-    const { state, pending, root } = await request('GET', '/api/state');
-    return formatStatus(state, pending, flags.job, root);
+    const { state, pending, root, repos } = await request('GET', '/api/state');
+    return formatStatus(state, pending, flags.job, root, repos);
   },
 
   async show({ positional }) {

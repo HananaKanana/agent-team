@@ -147,7 +147,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
       break;
     case 'handoff':
       out = `# ⚠ 接手任务 ${title}\n\n`
-        + '上一位 worker 中途掉线。先阅读下方历史，再运行 git log --oneline -5 和 git status 了解现状，在已有改动基础上继续，不要从头做起。\n\n'
+        + '上一位 worker 中途掉线。先阅读下方历史，再在任务路径所在的 git 仓库里运行 git log --oneline -5 和 git status 了解现状（多仓库时用 git -C <仓库目录> ...），在已有改动基础上继续，不要从头做起。\n\n'
         + `${formatTask(task)}${deliverySection(delivery)}`;
       break;
     case 'rejected':
@@ -196,12 +196,13 @@ const PENDING_HINT = {
   held: (t) => `已打回 3 次：ateam task edit ${t.id} ... 后 ateam release ${t.id}，或自己修改后 ateam approve ${t.id}`,
 };
 
-export function formatStatus(state, pending, jobId, root) {
+export function formatStatus(state, pending, jobId, root, repos) {
   const now = Date.now();
   const jobs = jobId ? state.jobs.filter((j) => j.id === jobId) : state.jobs;
   const jobIds = new Set(jobs.map((j) => j.id));
   const lines = ['# ateam 状态', ''];
   if (root) lines.push(`项目目录：${root}`, '');
+  if (repos?.length) lines.push(`多仓库模式，包含 git 仓库：${repos.join('、')}。提交号形如「仓库@提交号」，review 用 git -C <仓库> show <提交号>`, '');
 
   const mine = pending.filter((t) => jobIds.has(t.jobId));
   lines.push(`## 待你处理（${mine.length}）`, '');

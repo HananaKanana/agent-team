@@ -343,10 +343,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return workingTaskOf(agentId).task;
   }
 
+  // commit：一个提交号、多个提交号（多仓库时每个仓库一个，如 pan_api@a1b2c3d），或 null（无代码改动）
   function recordSubmit(agentId, summary, commit) {
     summary = requireText(summary, '提交总结');
     const { agent, task } = workingTaskOf(agentId);
-    if (commit) task.commits.push(commit);
+    const list = [].concat(commit ?? []).filter(Boolean);
+    task.commits.push(...list);
+    commit = list.length ? list.join('、') : null;
     task.status = 'submitted';
     addHistory(task, 'submitted', agent.id, summary, commit);
     emit('submitted', {

@@ -29,7 +29,7 @@ description: 作为 agent-team 的 worker 加入团队、领取并完成开发�
 - **一条命令只运行一次 `ateam wait`。** 不要写 `for`/`while` 循环，不要加 `sleep`，不要接管道（`| head`、`$(...)` 等）。你的命令有 120 秒超时，循环里连续等几次一定会超时，结果就丢了。等待本身已经在服务端完成，你只需要一次次重复调用。
 - **「暂无任务」时，原样运行输出里给出的那条带 `--round` 的命令**，比如 `ateam wait --as frontend-1 --round 3`。轮次号每次加 1，让每次的命令都不一样——你的平台会把一字不差的重复命令判成死循环并强制停下，带轮次号就不会。不要自己去掉 `--round`，也不要自己编轮次号。
 - **不要自己执行 `git commit`、`git add`、`git push`**。提交由 `ateam submit` 完成，服务会只提交你任务允许的路径。
-- 你可以用 `git log`、`git status`、`git diff`、`git show` 查看现状。
+- 你可以用 `git log`、`git status`、`git diff`、`git show` 查看现状。如果项目目录下有多个仓库（`ateam status` 会写「多仓库模式」），在任务路径所在的仓库里运行，或用 `git -C <仓库目录> ...`。
 
 ## 1. 加入
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
-import { commitPaths, ensureGitignore, ensureGitRepo, latestChangeTime } from './git.js';
+import { commitPaths, detectRepos, ensureGitignore, latestChangeTime } from './git.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -63,8 +63,9 @@ function readBody(req) {
 }
 
 export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
-  await ensureGitRepo(root);
-  ensureGitignore(root);
+  const layout = await detectRepos(root);
+  // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
+  if (layout.mode === 'single') ensureGitignore(root);
 
   const dataDir = join(root, '.ateam');
   const leaseMs = leaseMin * 60 * 1000;
@@ -144,15 +145,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
       if (typeof b.summary !== 'string' || !b.summary.trim()) {
         throw new AteamError('INVALID', '提交总结不能为空。请写明做了什么、怎么验证的。');
       }
-      let commit = null;
+      let commits = null;
       if (!b.noChanges) {
         const result = await commitPaths(root, task.paths, `[${task.id}] ${b.summary.trim()}`);
         if (result.nothing) {
           throw new AteamError('INVALID', `指定路径（${task.paths.join('、')}）下没有改动。服务的项目目录是 ${root}，路径相对于这个目录：如果你的改动在别的目录，说明服务起错了目录，请通知用户，不要挪动改动；如确实无需改代码，请加 --no-changes。`);
         }
-        commit = result.sha;
+        commits = result.commits;
       }
-      return { task: store.recordSubmit(b.as, b.summary, commit), commit };
+      return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null };
     }),
     'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description }) }),
     'POST /api/jobs/edit': (b) => {
@@ -187,7 +188,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     },
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
     'GET /api/state': () => ({
-      state: store.state, pending: store.pendingActions(), root, toolDir: TOOL_DIR, port,
+      state: store.state, pending: store.pendingActions(), root, toolDir: TOOL_DIR, port, repos: layout.mode === 'multi' ? layout.repos : null,
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
       leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: watchers.size > 0 || (leaderSeenAt !== null && Date.now() - leaderSeenAt < LEADER_FRESH_MS) },
     }),
@@ -307,5 +308,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     });
     server.listen(port, '127.0.0.1', resolve);
   });
+  server.ateamLayout = layout;
   return server;
 }

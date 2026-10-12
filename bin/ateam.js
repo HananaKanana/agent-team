@@ -264,11 +264,12 @@ const commands = {
     }
     const { dismissed } = await request('POST', '/api/dismiss', body);
     if (dismissed.length === 0) return '没有符合条件的在线 worker。';
-    const idle = dismissed.filter((d) => !d.holding).map((d) => d.id);
-    const busy = dismissed.filter((d) => d.holding).map((d) => `${d.id}（${d.holding}）`);
-    const lines = [`已安排 ${dismissed.length} 个 worker 下线。`];
-    if (idle.length) lines.push(`- 空闲的马上下线：${idle.join('、')}`);
-    if (busy.length) lines.push(`- 手上有任务的，任务结束（通过、作废或收回）后下线，期间不再领新任务：${busy.join('、')}`);
+    const lines = [`已让 ${dismissed.length} 个 worker 下线：${dismissed.map((d) => d.id).join('、')}。`];
+    const returned = dismissed.filter((d) => d.returned).map((d) => `${d.returned}（${d.id}）`);
+    const submitted = dismissed.filter((d) => d.submitted).map((d) => d.submitted);
+    if (returned.length) lines.push(`- 进行中的任务已退回待领取，等同角色的 worker 接手，已有改动保留：${returned.join('、')}`);
+    if (submitted.length) lines.push(`- 已提交待 review 的任务照常 review：${submitted.join('、')}（打回的话会交给别人接手）`);
+    lines.push('正在等任务的 worker 会马上收到通知；正在写代码的，下一次调用 ateam 命令时收到。');
     return lines.join('\n');
   },
 

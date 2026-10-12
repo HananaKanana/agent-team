@@ -258,8 +258,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     changed();
   }
 
-  // 安排 worker 下线：ids 指定编号，或 role 指定整个角色，或 all 表示全部在线 worker。
-  // 空闲的 worker 下次 wait 时收到「已下线」；手上有任务的做完这个任务再下线，期间不再领新任务。
+  // 让 worker 立即下线：ids 指定编号，或 role 指定整个角色，或 all 表示全部在线 worker。
+  // 手上进行中（或等答复）的任务退回待领取、标记接手，已有改动保留；已提交待 review 的任务原样留着，
+  // 之后被打回就按「原 worker 已离开」交给别人接手。正挂在 wait 上的 worker 由 server 立即通知。
   function dismiss({ ids = [], role = '', all = false } = {}) {
     const wantIds = new Set(Array.isArray(ids) ? ids : []);
     role = String(role ?? '').trim();
@@ -274,12 +275,23 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
       && (all || wantIds.has(a.id) || (role && sameRole(a.role, role))));
     const result = [];
     for (const agent of picked) {
-      agent.dismiss = true;
-      result.push({ id: agent.id, holding: agent.currentTask });
+      let returned = null;
+      const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
+      if (task && (task.status === 'working' || task.status === 'asking')) {
+        task.status = 'pending';
+        task.handoff = true;
+        task.assignee = null;
+        addHistory(task, 'handoff', 'lead', `${agent.id} 被安排下线，任务退回待领取，等待接手`);
+        returned = task.id;
+      }
+      agent.currentTask = null;
+      finishDismiss(agent);
+      result.push({ id: agent.id, returned, submitted: task && !returned ? task.id : null });
     }
     if (result.length > 0) changed();
     return result;
   }
+
 
   // 「暂无任务」时告诉 worker 在等什么：本角色还有哪些任务在等依赖、等的是谁
   function waitingInfo(agentId) {
@@ -287,7 +299,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     if (!agent) return null;
     if (agent.currentTask) {
       const task = state.tasks.find((t) => t.id === agent.currentTask);
-      return task ? { holding: { id: task.id, status: task.status }, dismissing: !!agent.dismiss } : null;
+      return task ? { holding: { id: task.id, status: task.status } } : null;
     }
     const blocked = state.tasks
       .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && !depsMet(t))

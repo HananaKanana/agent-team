@@ -43,6 +43,7 @@ leader
   ateam reject T3 "<修改意见>"
   ateam answer T3 "<答复>"
   ateam status [--job J1 | --all]
+  ateam rules [add "<一条规则>" | set --file rules.md]
   ateam jobs [--all] [--grep <关键词>]
   ateam job show J1
   ateam show T3
@@ -360,6 +361,30 @@ const commands = {
     const { task } = await request('POST', '/api/answer', { id, text });
     const where = task.status === 'working' ? `将送达 ${task.assignee}` : '提问者已掉线，答复会交给接手的 worker';
     return `已答复 ${task.id}，${where}。`;
+  },
+
+  // 项目规则：每个任务派给 worker 时自动附上
+  async rules({ flags, positional }) {
+    const sub = positional[0];
+    if (!sub) {
+      const { rules } = await request('GET', '/api/rules');
+      return rules.trim()
+        ? `# 项目规则（每个任务派发时自动附上）\n\n${rules.trim()}`
+        : '还没有项目规则。添加：ateam rules add "提交前在 pan_api 里跑 mvn -q -o compile"，或 ateam rules set --file rules.md';
+    }
+    if (sub === 'add') {
+      const line = requireArg(positional[1], '规则', 'ateam rules add "不写新的测试代码"');
+      const { rules: old } = await request('GET', '/api/rules');
+      const text = `${old.trim()}${old.trim() ? '\n' : ''}- ${line.trim().replace(/^[-*]\s+/, '')}`;
+      await request('POST', '/api/rules', { text });
+      return `已添加。之后派发的任务都会带上这条规则（ateam rules 查看全部）。`;
+    }
+    if (sub === 'set') {
+      const file = requireArg(flags.file, '规则文件 --file', 'ateam rules set --file rules.md');
+      const { rules } = await request('POST', '/api/rules', { text: readTextFile(file, '--file') });
+      return rules.trim() ? '已更新项目规则。之后派发的任务都会带上。' : '已清空项目规则。';
+    }
+    fail('用法：ateam rules ／ ateam rules add "<一条规则>" ／ ateam rules set --file rules.md');
   },
 
   async status({ flags }) {

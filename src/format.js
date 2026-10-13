@@ -77,6 +77,7 @@ const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复' };
 function footer(agentId) {
   return [
     '',
+    '',
     '---',
     '**现在就开始做。** 不要先停下来向用户汇报「领到了任务」，也不要问用户要不要开始；直接读代码、改代码。',
     '做完提交后立即回到 ateam wait，整个过程中不要结束本轮回复。',
@@ -164,6 +165,9 @@ export function formatWait(result, agentId, waiting, round = 0) {
       break;
     default:
       out = `# ${kind} ${title}\n\n${formatTask(task)}`;
+  }
+  if (result.rules) {
+    out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
   return out + footer(agentId);
 }

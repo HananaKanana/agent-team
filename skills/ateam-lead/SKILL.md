@@ -35,6 +35,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
    - 角色标错了：`ateam task edit T3 --role backend` 改（只有待领取或已挂起的任务能改）。
    - **同时进行的任务 `paths` 不能重叠。** 服务只提交任务路径内的改动，这是隔离的唯一手段。`task add` / `task edit` 输出「⚠ 路径重叠」时，按提示加 `--after` 让它排在后面，或者把两个任务合成一个；确定改的是同一文件里互不相干的部分才可以不管。
    - 验收标准要能逐条核对。
+   - **项目规则不用写进任务描述。** 每个任务都要遵守的约定（不写测试、提交前跑哪条编译命令、代码风格……）放在项目规则里，worker 领任务时自动附上。开工时 `ateam rules` 看一眼现有规则；用户提出新的通用要求，或者 review 时发现 worker 反复犯同一类错（比如漏 import、忘了编译），就 `ateam rules add "<一条规则>"` 加进去，并告诉用户加了什么。整份替换用 `ateam rules set --file rules.md`。
    - 有先后关系就用 `--after`，依赖的任务通过后才会派发。
    - 粒度：一个 worker 一次能做完。
 

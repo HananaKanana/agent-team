@@ -1,7 +1,7 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,9 @@ const MAX_BODY = 1024 * 1024;
 const DEFAULT_HOLD_SEC = 90;
 const MAX_HOLD_SEC = 110;
 const LEADER_FRESH_MS = 3 * 60 * 1000;
+const MAX_RULES = 20 * 1024;
+// 新领到、接手、继续的任务附上项目规则；打回意见和答复只是补充消息，不重复附
+const RULES_KINDS = new Set(['task', 'handoff', 'resume']);
 
 // 服务端代码指纹：src/*.js 和 bin/ateam.js 的内容哈希。启动时记一份，之后比对，
 // 代码被更新（git pull、改了代码）而服务没重启时，看板和 status 提示重启。
@@ -117,6 +120,27 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   let waking = false;
   let wakeScheduled = false;
 
+  // 项目规则：.ateam/rules.md，每个任务都要遵守的约定（不写测试、提交前跑编译……）。
+  // 每次派任务时现读，用户或 leader 改了马上生效。
+  const rulesFile = join(dataDir, 'rules.md');
+  function readRules() {
+    try { return readFileSync(rulesFile, 'utf8'); } catch { return ''; }
+  }
+  function writeRules(text) {
+    if (typeof text !== 'string') throw new AteamError('INVALID', '规则内容必须是文本。');
+    if (Buffer.byteLength(text) > MAX_RULES) throw new AteamError('INVALID', '项目规则超过 20KB。规则是每个任务都要读的，请精简到最重要的几条。');
+    mkdirSync(dataDir, { recursive: true });
+    const tmp = `${rulesFile}.tmp`;
+    writeFileSync(tmp, text.trim() ? `${text.trim()}\n` : '');
+    renameSync(tmp, rulesFile);
+    return readRules();
+  }
+  function withRules(result) {
+    if (!result || !RULES_KINDS.has(result.kind)) return result;
+    const rules = readRules().trim();
+    return rules ? { ...result, rules } : result;
+  }
+
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
 
   // 每次状态变化：落盘，并在下一轮事件循环唤醒挂起的请求。
@@ -135,7 +159,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       for (const [agentId, waiter] of [...waiters]) {
         try {
           const result = store.nextFor(agentId);
-          if (result) finishWaiter(agentId, waiter, 200, { ok: true, result });
+          if (result) finishWaiter(agentId, waiter, 200, { ok: true, result: withRules(result) });
         } catch (err) {
           finishWaiter(agentId, waiter, err instanceof AteamError ? 400 : 500,
             { ok: false, code: err.code ?? 'INTERNAL', message: err.message });
@@ -242,6 +266,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task, agentId };
     },
+    'GET /api/rules': () => ({ rules: readRules() }),
+    'POST /api/rules': (b) => ({ rules: writeRules(b.text) }),
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
     'GET /api/state': (_b, url) => ({
       // 看板不用事件列表（命令行 status 要用它数未读事件），?view=dashboard 时去掉，减小数据量
@@ -262,7 +288,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (old) finishWaiter(agentId, old, 200, { ok: true, result: null, waiting: store.waitingInfo(agentId) });
 
     const result = store.nextFor(agentId); // 先 touch，掉线的 worker 在这里拿到 LEASE_LOST
-    if (result) return send(res, 200, { ok: true, result });
+    if (result) return send(res, 200, { ok: true, result: withRules(result) });
 
     const waiter = { res, timer: null };
     waiter.timer = setTimeout(() => {

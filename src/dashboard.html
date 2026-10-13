@@ -90,6 +90,13 @@ button.worker:hover { border-color: var(--muted); }
   box-shadow: 0 12px 32px rgba(15, 25, 20, .22); padding: 14px 16px 16px;
 }
 .helper[hidden] { display: none; }
+.rules-editor {
+  display: block; width: 100%; margin-top: 8px; padding: 10px 12px; resize: vertical;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink);
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.rules-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.btn:disabled { opacity: .45; cursor: default; }
 .helper-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .helper-head b { font-size: 15px; }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 8px 0 10px; }
@@ -685,9 +692,64 @@ function renderOfflinePanel(panel) {
   panel.hidden = false;
 }
 
-function renderHelper() {
+// 项目规则编辑器的状态。规则不在 /api/state 里，进入「项目规则」页时单独读取
+let rules = { loaded: false, saved: '', draft: '', status: '' };
+
+async function loadRules() {
+  try {
+    const res = await fetch('/api/rules', { cache: 'no-store' });
+    const json = await res.json();
+    const saved = json.rules || '';
+    // 上次没保存的草稿保留着（比如按 Esc 关了面板）
+    const keepDraft = rules.loaded && rules.draft !== rules.saved;
+    rules = { loaded: true, saved, draft: keepDraft ? rules.draft : saved, status: keepDraft ? '有未保存的修改。' : '' };
+  } catch {
+    rules = { ...rules, loaded: true, status: '读取失败，请确认服务在运行（规则功能需要新版服务）。' };
+  }
+  renderHelper(true);
+}
+
+async function saveRules() {
+  try {
+    const res = await fetch('/api/rules', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: rules.draft }) });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.message);
+    rules = { loaded: true, saved: json.rules, draft: json.rules, status: '已保存。之后派发的任务都会带上。' };
+  } catch (err) {
+    rules = { ...rules, status: `保存失败：${err.message}` };
+  }
+  renderHelper(true);
+}
+
+function rulesEditor() {
+  if (!rules.loaded) return el('p', { class: 'hint' }, '读取中……');
+  const dirty = rules.draft !== rules.saved;
+  const area = el('textarea', {
+    class: 'rules-editor', rows: '14', spellcheck: 'false',
+    placeholder: '- 不写新的测试代码\n- 不起浏览器、不截图\n- 提交前在 pan_api 里跑 mvn -q -o compile，在 pan_web 里跑 vue-tsc --noEmit',
+  });
+  area.value = rules.draft;
+  area.addEventListener('input', () => {
+    rules.draft = area.value;
+    const changed = rules.draft !== rules.saved;
+    saveBtn.disabled = !changed;
+    resetBtn.disabled = !changed;
+  });
+  const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); saveRules(); } }, '保存');
+  const resetBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); rules = { ...rules, draft: rules.saved, status: '' }; renderHelper(true); } }, '还原');
+  return [
+    el('p', { class: 'hint' }, '每个任务都要遵守的约定。worker 领到任务时，这里的内容会自动附在任务后面，leader 不用在每个任务里重复写。一行一条，支持 markdown。'),
+    area,
+    el('div', { class: 'rules-actions' }, saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null),
+    el('p', { class: 'hint' }, '保存在项目的 .ateam/rules.md。leader 也可以用 ateam rules add "<一条规则>" 添加。'),
+  ];
+}
+
+function renderHelper(force = false) {
   const panel = document.getElementById('helper');
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
+  // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
+  if (!force && helper.tab === 'rules' && panel.querySelector('.rules-editor')) return;
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;
   const online = agents.filter((a) => a.status === 'online');
@@ -712,16 +774,22 @@ function renderHelper() {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = ['lead', 'install'].includes(helper.tab) ? helper.tab : 'worker';
+  const tab = ['lead', 'install', 'rules'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
-    onclick: (e) => { e.stopPropagation(); helper = { ...helper, tab: key }; dismissAllArm = false; renderHelper(); },
+    onclick: (e) => {
+      e.stopPropagation();
+      helper = { ...helper, tab: key };
+      dismissAllArm = false;
+      if (key === 'rules') loadRules();
+      renderHelper(true);
+    },
   }, label);
   fill(panel,
     el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装')),
-    el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
-    tab === 'install' ? installGuide() : tab === 'worker' ? [
+    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则')),
+    tab === 'rules' ? null : el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
+    tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
     roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },

@@ -230,10 +230,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/tasks': (b) => {
       const task = store.addTask({
         jobId: b.jobId, title: b.title, role: b.role, paths: b.paths,
-        description: b.description, acceptance: b.acceptance, dependsOn: b.dependsOn,
+        description: b.description, acceptance: b.acceptance, dependsOn: b.dependsOn, top: !!b.top,
       });
       return { task, overlaps: store.overlapsFor(task) };
     },
+    'POST /api/tasks/priority': (b) => ({ task: store.setPriority(requireId(b), !!b.top) }),
     'POST /api/tasks/edit': (b) => {
       const { id, ...patch } = b;
       const task = store.editTask(requireId({ id }), patch);

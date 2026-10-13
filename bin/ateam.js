@@ -13,7 +13,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'no-notify']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'no-notify', 'top', 'off']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
@@ -32,7 +32,8 @@ leader
   ateam job new "<标题>" [--desc-file f.md]
   ateam job edit J1 [--title "..."] [--desc-file f.md]
   ateam job accept J1 [J2...]
-  ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]...
+  ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]... [--top]
+  ateam task top T3 [--off]
   ateam task edit T3 [--title "..."] [--role <角色>] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
   ateam cancel T3 ["<原因>"]
@@ -266,10 +267,21 @@ const commands = {
       description: flags['desc-file'] ? readTextFile(flags['desc-file'], '--desc-file') : '',
       acceptance: flags.accept ?? [],
       dependsOn: flags.after ? splitList(flags.after) : [],
+      top: !!flags.top,
     };
     const { task, overlaps } = await request('POST', '/api/tasks', body);
     const deps = task.dependsOn.length ? `，依赖 ${task.dependsOn.join('、')}` : '';
-    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}`;
+    const top = task.priority ? '，优先' : '';
+    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}${top}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}`;
+  },
+
+  // 设为优先：同角色的 worker 下一个先领它；--off 取消
+  async 'task top'({ flags, positional }) {
+    const id = requireArg(positional[0], '任务编号', 'ateam task top T5');
+    const { task } = await request('POST', '/api/tasks/priority', { id, top: !flags.off });
+    if (!task.priority) return `已取消 ${task.id} 的优先，按编号顺序派发。`;
+    const waiting = task.dependsOn.length ? `（它依赖 ${task.dependsOn.join('、')}，依赖通过后才会派发）` : '';
+    return `已把 ${task.id} 设为优先：${task.role} 角色的 worker 下一个先领它${waiting}。正在做别的任务的 worker 不会被打断。`;
   },
 
   async 'task edit'({ flags, positional }) {

@@ -252,7 +252,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
     for (const t of live) {
       const named = state.agents.find((a) => a.id === t.assignee)?.name;
       const who = t.assignee ? `，${named ? `${named}（${t.assignee}）` : t.assignee}` : '';
-      const flags = [t.handoff ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
+      const flags = [t.priority && t.status === 'pending' ? '优先' : '', t.handoff ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
       lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}${who}）${flags ? ` ${flags}` : ''}`);
     }
     const cancelled = tasks.filter((t) => t.status === 'cancelled');

@@ -37,6 +37,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
    - 验收标准要能逐条核对。
    - **项目规则不用写进任务描述。** 每个任务都要遵守的约定（不写测试、提交前跑哪条编译命令、代码风格……）放在项目规则里，worker 领任务时自动附上。开工时 `ateam rules` 看一眼现有规则；用户提出新的通用要求，或者 review 时发现 worker 反复犯同一类错（比如漏 import、忘了编译），就 `ateam rules add "<一条规则>"` 加进去，并告诉用户加了什么。整份替换用 `ateam rules set --file rules.md`。
    - 有先后关系就用 `--after`，依赖的任务通过后才会派发。
+   - 同角色的任务默认按编号顺序派发。用户说某件事急（比如插进来一个紧急修复），加任务时带 `--top`，或者对已有任务 `ateam task top T5`，同角色的 worker 下一个先领它（取消：`ateam task top T5 --off`）。优先不会越过依赖，也不会打断正在做的任务。
    - 粒度：一个 worker 一次能做完。
 
 **任务描述模板**（写到 `--desc-file` 指定的文件里）：

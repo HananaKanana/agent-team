@@ -241,6 +241,7 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .role-text { color: var(--rc); font-weight: 600; }
 .tag.warn { background: var(--rework); color: #fff; }
 .tag.handoff { background: var(--asking); color: #fff; }
+.tag.urgent { background: var(--rework); color: #fff; }
 
 /* 任务详情抽屉 */
 .drawer {
@@ -915,6 +916,8 @@ function renderMain() {
 
   const board = el('div', { class: 'board' }, LANES.map((lane) => {
     const cards = tasks.filter((t) => laneOf(t) === lane.key);
+    // 待领取一列按派发顺序排：优先的在最上面（与服务端 dispatchOrder 一致）
+    if (lane.key === 'pending') cards.sort((a, b) => ((b.priority ?? 0) - (a.priority ?? 0)) || (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
     return el('section', { class: `lane c-${lane.key}`, 'aria-label': lane.label },
       el('h3', null, el('span', { class: 'label' }, lane.label), el('span', { class: 'n' }, cards.length)),
       cards.map((t) => card(t, lane.key)));
@@ -936,7 +939,8 @@ function card(t, lane) {
       el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role),
       t.assignee ? el('span', { class: 'tag', title: t.assignee }, agentName(t.assignee)) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`) : null,
-      handedOff ? el('span', { class: 'tag handoff' }, '接手') : null));
+      handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
+      t.priority && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag urgent' }, '优先') : null));
 }
 
 function renderDrawer(fresh) {
@@ -970,6 +974,7 @@ function renderDrawer(fresh) {
       el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
       el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
+    t.status === 'pending' || t.status === 'held' ? priorityBox(t) : null,
     t.status === 'pending' ? [
       el('h4', null, t.handoff ? '让新 worker 接手' : '找 worker 来做'),
       el('p', { class: 'hint' }, '在新的 agent 窗口（可以换账号）里发这句话。已有同角色 worker 在线时不用开新窗口，它做完手上的会自动领。'),
@@ -1004,6 +1009,33 @@ function closeDrawer() {
   view.task = null;
   saveView();
   renderDrawer();
+}
+
+// 设为优先 / 取消优先：只影响同角色 worker 领任务的先后
+let priorityError = null;
+function priorityBox(t) {
+  const on = !!t.priority;
+  return [
+    el('h4', null, '派发顺序'),
+    el('p', { class: 'hint' }, on
+      ? `已设为优先：${t.role} 的 worker 下一个先领它${t.dependsOn.length ? '（依赖通过后）' : ''}。`
+      : `急着要的话可以设为优先，${t.role} 的 worker 下一个先领它，不用等前面排着的任务。正在做别的任务的 worker 不会被打断。`),
+    el('div', { class: 'prompt' },
+      el('button', {
+        class: on ? 'btn' : 'btn primary',
+        onclick: async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await fetch('/api/tasks/priority', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, top: !on }) });
+            const out = await res.json();
+            priorityError = out.ok ? null : out.message;
+          } catch { priorityError = '连不上 ateam 服务。'; }
+          await poll();
+          renderDrawer(false);
+        },
+      }, on ? '取消优先' : '设为优先'),
+      priorityError ? el('span', { class: 'hint' }, priorityError) : null),
+  ];
 }
 
 // 收回任务：两步确认，避免误点

@@ -148,7 +148,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return job;
   }
 
-  function addTask({ jobId, title, role, paths, description = '', acceptance = [], dependsOn = [] } = {}) {
+  function addTask({ jobId, title, role, paths, description = '', acceptance = [], dependsOn = [], top = false } = {}) {
     const job = getJob(jobId);
     title = requireText(title, '任务标题');
     role = requireText(role, '角色（--role）');
@@ -166,6 +166,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       commits: [], pendingDelivery: null, history: [],
     };
     addHistory(task, 'created', 'lead', title);
+    if (top) task.priority = Math.max(0, ...state.tasks.map((t) => t.priority ?? 0)) + 1;
     state.tasks.push(task);
     job.status = 'active';
     job.updatedAt = now();
@@ -244,6 +245,31 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return a.trim().toLowerCase() === b.trim().toLowerCase();
   }
 
+  // 派发顺序：优先的任务最先（后被设为优先的排更前），再是接手任务（有半成品），最后按编号
+  function dispatchOrder(a, b) {
+    return ((b.priority ?? 0) - (a.priority ?? 0)) || (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1)));
+  }
+
+  // 设为优先 / 取消优先。只对还没开始的任务（待领取、已挂起）有意义。
+  // 优先只影响同角色 worker 领任务的先后，不会越过依赖。
+  function setPriority(taskId, top) {
+    const task = getTask(taskId);
+    if (task.status !== 'pending' && task.status !== 'held') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有待领取或已挂起的任务可以调整优先级。`);
+    }
+    const before = task.priority ?? 0;
+    if (top) {
+      task.priority = Math.max(0, ...state.tasks.map((t) => t.priority ?? 0)) + 1;
+      addHistory(task, 'edited', 'lead', '设为优先：同角色的 worker 先领它');
+    } else {
+      if (!before) return task;
+      delete task.priority;
+      addHistory(task, 'edited', 'lead', '取消优先');
+    }
+    changed();
+    return task;
+  }
+
   // spec §4.1：返回 { kind, task, delivery? } 或 null（asking 中、或没有可派发的任务）
   function nextFor(agentId) {
     const agent = touch(agentId);
@@ -268,10 +294,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       return { kind: 'resume', task };
     }
 
-    // 规则 3：领取新任务，handoff 优先，再按编号
+    // 规则 3：领取新任务，派发顺序见 dispatchOrder
     const candidates = state.tasks
       .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && depsMet(t))
-      .sort((a, b) => (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
+      .sort(dispatchOrder);
     const task = candidates[0];
     if (!task) return null;
 
@@ -732,7 +758,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
+    acceptJobs, setPriority, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
   };
 }

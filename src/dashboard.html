@@ -146,7 +146,7 @@ nav.jobs h2, main h2 { font-size: 13px; font-weight: 600; color: var(--muted); m
 .job:hover { background: var(--surface); }
 .job[aria-current="true"] { background: var(--surface); border-color: var(--line); }
 .job .title { font-weight: 600; }
-.job.done { opacity: .55; }
+.job .sub .accepted { color: var(--approved); font-weight: 600; }
 .report-bar .hint { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
 .job .sub { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; margin-top: 4px; }
 
@@ -749,11 +749,11 @@ function renderJobs() {
     const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const done = jt.filter((t) => t.status === 'approved').length;
     return el('button', {
-      class: j.status === 'accepted' ? 'job done' : 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
+      class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
     },
     el('div', { class: 'title' }, `${j.id} ${j.title}`),
-    el('div', { class: 'sub' }, el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
+    el('div', { class: 'sub' }, j.status === 'accepted' ? el('span', { class: 'accepted' }, '✓ 已验收') : el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
     jt.length ? strip(jt, false) : null);
   });
   nav.replaceChildren(el('h2', null, '需求'), ...(items.length ? items : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，leader 会在这里建立任务。')]));

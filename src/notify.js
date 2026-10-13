@@ -35,7 +35,7 @@ function osaNotify(title, message) {
   // 文字通过参数传给脚本，不拼进脚本里，避免引号转义问题
   execFile('osascript', [
     '-e', 'on run argv',
-    '-e', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"',
+    '-e', 'display notification (item 2 of argv) with title (item 1 of argv)',
     '-e', 'end run',
     title, message,
   ], () => {});

@@ -13,13 +13,13 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'no-notify']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
 
 服务
-  ateam serve [--port 7700] [--lease 15] [--idle 3]
+  ateam serve [--port 7700] [--lease 15] [--idle 3] [--no-notify]
 
 worker
   ateam join --role <角色> [--name <名字>]
@@ -175,17 +175,21 @@ const commands = {
     const idleMin = Number(flags.idle ?? process.env.ATEAM_IDLE_MIN ?? 3);
     if (!Number.isFinite(leaseMin) || leaseMin <= 0) fail('--lease 必须是正数（分钟）。');
     if (!Number.isFinite(idleMin) || idleMin <= 0) fail('--idle 必须是正数（分钟）。');
+    const notify = !flags['no-notify'] && process.env.ATEAM_NOTIFY !== '0';
     let server;
     try {
-      server = await startServer({ root: process.cwd(), port, leaseMin, idleMin });
+      server = await startServer({ root: process.cwd(), port, leaseMin, idleMin, notify });
     } catch (err) {
       fail(err.message);
     }
     const layout = server.ateamLayout;
+    const notice = process.platform !== 'darwin' ? ''
+      : notify ? '\n系统通知：已开启，有需求待验收、缺 worker、leader 掉线时弹 macOS 通知（不要的话加 --no-notify）'
+        : '\n系统通知：已关闭';
     const repos = layout?.mode === 'multi'
       ? `\n多仓库模式，包含 git 仓库：${layout.repos.join('、')}（任务路径写成「仓库目录/子路径」，比如 ${layout.repos[0]}/src/）`
       : '';
-    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}`;
+    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}${notice}`;
   },
 
   async join({ flags }) {

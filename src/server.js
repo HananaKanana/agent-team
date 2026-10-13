@@ -9,6 +9,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, latestChangeTime } from './git.js';
+import { startNotifier } from './notify.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -100,7 +101,7 @@ function readBody(req) {
   });
 }
 
-export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
+export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, notify = true } = {}) {
   const layout = await detectRepos(root);
   const startHash = codeHash();
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
@@ -111,6 +112,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   const waiters = new Map(); // agentId -> { res, timer }
   const watchers = new Set(); // { res, timer }
   let leaderSeenAt = null; // leader 最近一次用命令行操作的时间（只在内存里，重启后等 leader 下次操作）
+  // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
+  const leaderOnline = () => watchers.size > 0 || (leaderSeenAt !== null && Date.now() - leaderSeenAt < LEADER_FRESH_MS);
   let waking = false;
   let wakeScheduled = false;
 
@@ -247,7 +250,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
-      leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: watchers.size > 0 || (leaderSeenAt !== null && Date.now() - leaderSeenAt < LEADER_FRESH_MS) },
+      leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline() },
     }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),
   };
@@ -356,6 +359,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   const sweepTimer = setInterval(sweepTick, Math.min(30000, leaseMs / 3));
   sweepTimer.unref();
   server.on('close', () => clearInterval(sweepTimer));
+
+  if (notify) {
+    const notifier = startNotifier({ root, port, getState: () => store.state, leaderOnline });
+    server.on('close', () => notifier.stop());
+  }
 
   await new Promise((resolve, reject) => {
     server.once('error', (err) => {

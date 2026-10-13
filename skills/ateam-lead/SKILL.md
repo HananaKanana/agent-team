@@ -151,4 +151,6 @@ ateam dismiss frontend-2 --after-task # 做完手上这个任务（通过或作�
 
 ## 6. 会话重开
 
+`ateam status` 默认不列出已验收的需求（只给编号），需要看时用 `ateam status --job J3` 或 `--all`。
+
 上下文满了或会话重开时：先运行 `ateam status`，按「待你处理」列表继续（待 review、等待答复、已挂起），再重新启动 `ateam watch --follow` 的后台监听。事件不是唯一的事实来源，`status` 不会漏掉需要处理的事。

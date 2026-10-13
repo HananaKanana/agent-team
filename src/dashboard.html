@@ -79,6 +79,9 @@ header.top h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .0
 button.worker { cursor: pointer; }
 button.worker:hover { border-color: var(--muted); }
 .helper-btn { margin-left: auto; }
+.btn.attention { border-color: var(--rework); color: var(--rework); font-weight: 600; }
+.btn.attention[hidden] { display: none; }
+.btn.attention + .helper-btn { margin-left: 0; }
 /* 提示词面板：顶部右侧弹出 */
 .helper {
   position: fixed; top: 56px; right: 16px; z-index: 15; width: min(520px, calc(100vw - 32px));
@@ -147,6 +150,12 @@ nav.jobs h2, main h2 { font-size: 13px; font-weight: 600; color: var(--muted); m
 .job[aria-current="true"] { background: var(--surface); border-color: var(--line); }
 .job .title { font-weight: 600; }
 .job .sub .accepted { color: var(--approved); font-weight: 600; }
+.accepted-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 10px; padding: 8px 12px;
+  border: none; border-top: 1px solid var(--line); background: none; cursor: pointer;
+  color: var(--muted); font-size: 13px; font-weight: 600; text-align: left;
+}
+.accepted-toggle:hover { color: var(--ink); }
 .report-bar .hint { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
 .job .sub { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; margin-top: 4px; }
 
@@ -314,6 +323,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 <header class="top">
   <h1>ateam 调度台</h1>
   <div class="workers" id="workers"></div>
+  <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn helper-btn" id="helper-btn" type="button">使用说明</button>
 </header>
 <section class="needs" id="needs" hidden aria-label="需要 worker"></section>
@@ -754,10 +764,14 @@ function renderHelper() {
   panel.hidden = false;
 }
 
+// 已验收的需求收进左侧底部一个可展开的分组，默认收起
+let acceptedOpen = false;
+try { acceptedOpen = localStorage.getItem('ateam.acceptedOpen') === '1'; } catch {}
+
 function renderJobs() {
   const nav = document.getElementById('jobs');
   const { jobs, tasks } = data.state;
-  const items = jobs.slice().reverse().map((j) => {
+  const jobItem = (j) => {
     const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const done = jt.filter((t) => t.status === 'approved').length;
     return el('button', {
@@ -767,8 +781,24 @@ function renderJobs() {
     el('div', { class: 'title' }, `${j.id} ${j.title}`),
     el('div', { class: 'sub' }, j.status === 'accepted' ? el('span', { class: 'accepted' }, '✓ 已验收') : el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
     jt.length ? strip(jt, false) : null);
-  });
-  nav.replaceChildren(el('h2', null, '需求'), ...(items.length ? items : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，leader 会在这里建立任务。')]));
+  };
+  const newest = jobs.slice().reverse();
+  const open = newest.filter((j) => j.status !== 'accepted');
+  const done = newest.filter((j) => j.status === 'accepted');
+  const doneGroup = done.length ? [
+    el('button', {
+      class: 'accepted-toggle', 'aria-expanded': acceptedOpen ? 'true' : 'false',
+      onclick: () => {
+        acceptedOpen = !acceptedOpen;
+        try { localStorage.setItem('ateam.acceptedOpen', acceptedOpen ? '1' : '0'); } catch {}
+        renderJobs();
+      },
+    }, el('span', null, acceptedOpen ? '▾' : '▸'), `已验收（${done.length}）`),
+    acceptedOpen ? done.map(jobItem) : null,
+  ] : [];
+  const empty = jobs.length ? (open.length ? [] : [el('p', { class: 'hint' }, '需求都验收完了。')])
+    : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，leader 会在这里建立任务。')];
+  fill(nav, el('h2', null, '需求'), open.map(jobItem), empty, doneGroup);
 }
 
 function renderMain() {
@@ -1129,6 +1159,45 @@ function loadView() {
   view = { job: job || null, task: report ? null : second || null, report };
 }
 
+// 需要你操作的事：待验收的需求、缺 worker 的角色、有活干时 leader 没连上。
+// 数量显示在标签页标题和图标上，看板不在前台时也能看到。
+const BASE_TITLE = 'ateam 调度台';
+let lastBadge = null;
+function attentionItems() {
+  if (!data) return [];
+  const items = [];
+  for (const j of data.state.jobs) if (j.status === 'awaiting_acceptance') items.push(`${j.id} 待你验收`);
+  for (const role of rolesNeedingWorkers().keys()) items.push(`${role} 缺 worker`);
+  const busy = data.state.jobs.some((j) => j.status === 'planning' || j.status === 'active');
+  if (busy && data.leader && !data.leader.online) items.push('leader 未连接');
+  return items;
+}
+
+function setBadge(text, color) {
+  const key = `${text}|${color}`;
+  if (key === lastBadge) return;
+  lastBadge = key;
+  document.title = text ? `(${text}) ${BASE_TITLE}` : BASE_TITLE;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">`
+    + `<rect x="2" y="2" width="28" height="28" rx="7" fill="#2f7d55"/>`
+    + `<text x="16" y="22" font-size="16" font-family="sans-serif" font-weight="700" text-anchor="middle" fill="#fff">a</text>`
+    + (text ? `<circle cx="25" cy="7" r="7" fill="${color}"/>` : '')
+    + '</svg>';
+  let link = document.querySelector('link[rel="icon"]');
+  if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.append(link); }
+  link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function renderAttention() {
+  const items = attentionItems();
+  setBadge(items.length ? String(items.length) : '', '#d9534f');
+  const btn = document.getElementById('attention');
+  if (!items.length) { btn.hidden = true; return; }
+  btn.hidden = false;
+  btn.textContent = `需要你处理 ${items.length}`;
+  btn.title = items.join('\n');
+}
+
 async function poll() {
   try {
     const res = await fetch('/api/state', { cache: 'no-store' });
@@ -1138,11 +1207,14 @@ async function poll() {
       lastJson = json;
       data = JSON.parse(json);
       render();
+      renderAttention();
     } else {
       renderWorkers(); // 只刷新「心跳 N 分钟前」
     }
   } catch {
     document.getElementById('banner').hidden = false;
+    lastJson = null; // 恢复连接后重新渲染，刷新提醒
+    setBadge('!', '#d9534f');
   }
 }
 
@@ -1158,6 +1230,21 @@ document.addEventListener('click', (e) => {
   if (!view.task) return;
   if (e.target.closest('#drawer, .card')) return;
   closeDrawer();
+});
+// 「需要你处理」：跳到第一件事——待验收的需求、缺 worker 的提示条、或 leader 的连接说明
+document.getElementById('attention').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const job = data.state.jobs.find((j) => j.status === 'awaiting_acceptance');
+  if (job) {
+    view = { job: job.id, task: null, report: false };
+    saveView();
+    render();
+    document.getElementById('main').scrollTop = 0;
+    return;
+  }
+  if (rolesNeedingWorkers().size) { document.getElementById('needs').scrollIntoView({ block: 'nearest' }); return; }
+  helper = { open: true, focus: null, tab: 'lead' };
+  renderHelper();
 });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();

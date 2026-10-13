@@ -203,9 +203,11 @@ const PENDING_HINT = {
   held: (t) => `已打回 3 次：ateam task edit ${t.id} ... 后 ateam release ${t.id}，或自己修改后 ateam approve ${t.id}`,
 };
 
-export function formatStatus(state, pending, jobId, root, repos) {
+// 默认不列出已验收的需求（只给编号），免得需求越积越多、撑满 leader 的上下文；--job 或 --all 时照常列出
+export function formatStatus(state, pending, jobId, root, repos, showAll = false) {
   const now = Date.now();
-  const jobs = jobId ? state.jobs.filter((j) => j.id === jobId) : state.jobs;
+  const accepted = jobId || showAll ? [] : state.jobs.filter((j) => j.status === 'accepted');
+  const jobs = jobId ? state.jobs.filter((j) => j.id === jobId) : state.jobs.filter((j) => !accepted.includes(j));
   const jobIds = new Set(jobs.map((j) => j.id));
   const lines = ['# ateam 状态', ''];
   if (root) lines.push(`项目目录：${root}`, '');
@@ -235,7 +237,8 @@ export function formatStatus(state, pending, jobId, root, repos) {
   }
 
   lines.push('', '## 需求', '');
-  if (!jobs.length) lines.push(jobId ? `（找不到需求 ${jobId}）` : '（还没有需求）');
+  if (accepted.length) lines.push(`已验收 ${accepted.length} 个，不再列出：${accepted.map((j) => j.id).join('、')}（需要时 ateam status --job J1 或 --all）`, '');
+  if (!jobs.length) lines.push(jobId ? `（找不到需求 ${jobId}）` : (accepted.length ? '（没有未验收的需求）' : '（还没有需求）'));
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id);
     const live = tasks.filter((t) => t.status !== 'cancelled');

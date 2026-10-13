@@ -42,7 +42,7 @@ leader
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
   ateam answer T3 "<答复>"
-  ateam status [--job J1]
+  ateam status [--job J1 | --all]
   ateam show T3
   ateam report --job J1 --file report.md
 
@@ -346,7 +346,7 @@ const commands = {
 
   async status({ flags }) {
     const { state, pending, root, repos } = await request('GET', '/api/state');
-    return formatStatus(state, pending, flags.job, root, repos);
+    return formatStatus(state, pending, flags.job, root, repos, !!flags.all);
   },
 
   async show({ positional }) {

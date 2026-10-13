@@ -13,13 +13,13 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
 
 服务
-  ateam serve [--port 7700] [--lease 15]
+  ateam serve [--port 7700] [--lease 15] [--idle 3]
 
 worker
   ateam join --role <角色> [--name <名字>]
@@ -36,7 +36,7 @@ leader
   ateam release T3
   ateam cancel T3 ["<原因>"]
   ateam reclaim T3 ["<原因>"]
-  ateam dismiss <编号>... | --role <角色> | --all
+  ateam dismiss <编号>... | --role <角色> | --all [--user-approved]
   ateam watch [--timeout 90] [--follow]
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
@@ -157,10 +157,12 @@ const commands = {
     const port = Number(flags.port ?? 7700);
     const leaseMin = Number(flags.lease ?? process.env.ATEAM_LEASE_MIN ?? 15);
     if (!Number.isInteger(port) || port <= 0 || port > 65535) fail('--port 必须是 1-65535 的整数。');
+    const idleMin = Number(flags.idle ?? process.env.ATEAM_IDLE_MIN ?? 3);
     if (!Number.isFinite(leaseMin) || leaseMin <= 0) fail('--lease 必须是正数（分钟）。');
+    if (!Number.isFinite(idleMin) || idleMin <= 0) fail('--idle 必须是正数（分钟）。');
     let server;
     try {
-      server = await startServer({ root: process.cwd(), port, leaseMin });
+      server = await startServer({ root: process.cwd(), port, leaseMin, idleMin });
     } catch (err) {
       fail(err.message);
     }
@@ -258,7 +260,7 @@ const commands = {
   },
 
   async dismiss({ flags, positional }) {
-    const body = { ids: positional, role: flags.role ?? '', all: !!flags.all };
+    const body = { ids: positional, role: flags.role ?? '', all: !!flags.all, userApproved: !!flags['user-approved'] };
     if (!body.all && !body.role && body.ids.length === 0) {
       fail('请指定要下线的 worker。示例：ateam dismiss frontend-2 ／ ateam dismiss --role frontend ／ ateam dismiss --all');
     }

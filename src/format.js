@@ -102,6 +102,9 @@ function waitingLines(waiting) {
     const lines = [`你手上的任务 ${waiting.holding.id} ${why}。`];
     return lines;
   }
+  if (waiting.leaveAsked) {
+    return ['你已经空闲了一段时间，系统已替你向 leader 申请下线。leader 同意的话你会收到「# 已下线」；在那之前照常等待，也可能会派新任务过来。'];
+  }
   if (!waiting.blocked?.length) return ['你这个角色目前没有待领取的任务，等 leader 派新任务。'];
   return [
     '你这个角色的任务都在等依赖完成：',
@@ -167,6 +170,9 @@ const EVENT_HINT = {
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,
+  leave_request: (e) => (e.last
+    ? `它是 ${e.role} 角色最后一个 worker，下线需要你和用户都同意：近期不会再有 ${e.role} 任务的话，先问用户，用户同意后 ateam dismiss ${e.agentId} --user-approved；要留着就不用管，它会继续等待`
+    : `近期不会再有 ${e.role} 任务的话：ateam dismiss ${e.agentId}；要留着就不用管，它会继续等待`),
   worker_offline: (e) => (e.taskId ? `任务 ${e.taskId} 已退回待领取；用 ateam status 确认，需要时提醒用户开新的 worker 窗口` : ''),
 };
 

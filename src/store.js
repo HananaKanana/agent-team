@@ -7,7 +7,7 @@ export function emptyState() {
   return { seq: { job: 0, task: 0, event: 0 }, jobs: [], tasks: [], agents: [], events: [] };
 }
 
-export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, onChange = () => {} } = {}) {
+export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, idleMs = 3 * 60 * 1000, onChange = () => {} } = {}) {
   state = state ?? emptyState();
   const changed = () => onChange();
 
@@ -258,10 +258,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     changed();
   }
 
+  function onlineOfRole(role) {
+    return state.agents.filter((a) => a.status === 'online' && sameRole(a.role, role));
+  }
+
   // 让 worker 立即下线：ids 指定编号，或 role 指定整个角色，或 all 表示全部在线 worker。
   // 手上进行中（或等答复）的任务退回待领取、标记接手，已有改动保留；已提交待 review 的任务原样留着，
   // 之后被打回就按「原 worker 已离开」交给别人接手。正挂在 wait 上的 worker 由 server 立即通知。
-  function dismiss({ ids = [], role = '', all = false } = {}) {
+  // 每个角色至少留一个在线 worker：会让某个角色一个不剩时，必须带 userApproved（用户同意）。
+  function dismiss({ ids = [], role = '', all = false, userApproved = false } = {}) {
     const wantIds = new Set(Array.isArray(ids) ? ids : []);
     role = String(role ?? '').trim();
     if (!all && !role && wantIds.size === 0) {
@@ -273,6 +278,17 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     }
     const picked = state.agents.filter((a) => a.status === 'online'
       && (all || wantIds.has(a.id) || (role && sameRole(a.role, role))));
+    if (!userApproved) {
+      const emptied = [];
+      for (const a of picked) {
+        if (emptied.some((r) => sameRole(r, a.role))) continue;
+        if (onlineOfRole(a.role).every((x) => picked.includes(x))) emptied.push(a.role);
+      }
+      if (emptied.length > 0) {
+        const detail = emptied.map((r) => `${r}（${onlineOfRole(r).map((a) => a.id).join('、')}）`).join('、');
+        throw new AteamError('NEEDS_USER', `这样会让角色 ${detail}一个在线 worker 都不剩。每个角色至少要留一个 worker，最后一个下线必须先征得用户同意：请先问用户，用户同意后加 --user-approved 重新运行；只是想减少人数的话，改成只下线其中几个、留下一个。`);
+      }
+    }
     const result = [];
     for (const agent of picked) {
       let returned = null;
@@ -292,6 +308,40 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     return result;
   }
 
+  // 空闲：在线、手上没有任务、本角色也没有待领取的任务（包括还在等依赖的）。
+  // 空闲超过 idleMs 的 worker 向 leader 申请下线，省得空等浪费 token；每段空闲只申请一次。
+  // last：它是本角色最后一个在线 worker，下线需要 leader 和用户都同意。
+  function checkIdle() {
+    let dirty = false;
+    for (const agent of state.agents) {
+      if (agent.status !== 'online') continue;
+      const busy = agent.currentTask
+        || state.tasks.some((t) => t.status === 'pending' && sameRole(t.role, agent.role));
+      if (busy) {
+        if (agent.idleSince || agent.leaveAsked) {
+          delete agent.idleSince;
+          delete agent.leaveAsked;
+          dirty = true;
+        }
+        continue;
+      }
+      if (!agent.idleSince) {
+        agent.idleSince = now();
+        dirty = true;
+      } else if (!agent.leaveAsked && now() - agent.idleSince >= idleMs) {
+        agent.leaveAsked = true;
+        const last = onlineOfRole(agent.role).length === 1;
+        const who = agent.name ? `${agent.name}（${agent.id}）` : agent.id;
+        const min = Math.round((now() - agent.idleSince) / 60000);
+        emit('leave_request', {
+          agentId: agent.id, role: agent.role, last,
+          text: `${who} 已空闲 ${min} 分钟，${agent.role} 角色没有待领取的任务，申请下线${last ? `（它是 ${agent.role} 角色最后一个在线 worker）` : ''}`,
+        });
+        dirty = true;
+      }
+    }
+    if (dirty) changed();
+  }
 
   // 「暂无任务」时告诉 worker 在等什么：本角色还有哪些任务在等依赖、等的是谁
   function waitingInfo(agentId) {
@@ -310,7 +360,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
           .filter((d) => d && d.status !== 'approved')
           .map((d) => ({ id: d.id, status: d.status })),
       }));
-    return { blocked };
+    return { blocked, leaveAsked: !!agent.leaveAsked };
   }
 
   // worker 当前持有的任务，且必须处于 working
@@ -596,7 +646,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, o
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, report, sweep, noteActivity,
+    approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

@@ -498,7 +498,7 @@ function renderWorkers() {
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
     a.name ? el('span', { class: 'task' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-    el('span', { class: 'task' }, a.currentTask || '空闲'),
+    el('span', { class: 'task' }, a.currentTask || (a.leaveAsked ? '空闲，申请下线' : '空闲')),
   );
   })];
   if (offline.length) {
@@ -520,7 +520,13 @@ function isStale(a) {
 
 let helper = { open: false, focus: null };
 let dismissAllArm = false; // 「全部下线」两步确认
-let dismissArm = null; // 单个 worker 下线的两步确认（手上有进行中的任务时）
+let dismissArm = null; // 单个 worker 下线的两步确认（手上有进行中的任务，或是本角色最后一个时）
+
+// 本角色唯一在线的 worker：每个角色至少留一个，下线前要用户确认
+function isLastOfRole(a) {
+  const role = a.role.trim().toLowerCase();
+  return data.state.agents.filter((x) => x.status === 'online' && x.role.trim().toLowerCase() === role).length === 1;
+}
 
 function wakePrompt(a) {
   const doing = a.currentTask ? `继续做 ${a.currentTask}，做完提交后` : '';
@@ -602,7 +608,7 @@ function renderHelper() {
         e.stopPropagation();
         if (!dismissAllArm) { dismissAllArm = true; renderHelper(); return; }
         dismissAllArm = false;
-        dismissAgents({ all: true });
+        dismissAgents({ all: true, userApproved: true });
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
@@ -632,19 +638,24 @@ function renderHelper() {
           el('b', null, agentLabel(a.id)),
           el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
           el('span', { class: 'hint' }, `${a.currentTask || '空闲'}，心跳 ${ago(a.lastSeenAt)}`),
-          isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null),
+          isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null,
+          a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null),
         dismissArm === a.id
           ? [
             el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissArm = null; renderHelper(); } }, '取消'),
-            el('button', { class: 'btn warn sm', onclick: (e) => { e.stopPropagation(); dismissArm = null; dismissAgents({ ids: [a.id] }); } }, '确认下线'),
+            el('button', {
+              class: 'btn warn sm',
+              title: isLastOfRole(a) ? `${a.role} 角色只剩它一个，下线后这个角色的新任务没人领` : '',
+              onclick: (e) => { e.stopPropagation(); dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); },
+            }, isLastOfRole(a) ? `确认下线（${a.role} 最后一个）` : '确认下线'),
           ]
           : el('button', {
             class: 'btn ghost sm',
             onclick: (e) => {
               e.stopPropagation();
-              // 手上有进行中的任务：先确认，因为任务会退回待领取
+              // 手上有进行中的任务（会退回待领取），或是本角色最后一个 worker：先确认
               const t = a.currentTask && data.state.tasks.find((x) => x.id === a.currentTask);
-              if (t && (t.status === 'working' || t.status === 'asking')) { dismissArm = a.id; renderHelper(); return; }
+              if ((t && (t.status === 'working' || t.status === 'asking')) || isLastOfRole(a)) { dismissArm = a.id; renderHelper(); return; }
               dismissAgents({ ids: [a.id] });
             },
           }, '下线')),

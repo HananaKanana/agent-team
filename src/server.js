@@ -62,7 +62,7 @@ function readBody(req) {
   });
 }
 
-export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
+export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
   const layout = await detectRepos(root);
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
   if (layout.mode === 'single') ensureGitignore(root);
@@ -75,7 +75,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
   let waking = false;
   let wakeScheduled = false;
 
-  const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, onChange });
+  const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
 
   // 每次状态变化：落盘，并在下一轮事件循环唤醒挂起的请求。
   // 唤醒过程本身（nextFor 的 touch、takeEvents）也会触发 onChange，用 waking 标记避免循环。
@@ -177,7 +177,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
     'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),
     'POST /api/agents/hide': (b) => ({ hidden: store.hideAgents(b.ids) }),
     'POST /api/dismiss': (b) => {
-      const dismissed = store.dismiss({ ids: b.ids, role: b.role, all: !!b.all });
+      const dismissed = store.dismiss({ ids: b.ids, role: b.role, all: !!b.all, userApproved: !!b.userApproved });
       // 正挂在 wait 上的 worker 立即收到「已下线」
       for (const { id } of dismissed) {
         const waiter = waiters.get(id);
@@ -298,6 +298,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15 } = {}) {
         if (ts) store.noteActivity(agent.id, ts);
       }
       store.sweep((id) => waiters.has(id));
+      store.checkIdle();
     } finally {
       sweeping = false;
     }

@@ -65,6 +65,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `submitted` | review（第 4 节） |
 | `question` | `ateam answer T3 "<答复>"`。答不了就问用户 |
 | （用户说某个 worker 窗口没了） | `ateam reclaim T3`：立即收回任务交给同角色的其他 worker 接手，不必等租约过期；原 worker 会被标记掉线 |
+| `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `worker_joined` `claimed` | 了解即可 |
@@ -138,6 +139,8 @@ ateam dismiss --all              # 全部在线 worker
 ateam dismiss --role frontend    # 某个角色
 ateam dismiss frontend-2 backend-1    # 指定编号
 ```
+
+**每个角色至少留一个在线 worker。** 会让某个角色一个不剩的下线（包括 `--all`、`--role`）会被拒绝，必须先问用户，用户同意后加 `--user-approved` 重新运行。用户说「让大家收工」就是同意，直接 `ateam dismiss --all --user-approved`。
 
 下线立即生效：正在等任务的 worker 马上收到「已下线」并停止，正在写代码的在下一次调用 ateam 命令时收到。它手上进行中的任务退回待领取（已有改动保留，同角色的 worker 会接手）；已提交待 review 的任务照常 review。所以手上有进行中任务的 worker，最好等它提交后再让它下线。用户说「让大家收工」时也这样做。之后要再开工，请用户重新打开 worker 窗口。
 

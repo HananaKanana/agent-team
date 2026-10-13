@@ -265,7 +265,9 @@ rm -r ~/code/agent-team/.ateam
 
 ### 活都干完了，让 worker 收工
 
-worker 没活时会一直挂着等任务。所有需求做完后：点看板右上角「使用说明」→「worker」页里的「全部下线」，或者对 leader 说「让大家收工」。worker 立即停下；进行中的任务退回待领取。之后要再开工，重新开 worker 窗口即可。
+worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没有待领取的任务）时，它会自动向 leader 申请下线，看板上它的卡片标着「申请下线」，leader 决定要不要让它走。**每个角色至少留一个 worker**：最后一个要下线，需要 leader 和你都同意（leader 会先问你；你在看板上点它的「下线」也要再点一次「确认下线」）。空闲多久算久可以用 `ateam serve --idle <分钟>` 调。
+
+所有需求做完后：点看板右上角「使用说明」→「worker」页里的「全部下线」，或者对 leader 说「让大家收工」。worker 立即停下；进行中的任务退回待领取。之后要再开工，重新开 worker 窗口即可。
 
 ### leader 会话重开了（上下文满了）
 
@@ -289,6 +291,7 @@ worker 没活时会一直挂着等任务。所有需求做完后：点看板右�
 | `ateam serve --port 7701` | 换端口（7700 被占用时） | `7700` |
 | `ATEAM_URL` | 换了端口后，leader 和 worker 都要设置，例如 `http://127.0.0.1:7701` | `http://127.0.0.1:7700` |
 | `ateam serve --lease 5` 或 `ATEAM_LEASE_MIN` | 租约时长（分钟）：多久没动静判为掉线。测试掉线接手时可以设短一点，正常干活用默认值 | `15` |
+| `ateam serve --idle 5` 或 `ATEAM_IDLE_MIN` | 空闲多久（分钟）后 worker 自动向 leader 申请下线 | `3` |
 
 ## 六、命令速查
 
@@ -301,7 +304,7 @@ ateam cancel T3 "原因"   # 作废任务：不再派发，看板上置灰放到
 ateam reclaim T3         # 原窗口没了：立即收回任务，交给同角色的 worker 接手
 ateam job edit J1 --desc-file job.md   # 改需求的说明（或 --title 改标题）
 ateam task edit T3 --role backend      # 改任务的角色（待领取或已挂起的任务）
-ateam dismiss --all      # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号）
+ateam dismiss --all --user-approved   # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号；让某个角色一个不剩时要加 --user-approved，表示用户同意）
 ateam help          # 全部命令
 ```
 

@@ -68,7 +68,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
-| `worker_joined` `claimed` | 了解即可 |
+| `worker_joined` `claimed` `job_accepted` | 了解即可 |
 
 ## 作废任务
 
@@ -131,6 +131,10 @@ ateam report --job J1 --file report.md
 ```
 
 然后在对话里把汇报内容告诉用户，请用户测试验收。
+
+**用户验收**：用户可以在看板上点「验收通过」（你会收到 `job_accepted` 事件），也可能直接在对话里说。
+- 用户说通过（比如「J3 验收通过」「这几个都通过了」）：`ateam job accept J3 [J4 ...]`。
+- 用户说有问题：在**同一个需求**下 `ateam task add --job J3 ...` 加修复任务，需求自动回到进行中；修完再 `ateam report` 一次。
 
 **让 worker 下线**：所有需求都做完、近期也没有新任务时，让 worker 收工，免得它们一直空转等待：
 

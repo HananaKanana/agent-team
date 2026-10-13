@@ -146,6 +146,8 @@ nav.jobs h2, main h2 { font-size: 13px; font-weight: 600; color: var(--muted); m
 .job:hover { background: var(--surface); }
 .job[aria-current="true"] { background: var(--surface); border-color: var(--line); }
 .job .title { font-weight: 600; }
+.job.done { opacity: .55; }
+.report-bar .hint { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
 .job .sub { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; margin-top: 4px; }
 
 /* 需求进度：每个任务一格，按状态着色 */
@@ -186,7 +188,7 @@ main { padding: 20px 24px 40px; min-width: 0; }
   position: sticky; top: 0; display: flex; align-items: center; gap: 14px;
   padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line);
 }
-.report-top .crumb { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-top .crumb { color: var(--muted); font-size: 13px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .report-sheet {
   max-width: 760px; margin: 32px auto 80px; padding: 36px 48px 44px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
@@ -325,7 +327,29 @@ const LANES = [
   { key: 'held', label: '已挂起' },
 ];
 const LANE_LABEL = { ...Object.fromEntries(LANES.map((l) => [l.key, l.label])), cancelled: '已作废' };
-const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收' };
+const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收', accepted: '已验收' };
+let acceptArm = null; // 「验收通过」两步确认：记需求编号
+
+async function acceptJob(id) {
+  try {
+    await fetch('/api/jobs/accept', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
+  } catch {}
+  acceptArm = null;
+  await poll();
+}
+
+// 待验收需求的「验收通过」按钮，点两次生效
+function acceptButtons(job) {
+  if (job.status !== 'awaiting_acceptance') return null;
+  if (acceptArm !== job.id) {
+    return el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); acceptArm = job.id; render(); } }, '验收通过');
+  }
+  return [
+    el('button', { class: 'btn ghost', onclick: (e) => { e.stopPropagation(); acceptArm = null; render(); } }, '取消'),
+    el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); acceptJob(job.id); } }, `确认 ${job.id} 验收通过`),
+  ];
+}
+const ACCEPT_HINT = '测过没问题就点「验收通过」；有问题就在对话里告诉 leader 哪里不对，它会在这个需求下加修复任务。';
 const HISTORY = {
   created: ['创建', 'pending'], claimed: ['领取', 'working'], progress: ['进度', 'working'],
   asked: ['提问', 'asking'], answered: ['答复', 'asking'], submitted: ['交付', 'submitted'],
@@ -725,7 +749,7 @@ function renderJobs() {
     const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const done = jt.filter((t) => t.status === 'approved').length;
     return el('button', {
-      class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
+      class: j.status === 'accepted' ? 'job done' : 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
     },
     el('div', { class: 'title' }, `${j.id} ${j.title}`),
@@ -766,7 +790,14 @@ function renderMain() {
     report = el('div', { class: 'report-bar' },
       el('span', { class: 'what' }, 'leader 已提交汇报，等你验收'),
       el('span', { class: 'when' }, `${fmtTime(job.updatedAt)} 提交`),
-      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'));
+      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'),
+      acceptButtons(job),
+      el('span', { class: 'hint' }, ACCEPT_HINT));
+  } else if (job.status === 'accepted' && job.report) {
+    report = el('div', { class: 'report-bar' },
+      el('span', { class: 'what' }, '已验收通过'),
+      el('span', { class: 'when' }, job.acceptedAt ? `${fmtTime(job.acceptedAt)} 验收` : ''),
+      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'));
   }
 
   const board = el('div', { class: 'board' }, LANES.map((lane) => {
@@ -1059,7 +1090,8 @@ function renderReport() {
   fill(page,
     el('div', { class: 'report-top' },
       el('button', { class: 'btn', onclick: closeReport }, '返回看板'),
-      el('span', { class: 'crumb' }, `${job.id} ${job.title}`)),
+      el('span', { class: 'crumb' }, `${job.id} ${job.title}`),
+      acceptButtons(job)),
     el('article', { class: 'report-sheet' },
       el('div', { class: 'report-meta' },
         el('span', null, '状态 ', el('b', null, JOB_STATUS[job.status] || job.status)),
@@ -1067,7 +1099,8 @@ function renderReport() {
         el('span', null, '任务 ', el('b', null, `${st.approved}/${tasks.length}`), ' 已通过'),
         el('span', null, 'review ', el('b', null, st.reviews), ' 次'),
         el('span', null, '一次通过率 ', el('b', null, st.rate))),
-      body));
+      body,
+      job.status === 'awaiting_acceptance' ? el('p', { class: 'hint' }, ACCEPT_HINT) : null));
   page.hidden = false;
   page.scrollTop = scroll;
   document.body.style.overflow = 'hidden';

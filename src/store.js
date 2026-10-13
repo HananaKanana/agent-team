@@ -565,6 +565,26 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return job;
   }
 
+  // 用户验收通过：只有「待用户验收」的需求可以。之后还要改，就在这个需求下加任务，它会回到进行中。
+  function acceptJobs(ids) {
+    const list = Array.isArray(ids) ? ids : [];
+    if (list.length === 0) throw new AteamError('INVALID', '请指定要验收通过的需求编号，例如 J1。');
+    const jobs = list.map((id) => getJob(id));
+    for (const job of jobs) {
+      if (job.status !== 'awaiting_acceptance') {
+        throw new AteamError('BAD_STATE', `需求 ${job.id} 当前状态是 ${job.status}，只有待用户验收的需求可以验收通过。`);
+      }
+    }
+    for (const job of jobs) {
+      job.status = 'accepted';
+      job.acceptedAt = now();
+      job.updatedAt = job.acceptedAt;
+      emit('job_accepted', { jobId: job.id, text: `用户已验收通过 ${job.id} ${job.title}` });
+    }
+    changed();
+    return jobs;
+  }
+
   // ---------- 租约 ----------
 
   // leader（或用户在看板上）确认原窗口没了，立即收回任务交给别人接手，不必等租约过期。
@@ -670,7 +690,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
+    acceptJobs, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

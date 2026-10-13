@@ -15,6 +15,7 @@ const JOB_STATUS = {
   planning: '规划中',
   active: '进行中',
   awaiting_acceptance: '待用户验收',
+  accepted: '已验收',
 };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -178,7 +179,7 @@ const EVENT_HINT = {
 };
 
 export function formatEventLine(e) {
-  const subject = [e.taskId, e.agentId].filter(Boolean).join(' ');
+  const subject = [e.jobId, e.taskId, e.agentId].filter(Boolean).join(' ');
   return `${formatTime(e.ts)} [${e.type}]${subject ? ` ${subject}` : ''}：${oneLine(e.text)}`;
 }
 

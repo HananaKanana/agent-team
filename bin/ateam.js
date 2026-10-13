@@ -31,6 +31,7 @@ worker
 leader
   ateam job new "<标题>" [--desc-file f.md]
   ateam job edit J1 [--title "..."] [--desc-file f.md]
+  ateam job accept J1 [J2...]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]...
   ateam task edit T3 [--title "..."] [--role <角色>] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
@@ -218,6 +219,13 @@ const commands = {
     const description = flags['desc-file'] ? readTextFile(flags['desc-file'], '--desc-file') : '';
     const { job } = await request('POST', '/api/jobs', { title, description });
     return `已创建需求 ${job.id}：${job.title}\n\n下一步：ateam task add --job ${job.id} --role <角色> --paths <路径> --title "..." --desc-file <文件> --accept "..."`;
+  },
+
+  // 用户在对话里说「J1 验收通过」时由 leader 运行；用户也可以在看板上直接点「验收通过」
+  async 'job accept'({ positional }) {
+    if (positional.length === 0) fail('请指定需求编号。示例：ateam job accept J1 J2');
+    const { jobs } = await request('POST', '/api/jobs/accept', { ids: positional });
+    return `已验收通过：${jobs.map((j) => `${j.id} ${j.title}`).join('、')}。`;
   },
 
   async 'job edit'({ flags, positional }) {

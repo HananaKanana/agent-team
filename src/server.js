@@ -160,6 +160,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const { jobId, ...patch } = b;
       return { job: store.editJob(jobId, patch) };
     },
+    'POST /api/jobs/accept': (b) => ({ jobs: store.acceptJobs(b.ids) }),
     'POST /api/tasks': (b) => ({
       task: store.addTask({
         jobId: b.jobId, title: b.title, role: b.role, paths: b.paths,

@@ -113,6 +113,7 @@ button.worker:hover { border-color: var(--muted); }
 .worker .meta { color: var(--muted); }
 .banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
 .banner[hidden] { display: none; }
+.banner.stale { background: var(--asking); }
 .needs { padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--line); border-left: 4px solid var(--asking); }
 .needs[hidden] { display: none; }
 .needs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
@@ -328,6 +329,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 </header>
 <section class="needs" id="needs" hidden aria-label="需要 worker"></section>
 <div class="banner" id="banner" hidden>连不上 ateam 服务，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
+<div class="banner stale" id="stale" hidden>ateam 的代码已经更新，但服务还在跑旧代码：在运行 ateam serve 的终端里按 Ctrl+C，再重新运行 ateam serve，然后刷新本页。状态不会丢，worker 和 leader 会自动重连。</div>
 <div class="layout">
   <nav class="jobs" id="jobs" aria-label="需求列表"></nav>
   <main id="main"></main>
@@ -381,6 +383,7 @@ const HISTORY = {
 
 let data = null;
 let lastJson = '';
+let lastEtag = '';
 let view = { job: null, task: null, report: false };
 let showPrompts = false;
 let copied = null; // 刚复制的提示词，用来显示「已复制」
@@ -1012,8 +1015,8 @@ function installGuide() {
       'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
     step('② 安装两份 skill（软链，推荐）', 'leader skill 给 Claude Code，worker skill 给 WorkBuddy。软链之后，skill 更新了自动生效。',
       `mkdir -p ~/.claude/skills ~/.workbuddy/skills\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ~/.workbuddy/skills/ateam-worker`),
-    step('或者：复制安装', '以后 skill 更新了，要再运行一次。',
-      `mkdir -p ~/.claude/skills ~/.workbuddy/skills\ncp -R ${tool}/skills/ateam-lead   ~/.claude/skills/\ncp -R ${tool}/skills/ateam-worker ~/.workbuddy/skills/`),
+    step('以前是复制安装的？', '先删掉复制的那份，再换成软链。',
+      `rm -r ~/.claude/skills/ateam-lead ~/.workbuddy/skills/ateam-worker\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ~/.workbuddy/skills/ateam-worker`),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
     step('③ 在项目根目录启动服务', '项目必须是 git 仓库。这个终端窗口一直开着；看到「项目目录」那一行是你要开发的项目就对了。',
       `cd ${project}\nateam serve`),
@@ -1168,6 +1171,7 @@ function attentionItems() {
   const items = [];
   for (const j of data.state.jobs) if (j.status === 'awaiting_acceptance') items.push(`${j.id} 待你验收`);
   for (const role of rolesNeedingWorkers().keys()) items.push(`${role} 缺 worker`);
+  if (data.stale) items.push('服务需要重启');
   const busy = data.state.jobs.some((j) => j.status === 'planning' || j.status === 'active');
   if (busy && data.leader && !data.leader.online) items.push('leader 未连接');
   return items;
@@ -1189,6 +1193,7 @@ function setBadge(text, color) {
 }
 
 function renderAttention() {
+  document.getElementById('stale').hidden = !data?.stale;
   const items = attentionItems();
   setBadge(items.length ? String(items.length) : '', '#d9534f');
   const btn = document.getElementById('attention');
@@ -1200,9 +1205,12 @@ function renderAttention() {
 
 async function poll() {
   try {
-    const res = await fetch('/api/state', { cache: 'no-store' });
-    const json = await res.text();
+    // 带上次的 ETag：状态没变时服务只回 304，不用重新下载和解析整份状态
+    const res = await fetch('/api/state?view=dashboard', { cache: 'no-store', headers: lastEtag ? { 'if-none-match': lastEtag } : {} });
+    if (res.status !== 200 && res.status !== 304) throw new Error(`HTTP ${res.status}`);
     document.getElementById('banner').hidden = true;
+    const json = res.status === 304 ? lastJson : await res.text();
+    lastEtag = res.headers.get('etag') || '';
     if (json !== lastJson) {
       lastJson = json;
       data = JSON.parse(json);
@@ -1214,6 +1222,7 @@ async function poll() {
   } catch {
     document.getElementById('banner').hidden = false;
     lastJson = null; // 恢复连接后重新渲染，刷新提醒
+    lastEtag = '';
     setBadge('!', '#d9534f');
   }
 }
@@ -1243,6 +1252,7 @@ document.getElementById('attention').addEventListener('click', (e) => {
     return;
   }
   if (rolesNeedingWorkers().size) { document.getElementById('needs').scrollIntoView({ block: 'nearest' }); return; }
+  if (data.stale) return; // 顶部的黄色提示条已经说明了怎么做
   helper = { open: true, focus: null, tab: 'lead' };
   renderHelper();
 });

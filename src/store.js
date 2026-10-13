@@ -79,6 +79,48 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return `${slug}-${n}`;
   }
 
+  // ---------- 路径重叠 ----------
+
+  function normPath(p) {
+    const s = String(p).trim().replace(/^\.\//, '').replace(/\/+$/, '');
+    return s === '.' ? '' : s;
+  }
+
+  // 两组路径有没有交集：相同，或一个是另一个的上级目录（空串 = 整个项目）
+  function pathsOverlap(a, b) {
+    for (const x of a.map(normPath)) {
+      for (const y of b.map(normPath)) {
+        if (x === '' || y === '' || x === y || y.startsWith(`${x}/`) || x.startsWith(`${y}/`)) return true;
+      }
+    }
+    return false;
+  }
+
+  // 沿依赖链往上找：ids 依赖的所有任务（含间接依赖）
+  function ancestors(ids) {
+    const seen = new Set();
+    const stack = [...ids];
+    while (stack.length) {
+      const id = stack.pop();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const t = state.tasks.find((x) => x.id === id);
+      if (t) stack.push(...t.dependsOn);
+    }
+    return seen;
+  }
+
+  // 和 task 改同一批文件、又可能同时进行的任务：还没通过/作废，且两者之间没有依赖先后（直接或间接）。
+  // 只用来提醒 leader，不拦着。
+  function overlapsFor(task) {
+    const before = ancestors(task.dependsOn);
+    return state.tasks
+      .filter((t) => t.id !== task.id && !['approved', 'cancelled'].includes(t.status)
+        && !before.has(t.id) && !ancestors(t.dependsOn).has(task.id)
+        && pathsOverlap(task.paths, t.paths))
+      .map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee, paths: t.paths }));
+  }
+
   // ---------- 需求与任务 ----------
 
   function createJob({ title, description = '' } = {}) {
@@ -691,6 +733,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     acceptJobs, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
-    getJob, getTask, pendingActions, takeEvents,
+    getJob, getTask, pendingActions, takeEvents, overlapsFor,
   };
 }

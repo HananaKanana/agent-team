@@ -1,5 +1,7 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
 import http from 'node:http';
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +18,29 @@ const DEFAULT_HOLD_SEC = 90;
 const MAX_HOLD_SEC = 110;
 const LEADER_FRESH_MS = 3 * 60 * 1000;
 
+// 服务端代码指纹：src/*.js 和 bin/ateam.js 的内容哈希。启动时记一份，之后比对，
+// 代码被更新（git pull、改了代码）而服务没重启时，看板和 status 提示重启。
+// 只在文件修改时间变了时才重新读内容，看板每 3 秒查一次也不费事。
+const CODE_FILES = () => [
+  ...readdirSync(join(TOOL_DIR, 'src')).filter((f) => f.endsWith('.js')).map((f) => join(TOOL_DIR, 'src', f)),
+  join(TOOL_DIR, 'bin', 'ateam.js'),
+];
+let codeCache = { key: '', hash: '' };
+function codeHash() {
+  try {
+    const files = CODE_FILES().sort();
+    const key = files.map((f) => `${f}:${statSync(f).mtimeMs}`).join('|');
+    if (key !== codeCache.key) {
+      const h = createHash('sha1');
+      for (const f of files) h.update(f).update(readFileSync(f));
+      codeCache = { key, hash: h.digest('hex') };
+    }
+    return codeCache.hash;
+  } catch {
+    return codeCache.hash;
+  }
+}
+
 function holdMs(timeout) {
   const sec = Number(timeout);
   if (!Number.isFinite(sec) || sec <= 0) return DEFAULT_HOLD_SEC * 1000;
@@ -26,6 +51,19 @@ function send(res, status, body) {
   if (res.writableEnded || res.destroyed) return;
   const data = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(data) });
+  res.end(data);
+}
+
+// 带 ETag 返回：内容没变时只回 304，看板每 3 秒轮询不用每次传整份状态
+function sendCached(req, res, body) {
+  const data = JSON.stringify(body);
+  const etag = `"${createHash('sha1').update(data).digest('base64url')}"`;
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { etag });
+    res.end();
+    return;
+  }
+  res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(data), etag });
   res.end(data);
 }
 
@@ -64,6 +102,7 @@ function readBody(req) {
 
 export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
   const layout = await detectRepos(root);
+  const startHash = codeHash();
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
   if (layout.mode === 'single') ensureGitignore(root);
 
@@ -161,15 +200,18 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return { job: store.editJob(jobId, patch) };
     },
     'POST /api/jobs/accept': (b) => ({ jobs: store.acceptJobs(b.ids) }),
-    'POST /api/tasks': (b) => ({
-      task: store.addTask({
+    'POST /api/tasks': (b) => {
+      const task = store.addTask({
         jobId: b.jobId, title: b.title, role: b.role, paths: b.paths,
         description: b.description, acceptance: b.acceptance, dependsOn: b.dependsOn,
-      }),
-    }),
+      });
+      return { task, overlaps: store.overlapsFor(task) };
+    },
     'POST /api/tasks/edit': (b) => {
       const { id, ...patch } = b;
-      return { task: store.editTask(requireId({ id }), patch) };
+      const task = store.editTask(requireId({ id }), patch);
+      // 只在改了路径或依赖时提醒
+      return { task, overlaps: patch.paths !== undefined || patch.dependsOn !== undefined ? store.overlapsFor(task) : [] };
     },
     'POST /api/approve': (b) => ({ task: store.approve(requireId(b), b.text ?? '') }),
     'POST /api/reject': (b) => ({ task: store.reject(requireId(b), b.text) }),
@@ -198,8 +240,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return { task, agentId };
     },
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
-    'GET /api/state': () => ({
-      state: store.state, pending: store.pendingActions(), root, toolDir: TOOL_DIR, port, repos: layout.mode === 'multi' ? layout.repos : null,
+    'GET /api/state': (_b, url) => ({
+      // 看板不用事件列表（命令行 status 要用它数未读事件），?view=dashboard 时去掉，减小数据量
+      state: url.searchParams.get('view') === 'dashboard' ? { ...store.state, events: [] } : store.state,
+      pending: store.pendingActions(), root, toolDir: TOOL_DIR, port, repos: layout.mode === 'multi' ? layout.repos : null,
+      // 代码已更新但服务还没重启
+      stale: codeHash() !== startHash,
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
       leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: watchers.size > 0 || (leaderSeenAt !== null && Date.now() - leaderSeenAt < LEADER_FRESH_MS) },
     }),
@@ -277,6 +323,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const route = routes[key];
       if (!route) throw new AteamError('NOT_FOUND', `未知接口：${key}`);
       const out = await route(body, url);
+      if (key === 'GET /api/state') return sendCached(req, res, { ok: true, ...out });
       send(res, 200, { ok: true, ...out });
     } catch (err) {
       sendError(res, err);

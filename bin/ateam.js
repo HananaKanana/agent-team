@@ -154,6 +154,18 @@ function holdSeconds(flags) {
   return sec;
 }
 
+// 新任务和别的任务改同一批文件、又没有先后依赖：两个 worker 可能同时改同一个文件
+function overlapWarning(task, overlaps) {
+  if (!overlaps?.length) return '';
+  const lines = ['', '', `⚠ 路径重叠：${task.id} 和下面的任务会改同一批文件，又没有先后依赖，可能被两个 worker 同时改：`];
+  for (const t of overlaps) {
+    const who = t.assignee ? `，${t.assignee} 在做` : '';
+    lines.push(`- ${t.id} ${t.title}（${t.status}${who}，路径 ${t.paths.join('、')}）`);
+  }
+  lines.push(`同时改同一个文件，提交时会把对方改到一半的内容一起带进去，或者互相冲突。建议：用 ateam task edit ${task.id} --after ${[...new Set([...task.dependsOn, ...overlaps.map((t) => t.id)])].join(',')} 让它排在后面；或者把它们合成一个任务；确定改的是文件里互不相干的部分，也可以不管。`);
+  return lines.join('\n');
+}
+
 const commands = {
   async serve({ flags }) {
     const { startServer } = await import('../src/server.js');
@@ -250,9 +262,9 @@ const commands = {
       acceptance: flags.accept ?? [],
       dependsOn: flags.after ? splitList(flags.after) : [],
     };
-    const { task } = await request('POST', '/api/tasks', body);
+    const { task, overlaps } = await request('POST', '/api/tasks', body);
     const deps = task.dependsOn.length ? `，依赖 ${task.dependsOn.join('、')}` : '';
-    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}，验收标准 ${task.acceptance.length} 条）`;
+    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}`;
   },
 
   async 'task edit'({ flags, positional }) {
@@ -264,9 +276,9 @@ const commands = {
     if (flags.accept !== undefined) body.acceptance = flags.accept;
     if (flags.paths !== undefined) body.paths = splitList(flags.paths);
     if (flags.after !== undefined) body.dependsOn = splitList(flags.after);
-    const { task } = await request('POST', '/api/tasks/edit', body);
+    const { task, overlaps } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
-    return `已修改任务 ${task.id}。${next}`;
+    return `已修改任务 ${task.id}。${overlapWarning(task, overlaps)}${next}`;
   },
 
   async dismiss({ flags, positional }) {
@@ -347,8 +359,8 @@ const commands = {
   },
 
   async status({ flags }) {
-    const { state, pending, root, repos } = await request('GET', '/api/state');
-    return formatStatus(state, pending, flags.job, root, repos, !!flags.all);
+    const { state, pending, root, repos, stale } = await request('GET', '/api/state');
+    return formatStatus({ ...state, stale }, pending, flags.job, root, repos, !!flags.all);
   },
 
   // 翻看历史需求：默认只列已验收的，--all 列全部；--grep 按关键词查

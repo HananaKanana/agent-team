@@ -211,6 +211,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
   const jobIds = new Set(jobs.map((j) => j.id));
   const lines = ['# ateam 状态', ''];
   if (root) lines.push(`项目目录：${root}`, '');
+  if (state.stale) lines.push('⚠ ateam 的代码已更新，服务还在跑旧代码：请提醒用户重启 ateam serve（Ctrl+C 后重新运行）。', '');
   if (repos?.length) lines.push(`多仓库模式，包含 git 仓库：${repos.join('、')}。提交号形如「仓库@提交号」，review 用 git -C <仓库> show <提交号>`, '');
 
   const mine = pending.filter((t) => jobIds.has(t.jobId));

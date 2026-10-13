@@ -177,14 +177,16 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),
     'POST /api/agents/hide': (b) => ({ hidden: store.hideAgents(b.ids) }),
     'POST /api/dismiss': (b) => {
-      const dismissed = store.dismiss({ ids: b.ids, role: b.role, all: !!b.all, userApproved: !!b.userApproved });
-      // 正挂在 wait 上的 worker 立即收到「已下线」
-      for (const { id } of dismissed) {
+      const dismissed = store.dismiss({ ids: b.ids, role: b.role, all: !!b.all, userApproved: !!b.userApproved, afterTask: !!b.afterTask });
+      // 正挂在 wait 上的 worker 立即收到「已下线」（「做完再下线」的等任务结束后由 nextFor 处理）
+      for (const { id, later } of dismissed) {
+        if (later) continue;
         const waiter = waiters.get(id);
         if (waiter) finishWaiter(id, waiter, 200, { ok: true, result: { kind: 'dismissed' } });
       }
       return { dismissed };
     },
+    'POST /api/agents/keep': (b) => ({ kept: store.keepAgents(b.ids) }),
     'POST /api/reclaim': (b) => {
       const { task, agentId } = store.reclaim(requireId(b), b.text ?? '');
       // 原 worker 若正挂在 wait 上，立即告诉它租约已失效

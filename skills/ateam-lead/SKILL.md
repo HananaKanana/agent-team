@@ -138,11 +138,12 @@ ateam report --job J1 --file report.md
 ateam dismiss --all              # 全部在线 worker
 ateam dismiss --role frontend    # 某个角色
 ateam dismiss frontend-2 backend-1    # 指定编号
+ateam dismiss frontend-2 --after-task # 做完手上这个任务（通过或作废）再下线，期间不领新任务
 ```
 
 **每个角色至少留一个在线 worker。** 会让某个角色一个不剩的下线（包括 `--all`、`--role`）会被拒绝，必须先问用户，用户同意后加 `--user-approved` 重新运行。用户说「让大家收工」就是同意，直接 `ateam dismiss --all --user-approved`。
 
-下线立即生效：正在等任务的 worker 马上收到「已下线」并停止，正在写代码的在下一次调用 ateam 命令时收到。它手上进行中的任务退回待领取（已有改动保留，同角色的 worker 会接手）；已提交待 review 的任务照常 review。所以手上有进行中任务的 worker，最好等它提交后再让它下线。用户说「让大家收工」时也这样做。之后要再开工，请用户重新打开 worker 窗口。
+下线立即生效：正在等任务的 worker 马上收到「已下线」并停止，正在写代码的在下一次调用 ateam 命令时收到。它手上进行中的任务退回待领取（已有改动保留，同角色的 worker 会接手）；已提交待 review 的任务照常 review。所以手上有任务的 worker，一般用 `--after-task`：它把手上的任务做完、review 通过后才下线，打回也由它自己改；空闲的 worker 加了这个参数也是立即下线。用户说「让大家收工」时也这样做。之后要再开工，请用户重新打开 worker 窗口。
 
 ## 6. 会话重开
 

@@ -100,6 +100,7 @@ function waitingLines(waiting) {
   if (waiting.holding) {
     const why = HOLDING_REASON[waiting.holding.status] ?? waiting.holding.status;
     const lines = [`你手上的任务 ${waiting.holding.id} ${why}。`];
+    if (waiting.leaving) lines.push('leader 安排你做完这个任务（通过）后下线，到时会收到「# 已下线」。在那之前照常等待和修改。');
     return lines;
   }
   if (waiting.leaveAsked) {
@@ -224,7 +225,7 @@ export function formatStatus(state, pending, jobId, root, repos) {
   if (agents.length) {
     for (const a of agents) {
       const online = a.status === 'online' ? '在线' : (a.dismissed ? '已下线' : '掉线');
-      const task = a.currentTask ? `，当前任务 ${a.currentTask}` : '，空闲';
+      const task = (a.currentTask ? `，当前任务 ${a.currentTask}` : '，空闲') + (a.dismiss ? '，做完后下线' : '');
       const who = a.name ? `${a.name}（${a.id}）` : a.id;
       lines.push(`- ${who}，角色 ${a.role}，${online}${task}，上次心跳 ${ago(a.lastSeenAt, now)}`);
     }

@@ -259,14 +259,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   function onlineOfRole(role) {
-    return state.agents.filter((a) => a.status === 'online' && sameRole(a.role, role));
+    // 已安排「做完再下线」的不算：它迟早要走
+    return state.agents.filter((a) => a.status === 'online' && !a.dismiss && sameRole(a.role, role));
   }
 
   // 让 worker 立即下线：ids 指定编号，或 role 指定整个角色，或 all 表示全部在线 worker。
   // 手上进行中（或等答复）的任务退回待领取、标记接手，已有改动保留；已提交待 review 的任务原样留着，
   // 之后被打回就按「原 worker 已离开」交给别人接手。正挂在 wait 上的 worker 由 server 立即通知。
+  // afterTask：手上有任务的 worker 不立即走，做完这个任务（通过或作废）后再下线，期间不领新任务；空闲的照样立即下线。
   // 每个角色至少留一个在线 worker：会让某个角色一个不剩时，必须带 userApproved（用户同意）。
-  function dismiss({ ids = [], role = '', all = false, userApproved = false } = {}) {
+  function dismiss({ ids = [], role = '', all = false, userApproved = false, afterTask = false } = {}) {
     const wantIds = new Set(Array.isArray(ids) ? ids : []);
     role = String(role ?? '').trim();
     if (!all && !role && wantIds.size === 0) {
@@ -281,6 +283,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!userApproved) {
       const emptied = [];
       for (const a of picked) {
+        if (a.dismiss) continue; // 已经安排过下线（当时已过这道检查）
         if (emptied.some((r) => sameRole(r, a.role))) continue;
         if (onlineOfRole(a.role).every((x) => picked.includes(x))) emptied.push(a.role);
       }
@@ -293,6 +296,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     for (const agent of picked) {
       let returned = null;
       const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
+      if (afterTask && task) {
+        if (!agent.dismiss) {
+          agent.dismiss = true;
+          emit('worker_leaving', { agentId: agent.id, taskId: task.id, text: `${agent.id} 做完 ${task.id} 后下线，不再领取新任务` });
+        }
+        result.push({ id: agent.id, later: task.id });
+        continue;
+      }
       if (task && (task.status === 'working' || task.status === 'asking')) {
         task.status = 'pending';
         task.handoff = true;
@@ -306,6 +317,19 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (result.length > 0) changed();
     return result;
+  }
+
+  // 撤销「做完再下线」
+  function keepAgents(ids) {
+    const want = new Set(Array.isArray(ids) ? ids : []);
+    let count = 0;
+    for (const agent of state.agents) {
+      if (!want.has(agent.id) || agent.status !== 'online' || !agent.dismiss) continue;
+      delete agent.dismiss;
+      count += 1;
+    }
+    if (count > 0) changed();
+    return count;
   }
 
   // 空闲：在线、手上没有任务、本角色也没有待领取的任务（包括还在等依赖的）。
@@ -349,7 +373,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!agent) return null;
     if (agent.currentTask) {
       const task = state.tasks.find((t) => t.id === agent.currentTask);
-      return task ? { holding: { id: task.id, status: task.status } } : null;
+      return task ? { holding: { id: task.id, status: task.status }, leaving: !!agent.dismiss } : null;
     }
     const blocked = state.tasks
       .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && !depsMet(t))
@@ -646,7 +670,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, checkIdle, report, sweep, noteActivity,
+    approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents,
   };
 }

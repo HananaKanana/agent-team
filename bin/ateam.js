@@ -13,7 +13,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
@@ -36,7 +36,7 @@ leader
   ateam release T3
   ateam cancel T3 ["<原因>"]
   ateam reclaim T3 ["<原因>"]
-  ateam dismiss <编号>... | --role <角色> | --all [--user-approved]
+  ateam dismiss <编号>... | --role <角色> | --all [--after-task] [--user-approved]
   ateam watch [--timeout 90] [--follow]
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
@@ -260,13 +260,18 @@ const commands = {
   },
 
   async dismiss({ flags, positional }) {
-    const body = { ids: positional, role: flags.role ?? '', all: !!flags.all, userApproved: !!flags['user-approved'] };
+    const body = { ids: positional, role: flags.role ?? '', all: !!flags.all, userApproved: !!flags['user-approved'], afterTask: !!flags['after-task'] };
     if (!body.all && !body.role && body.ids.length === 0) {
       fail('请指定要下线的 worker。示例：ateam dismiss frontend-2 ／ ateam dismiss --role frontend ／ ateam dismiss --all');
     }
     const { dismissed } = await request('POST', '/api/dismiss', body);
     if (dismissed.length === 0) return '没有符合条件的在线 worker。';
-    const lines = [`已让 ${dismissed.length} 个 worker 下线：${dismissed.map((d) => d.id).join('、')}。`];
+    const now = dismissed.filter((d) => !d.later);
+    const later = dismissed.filter((d) => d.later);
+    const lines = [];
+    if (later.length) lines.push(`做完手上的任务（通过或作废）后下线，期间不领新任务：${later.map((d) => `${d.id}（${d.later}）`).join('、')}。`);
+    if (!now.length) return lines.join('\n');
+    lines.push(`已让 ${now.length} 个 worker 下线：${now.map((d) => d.id).join('、')}。`);
     const returned = dismissed.filter((d) => d.returned).map((d) => `${d.returned}（${d.id}）`);
     const submitted = dismissed.filter((d) => d.submitted).map((d) => d.submitted);
     if (returned.length) lines.push(`- 进行中的任务已退回待领取，等同角色的 worker 接手，已有改动保留：${returned.join('、')}`);

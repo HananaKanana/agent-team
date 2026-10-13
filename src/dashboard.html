@@ -498,7 +498,7 @@ function renderWorkers() {
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
     a.name ? el('span', { class: 'task' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-    el('span', { class: 'task' }, a.currentTask || (a.leaveAsked ? '空闲，申请下线' : '空闲')),
+    el('span', { class: 'task' }, a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
   );
   })];
   if (offline.length) {
@@ -520,12 +520,55 @@ function isStale(a) {
 
 let helper = { open: false, focus: null };
 let dismissAllArm = false; // 「全部下线」两步确认
-let dismissArm = null; // 单个 worker 下线的两步确认（手上有进行中的任务，或是本角色最后一个时）
+let dismissArm = null; // 单个 worker 下线的两步确认（手上有任务，或是本角色最后一个时）
 
-// 本角色唯一在线的 worker：每个角色至少留一个，下线前要用户确认
+// 本角色唯一在线的 worker（已安排「做完再下线」的不算）：每个角色至少留一个，下线前要用户确认
 function isLastOfRole(a) {
+  if (a.dismiss) return false;
   const role = a.role.trim().toLowerCase();
-  return data.state.agents.filter((x) => x.status === 'online' && x.role.trim().toLowerCase() === role).length === 1;
+  return data.state.agents.filter((x) => x.status === 'online' && !x.dismiss && x.role.trim().toLowerCase() === role).length === 1;
+}
+
+function dismissButtons(a) {
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const last = isLastOfRole(a);
+  const lastTip = last ? `${a.role} 角色只剩它一个，下线后这个角色的新任务没人领` : '';
+  // 已安排做完再下线：可以撤销，或改成立即下线
+  if (a.dismiss) {
+    return [
+      el('button', { class: 'btn ghost sm', title: '撤销「做完再下线」，它会继续领新任务', onclick: stop(() => keepAgents([a.id])) }, '撤销'),
+      el('button', { class: 'btn ghost sm', title: '立即下线；进行中的任务退回待领取', onclick: stop(() => dismissAgents({ ids: [a.id], userApproved: true })) }, '立即下线'),
+    ];
+  }
+  if (dismissArm !== a.id) {
+    return el('button', {
+      class: 'btn ghost sm',
+      onclick: stop(() => {
+        // 手上有任务（可以选做完再下线），或是本角色最后一个 worker：先确认
+        if (a.currentTask || last) { dismissArm = a.id; renderHelper(); return; }
+        dismissAgents({ ids: [a.id] });
+      }),
+    }, '下线');
+  }
+  const cancel = el('button', { class: 'btn ghost sm', onclick: stop(() => { dismissArm = null; renderHelper(); }) }, '取消');
+  const suffix = last ? `（${a.role} 最后一个）` : '';
+  if (!a.currentTask) {
+    return [cancel, el('button', {
+      class: 'btn warn sm', title: lastTip,
+      onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
+    }, `确认下线${suffix}`)];
+  }
+  return [
+    cancel,
+    el('button', {
+      class: 'btn sm', title: `做完 ${a.currentTask}（通过或作废）后下线，期间不领新任务。${lastTip}`,
+      onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true, afterTask: true }); }),
+    }, `做完 ${a.currentTask} 再下线`),
+    el('button', {
+      class: 'btn warn sm', title: `马上停下，${a.currentTask} 若还在进行中就退回待领取。${lastTip}`,
+      onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
+    }, `立即下线${suffix}`),
+  ];
 }
 
 function wakePrompt(a) {
@@ -537,6 +580,14 @@ function wakePrompt(a) {
 async function dismissAgents(body) {
   try {
     await fetch('/api/dismiss', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  } catch {}
+  await poll();
+  renderHelper();
+}
+
+async function keepAgents(ids) {
+  try {
+    await fetch('/api/agents/keep', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }) });
   } catch {}
   await poll();
   renderHelper();
@@ -639,26 +690,9 @@ function renderHelper() {
           el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
           el('span', { class: 'hint' }, `${a.currentTask || '空闲'}，心跳 ${ago(a.lastSeenAt)}`),
           isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null,
-          a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null),
-        dismissArm === a.id
-          ? [
-            el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissArm = null; renderHelper(); } }, '取消'),
-            el('button', {
-              class: 'btn warn sm',
-              title: isLastOfRole(a) ? `${a.role} 角色只剩它一个，下线后这个角色的新任务没人领` : '',
-              onclick: (e) => { e.stopPropagation(); dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); },
-            }, isLastOfRole(a) ? `确认下线（${a.role} 最后一个）` : '确认下线'),
-          ]
-          : el('button', {
-            class: 'btn ghost sm',
-            onclick: (e) => {
-              e.stopPropagation();
-              // 手上有进行中的任务（会退回待领取），或是本角色最后一个 worker：先确认
-              const t = a.currentTask && data.state.tasks.find((x) => x.id === a.currentTask);
-              if ((t && (t.status === 'working' || t.status === 'asking')) || isLastOfRole(a)) { dismissArm = a.id; renderHelper(); return; }
-              dismissAgents({ ids: [a.id] });
-            },
-          }, '下线')),
+          a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null,
+          a.dismiss ? el('span', { class: 'pill', title: '做完手上的任务后下线，不再领新任务' }, '做完下线') : null),
+        dismissButtons(a)),
       promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '没有在线的 worker。'),
     offline.length ? [
       el('div', { class: 'helper-sec' }, el('h4', null, `③ 掉线了：重连（${offline.length}）`)),

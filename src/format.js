@@ -237,7 +237,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
   }
 
   lines.push('', '## 需求', '');
-  if (accepted.length) lines.push(`已验收 ${accepted.length} 个，不再列出：${accepted.map((j) => j.id).join('、')}（需要时 ateam status --job J1 或 --all）`, '');
+  if (accepted.length) lines.push(`已验收 ${accepted.length} 个，不再列出：${accepted.map((j) => j.id).join('、')}（翻看历史：ateam jobs，单个需求：ateam job show J1）`, '');
   if (!jobs.length) lines.push(jobId ? `（找不到需求 ${jobId}）` : (accepted.length ? '（没有未验收的需求）' : '（还没有需求）'));
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id);
@@ -255,6 +255,47 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
     lines.push('');
   }
   return lines.join('\n').trimEnd();
+}
+
+// 需求列表：每个需求一行，用来翻看历史（status 默认不列已验收的需求）。
+// filter：'accepted' 只看已验收，'all' 全部；keyword 在标题、说明、汇报、任务标题里查找。
+export function formatJobs(state, { filter = 'accepted', keyword = '' } = {}) {
+  let jobs = state.jobs.slice().reverse();
+  if (filter === 'accepted') jobs = jobs.filter((j) => j.status === 'accepted');
+  const kw = keyword.trim().toLowerCase();
+  if (kw) {
+    jobs = jobs.filter((j) => [j.title, j.description, j.report,
+      ...state.tasks.filter((t) => t.jobId === j.id).map((t) => t.title)]
+      .some((text) => String(text ?? '').toLowerCase().includes(kw)));
+  }
+  const what = filter === 'accepted' ? '已验收的需求' : '需求';
+  const head = `# ${what}（${jobs.length}）${kw ? `，包含「${keyword.trim()}」` : ''}`;
+  if (!jobs.length) return `${head}\n\n（没有）`;
+  const lines = [head, ''];
+  for (const j of jobs) {
+    const tasks = state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
+    const when = j.status === 'accepted' && j.acceptedAt ? `，${formatTime(j.acceptedAt)} 验收` : '';
+    lines.push(`- ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}${when}] 任务 ${tasks.length} 个`);
+  }
+  lines.push('', '看某个需求的说明、任务、提交和汇报：ateam job show J1');
+  return lines.join('\n');
+}
+
+// 一个需求的完整档案：说明、任务（含提交号）、汇报
+export function formatJob(state, job) {
+  const tasks = state.tasks.filter((t) => t.jobId === job.id);
+  const lines = [`# ${job.id} ${job.title}`, ''];
+  lines.push(`- 状态：${JOB_STATUS[job.status] ?? job.status}`);
+  if (job.createdAt) lines.push(`- 创建：${formatTime(job.createdAt)}`);
+  if (job.acceptedAt) lines.push(`- 验收：${formatTime(job.acceptedAt)}`);
+  lines.push('', '## 说明', '', job.description?.trim() || '（无）', '', '## 任务', '');
+  if (!tasks.length) lines.push('（无）');
+  for (const t of tasks) {
+    const commits = t.commits.length ? `，提交 ${t.commits.join('、')}` : '';
+    lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}，路径 ${t.paths.join('、')}${commits}）`);
+  }
+  lines.push('', '任务详情和历史：ateam show T1', '', '## 汇报', '', job.report?.trim() || '（还没有汇报）');
+  return lines.join('\n');
 }
 
 export function formatError(code, message) {

@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  formatError, formatEventLine, formatEvents, formatStatus, formatTask, formatWait,
+  formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait,
 } from '../src/format.js';
 
 const BASE = (process.env.ATEAM_URL || 'http://127.0.0.1:7700').replace(/\/+$/, '');
@@ -43,6 +43,8 @@ leader
   ateam reject T3 "<修改意见>"
   ateam answer T3 "<答复>"
   ateam status [--job J1 | --all]
+  ateam jobs [--all] [--grep <关键词>]
+  ateam job show J1
   ateam show T3
   ateam report --job J1 --file report.md
 
@@ -347,6 +349,20 @@ const commands = {
   async status({ flags }) {
     const { state, pending, root, repos } = await request('GET', '/api/state');
     return formatStatus(state, pending, flags.job, root, repos, !!flags.all);
+  },
+
+  // 翻看历史需求：默认只列已验收的，--all 列全部；--grep 按关键词查
+  async jobs({ flags }) {
+    const { state } = await request('GET', '/api/state');
+    return formatJobs(state, { filter: flags.all ? 'all' : 'accepted', keyword: flags.grep ?? '' });
+  },
+
+  async 'job show'({ positional }) {
+    const id = requireArg(positional[0], '需求编号', 'ateam job show J3');
+    const { state } = await request('GET', '/api/state');
+    const job = state.jobs.find((j) => j.id === id);
+    if (!job) fail(`找不到需求 ${id}。用 ateam jobs --all 查看所有需求。`);
+    return formatJob(state, job);
   },
 
   async show({ positional }) {

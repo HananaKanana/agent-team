@@ -312,6 +312,7 @@ ateam cancel T3 "原因"   # 作废任务：不再派发，看板上置灰放到
 ateam reclaim T3         # 原窗口没了：立即收回任务，交给同角色的 worker 接手
 ateam job edit J1 --desc-file job.md   # 改需求的说明（或 --title 改标题）
 ateam job accept J1 J2   # 验收通过（看板上点「验收通过」也一样）
+ateam jobs --grep 公告    # 翻看已验收的历史需求（--all 包括没验收的）；ateam job show J13 看单个需求的任务、提交和汇报
 ateam task edit T3 --role backend      # 改任务的角色（待领取或已挂起的任务）
 ateam dismiss --all --user-approved   # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号；让某个角色一个不剩时要加 --user-approved，表示用户同意）
 ateam help          # 全部命令

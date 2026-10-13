@@ -104,14 +104,6 @@ ln -s ~/code/agent-team/skills/ateam-lead   ~/.claude/skills/ateam-lead
 ln -s ~/code/agent-team/skills/ateam-worker ~/.workbuddy/skills/ateam-worker
 ```
 
-以前是复制安装的，先删掉复制的那份再软链：
-
-```bash
-rm -r ~/.claude/skills/ateam-lead ~/.workbuddy/skills/ateam-worker
-ln -s ~/code/agent-team/skills/ateam-lead   ~/.claude/skills/ateam-lead
-ln -s ~/code/agent-team/skills/ateam-worker ~/.workbuddy/skills/ateam-worker
-```
-
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 
 ---
@@ -289,7 +281,7 @@ worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没�
 - 改了服务端代码（`src/` 下的 `.js` 文件）：重启 `ateam serve`。状态不会丢，worker 和 leader 会在约 60 秒内自动重连。忘了也没关系：服务发现代码比自己新时，看板顶部会出现黄色提示条「服务还在跑旧代码」，`ateam status` 也会提醒 leader。
 - 改了命令行（`bin/ateam.js`、`src/format.js` 的输出文字）：下一条命令就生效；`src/format.js` 有一部分输出由服务生成，稳妥起见也重启一下服务。
 - 只改了看板（`src/dashboard.html`）：刷新浏览器即可。
-- 改了 skill：软链安装的自动生效（复制装的要再复制一次，建议换成软链，见「安装两份 skill」）；agent 窗口要新开才会读到新 skill。
+- 改了 skill：软链安装，自动生效；agent 窗口要新开才会读到新 skill。
 
 **看板上的新功能不生效、或者显示不对**（比如 leader 明明在线却显示「未连接」）：多半是看板已经是新的，服务还是旧的。重启 `ateam serve` 再刷新。
 

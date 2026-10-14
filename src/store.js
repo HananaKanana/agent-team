@@ -497,7 +497,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return workingTaskOf(agentId).task;
   }
 
-  // commit：一个提交号、多个提交号（多仓库时每个仓库一个，如 pan_api@a1b2c3d），或 null（无代码改动）
+  // commit：一个提交号、多个提交号（多仓库时每个仓库一个，如 api@a1b2c3d），或 null（无代码改动）
   function recordSubmit(agentId, summary, commit) {
     summary = requireText(summary, '提交总结');
     const { agent, task } = workingTaskOf(agentId);

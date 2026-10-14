@@ -378,7 +378,7 @@ const commands = {
       const { rules } = await request('GET', '/api/rules');
       return rules.trim()
         ? `# 项目规则（每个任务派发时自动附上）\n\n${rules.trim()}`
-        : '还没有项目规则。添加：ateam rules add "提交前在 pan_api 里跑 mvn -q -o compile"，或 ateam rules set --file rules.md';
+        : '还没有项目规则。添加：ateam rules add "提交前先跑一遍编译"，或 ateam rules set --file rules.md';
     }
     if (sub === 'add') {
       const line = requireArg(positional[1], '规则', 'ateam rules add "不写新的测试代码"');

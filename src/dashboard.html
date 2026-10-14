@@ -729,7 +729,7 @@ function rulesEditor() {
   const dirty = rules.draft !== rules.saved;
   const area = el('textarea', {
     class: 'rules-editor', rows: '14', spellcheck: 'false',
-    placeholder: '- 不写新的测试代码\n- 不起浏览器、不截图\n- 提交前在 pan_api 里跑 mvn -q -o compile，在 pan_web 里跑 vue-tsc --noEmit',
+    placeholder: '比如：\n- 不写新的测试代码\n- 提交前先跑一遍编译，编译通过再提交\n- 新文件沿用旁边文件的代码风格',
   });
   area.value = rules.draft;
   area.addEventListener('input', () => {

@@ -134,15 +134,15 @@ ateam 服务已启动：http://127.0.0.1:7700（看板同地址）
 **多仓库项目**：比如前后端是两个仓库，放在同一个上级目录下：
 
 ```
-pan/            ← 在这里运行 ateam serve（它本身不是仓库也行）
-├── pan_web/    ← git 仓库
-└── pan_api/    ← git 仓库
+myapp/            ← 在这里运行 ateam serve（它本身不是仓库也行）
+├── web/    ← git 仓库
+└── api/    ← git 仓库
 ```
 
-启动时会多显示一行「多仓库模式，包含 git 仓库：pan_api、pan_web」。之后：
-- 任务路径写成「仓库目录/子路径」，比如 `pan_api/`、`pan_web/src/`。leader 会按这个写。
-- 提交时服务自动找到路径所属的仓库，在那个仓库里提交；提交号显示成 `pan_api@a1b2c3d`。一个任务跨两个仓库时，两边各提交一次。
-- `.ateam/` 建在 `pan/` 下；`pan/` 不是仓库，所以不改任何 `.gitignore`。
+启动时会多显示一行「多仓库模式，包含 git 仓库：api、web」。之后：
+- 任务路径写成「仓库目录/子路径」，比如 `api/`、`web/src/`。leader 会按这个写。
+- 提交时服务自动找到路径所属的仓库，在那个仓库里提交；提交号显示成 `api@a1b2c3d`。一个任务跨两个仓库时，两边各提交一次。
+- `.ateam/` 建在 `myapp/` 下；`myapp/` 不是仓库，所以不改任何 `.gitignore`。
 
 ### 2. 打开看板
 
@@ -310,7 +310,7 @@ ateam reclaim T3         # 原窗口没了：立即收回任务，交给同角�
 ateam job edit J1 --desc-file job.md   # 改需求的说明（或 --title 改标题）
 ateam job accept J1 J2   # 验收通过（看板上点「验收通过」也一样）
 ateam task top T5        # 设为优先：同角色的 worker 下一个先领它（--off 取消；看板上点开待领取的任务也能设）
-ateam rules              # 查看项目规则；ateam rules add "提交前跑 mvn -q -o compile" 加一条（看板「使用说明 → 项目规则」也能改）
+ateam rules              # 查看项目规则；ateam rules add "提交前先跑一遍编译" 加一条（看板「使用说明 → 项目规则」也能改）
 ateam jobs --grep 公告    # 翻看已验收的历史需求（--all 包括没验收的）；ateam job show J13 看单个需求的任务、提交和汇报
 ateam task edit T3 --role backend      # 改任务的角色（待领取或已挂起的任务）
 ateam dismiss --all --user-approved   # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号；让某个角色一个不剩时要加 --user-approved，表示用户同意）

@@ -2,7 +2,7 @@
 //
 // 支持两种布局：
 // - 单仓库：项目目录本身在一个 git 仓库里（最常见）。
-// - 多仓库：项目目录不是仓库，但下面一层有若干仓库，比如 pan/ 下的 pan_web/、pan_api/。
+// - 多仓库：项目目录不是仓库，但下面一层有若干仓库，比如 myapp/ 下的 web/、api/。
 // 任务路径都相对于项目目录写；提交时按路径找到它所属的仓库，在那个仓库里提交。
 import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -50,7 +50,7 @@ async function repoTop(dir) {
   }
 }
 
-// 返回 { mode: 'single', top } 或 { mode: 'multi', repos: ['pan_api', 'pan_web'] }；两种都不是就报错
+// 返回 { mode: 'single', top } 或 { mode: 'multi', repos: ['api', 'web'] }；两种都不是就报错
 export async function detectRepos(root) {
   const top = await repoTop(root);
   if (top) return { mode: 'single', top };
@@ -147,7 +147,7 @@ async function commitInRepo(top, paths, message) {
 }
 
 // 只提交 paths 内的改动，每个涉及的仓库各提交一次。
-// 返回 { commits: ['a1b2c3d'] }（单仓库）或 { commits: ['pan_api@a1b2c3d', ...] }（多仓库）；都没有改动时返回 { nothing: true }。
+// 返回 { commits: ['a1b2c3d'] }（单仓库）或 { commits: ['api@a1b2c3d', ...] }（多仓库）；都没有改动时返回 { nothing: true }。
 export async function commitPaths(root, paths, message) {
   const groups = await groupByRepo(root, paths);
   const commits = [];

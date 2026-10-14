@@ -9,7 +9,6 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, latestChangeTime } from './git.js';
-import { startNotifier } from './notify.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -104,7 +103,7 @@ function readBody(req) {
   });
 }
 
-export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, notify = true } = {}) {
+export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
   const layout = await detectRepos(root);
   const startHash = codeHash();
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
@@ -145,8 +144,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 每次状态变化：落盘，并在下一轮事件循环唤醒挂起的请求。
   // 唤醒过程本身（nextFor 的 touch、takeEvents）也会触发 onChange，用 waking 标记避免循环。
+  // 看板的推送连接（SSE）。浏览器会暂停后台标签页的定时器，看板的 3 秒轮询在后台可能不跑，
+  // 标签页标题上的提醒就不更新；网络推送来的消息在后台照样会处理，收到后看板立即刷新一次。
+  const streams = new Set();
+  function pushAll(msg) {
+    for (const res of streams) res.write(`data: ${msg}\n\n`);
+  }
+  // leader 在线与否、心跳时间这类随时间变化的状态没有对应的 onChange，定时推一下
+  const streamTimer = setInterval(() => pushAll('tick'), 15000);
+  streamTimer.unref();
+
+  // 状态变化很频繁（每次心跳都算），合并成最多每秒推一次
+  let pushTimer = null;
+  function pushSoon() {
+    if (pushTimer || streams.size === 0) return;
+    pushTimer = setTimeout(() => { pushTimer = null; pushAll('change'); }, 1000);
+  }
+
   function onChange() {
     saveState(dataDir, store.state);
+    pushSoon();
     if (waking || wakeScheduled) return;
     wakeScheduled = true;
     setImmediate(wake);
@@ -348,6 +365,13 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const body = req.method === 'POST' ? await readBody(req) : {};
       // 命令行发来、且不带 --as 的请求都是 leader 的（worker 的命令都带 --as）
       if (req.headers['x-ateam-cli'] && !body.as && key !== 'POST /api/join') leaderSeenAt = Date.now();
+      if (key === 'GET /api/stream') {
+        res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' });
+        res.write('retry: 3000\n\n');
+        streams.add(res);
+        res.on('close', () => streams.delete(res));
+        return;
+      }
       if (key === 'POST /api/wait') return handleWait(body, res);
       if (key === 'POST /api/watch') return handleWatch(body, res);
       const route = routes[key];
@@ -385,12 +409,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   }
   const sweepTimer = setInterval(sweepTick, Math.min(30000, leaseMs / 3));
   sweepTimer.unref();
-  server.on('close', () => clearInterval(sweepTimer));
-
-  if (notify) {
-    const notifier = startNotifier({ root, port, getState: () => store.state, leaderOnline });
-    server.on('close', () => notifier.stop());
-  }
+  server.on('close', () => {
+    clearInterval(sweepTimer);
+    clearInterval(streamTimer);
+    clearTimeout(pushTimer);
+    for (const res of streams) res.end();
+  });
 
   await new Promise((resolve, reject) => {
     server.once('error', (err) => {

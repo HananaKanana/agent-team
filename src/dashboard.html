@@ -81,7 +81,8 @@ button.worker:hover { border-color: var(--muted); }
 .helper-btn { margin-left: auto; }
 .btn.attention { border-color: var(--rework); color: var(--rework); font-weight: 600; }
 .btn.attention[hidden] { display: none; }
-.btn.attention + .helper-btn { margin-left: 0; }
+.btn.attention + .helper-btn, #notify-btn + .helper-btn { margin-left: 0; }
+#notify-btn[hidden] { display: none; }
 /* 提示词面板：顶部右侧弹出 */
 .helper {
   position: fixed; top: 56px; right: 16px; z-index: 15; width: min(520px, calc(100vw - 32px));
@@ -333,6 +334,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <h1>ateam 调度台</h1>
   <div class="workers" id="workers"></div>
   <button class="btn attention" id="attention" type="button" hidden></button>
+  <button class="btn" id="notify-btn" type="button" hidden title="允许浏览器弹通知：有需求待验收、任务缺 worker、leader 掉线时提醒你">开启通知</button>
   <button class="btn helper-btn" id="helper-btn" type="button">使用说明</button>
 </header>
 <section class="needs" id="needs" hidden aria-label="需要 worker"></section>
@@ -1264,15 +1266,68 @@ function loadView() {
 // 数量显示在标签页标题和图标上，看板不在前台时也能看到。
 const BASE_TITLE = 'ateam 调度台';
 let lastBadge = null;
+// 每件事 { key, text, body }：key 用来给浏览器通知去重，text 是按钮提示，body 是通知正文
 function attentionItems() {
   if (!data) return [];
   const items = [];
-  for (const j of data.state.jobs) if (j.status === 'awaiting_acceptance') items.push(`${j.id} 待你验收`);
-  for (const role of rolesNeedingWorkers().keys()) items.push(`${role} 缺 worker`);
-  if (data.stale) items.push('服务需要重启');
+  for (const j of data.state.jobs) {
+    if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待你验收`, body: `${j.id} ${j.title} 待你验收` });
+  }
+  for (const role of rolesNeedingWorkers().keys()) {
+    items.push({ key: `needs:${role.toLowerCase()}`, text: `${role} 缺 worker`, body: `${role} 的任务没人做，需要开一个 ${role} worker` });
+  }
+  if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
   const busy = data.state.jobs.some((j) => j.status === 'planning' || j.status === 'active');
-  if (busy && data.leader && !data.leader.online) items.push('leader 未连接');
+  if (busy && data.leader && !data.leader.online) items.push({ key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
   return items;
+}
+
+// ---------- 浏览器通知 ----------
+// 一件事持续 1 分钟才通知（worker 掉线马上重连、leader 短暂断开都不打扰），同一件事只通知一次，
+// 事情消失后再出现会再通知。打开页面时已经存在的事不通知（标题上已经有数字了）。
+const NOTIFY_SETTLE_MS = 60 * 1000;
+const notifySeen = new Map(); // key -> 第一次看到的时间
+const notifyDone = new Set();
+let notifyPrimed = false;
+const canNotify = () => typeof Notification !== 'undefined';
+
+function checkNotify(items) {
+  const keys = new Set(items.map((i) => i.key));
+  for (const key of [...notifySeen.keys()]) {
+    if (!keys.has(key)) { notifySeen.delete(key); notifyDone.delete(key); }
+  }
+  for (const i of items) {
+    if (!notifySeen.has(i.key)) {
+      notifySeen.set(i.key, Date.now());
+      if (!notifyPrimed) notifyDone.add(i.key);
+    }
+  }
+  notifyPrimed = true;
+  if (!canNotify() || Notification.permission !== 'granted') return;
+  const fresh = items.filter((i) => !notifyDone.has(i.key) && Date.now() - notifySeen.get(i.key) >= NOTIFY_SETTLE_MS);
+  if (!fresh.length) return;
+  for (const i of fresh) notifyDone.add(i.key);
+  const project = (data.root || '').split('/').filter(Boolean).pop() || '';
+  const body = fresh.length === 1 ? fresh[0].body : `${fresh.length} 件事需要你处理：${fresh.map((i) => i.text).join('；')}`;
+  try {
+    const n = new Notification(`ateam${project ? ` · ${project}` : ''}`, { body, tag: `ateam-${project}`, silent: true });
+    n.onclick = () => { window.focus(); n.close(); };
+  } catch {}
+}
+
+function renderNotifyButton() {
+  const btn = document.getElementById('notify-btn');
+  const show = canNotify() && Notification.permission === 'default';
+  btn.hidden = !show;
+}
+
+async function enableNotify() {
+  if (!canNotify()) return;
+  try { await Notification.requestPermission(); } catch {}
+  renderNotifyButton();
+  if (Notification.permission === 'granted') {
+    try { new Notification('ateam 通知已开启', { body: '有需求待验收、任务缺 worker、leader 掉线时会在这里提醒你。看板标签页要开着（可以在后台）。', silent: true }); } catch {}
+  }
 }
 
 function setBadge(text, color) {
@@ -1294,11 +1349,13 @@ function renderAttention() {
   document.getElementById('stale').hidden = !data?.stale;
   const items = attentionItems();
   setBadge(items.length ? String(items.length) : '', '#d9534f');
+  checkNotify(items);
+  renderNotifyButton();
   const btn = document.getElementById('attention');
   if (!items.length) { btn.hidden = true; return; }
   btn.hidden = false;
   btn.textContent = `需要你处理 ${items.length}`;
-  btn.title = items.join('\n');
+  btn.title = items.map((i) => i.text).join('\n');
 }
 
 async function poll() {
@@ -1313,10 +1370,10 @@ async function poll() {
       lastJson = json;
       data = JSON.parse(json);
       render();
-      renderAttention();
     } else {
       renderWorkers(); // 只刷新「心跳 N 分钟前」
     }
+    renderAttention();
   } catch {
     document.getElementById('banner').hidden = false;
     lastJson = null; // 恢复连接后重新渲染，刷新提醒
@@ -1338,6 +1395,8 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#drawer, .card')) return;
   closeDrawer();
 });
+document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });
+
 // 「需要你处理」：跳到第一件事——待验收的需求、缺 worker 的提示条、或 leader 的连接说明
 document.getElementById('attention').addEventListener('click', (e) => {
   e.stopPropagation();
@@ -1362,6 +1421,19 @@ document.getElementById('helper-btn').addEventListener('click', (e) => {
 loadView();
 poll();
 setInterval(poll, 3000);
+// 服务有变化时推送过来，立即刷新：后台标签页的定时器会被浏览器暂停，推送不会，标题上的提醒才能及时更新
+let pollPending = false;
+function pollSoon() {
+  if (pollPending) return;
+  pollPending = true;
+  setTimeout(() => { pollPending = false; poll(); }, 300);
+}
+try {
+  const stream = new EventSource('/api/stream');
+  stream.onmessage = () => { if (document.hidden) poll(); else pollSoon(); };
+} catch {}
+// 切回标签页时马上刷新一次
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 </script>
 </body>
 </html>

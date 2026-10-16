@@ -134,10 +134,16 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     renameSync(tmp, rulesFile);
     return readRules();
   }
+  // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
+  // 和项目规则（长期有效的约定）
   function withRules(result) {
     if (!result || !RULES_KINDS.has(result.kind)) return result;
+    const out = { ...result };
     const rules = readRules().trim();
-    return rules ? { ...result, rules } : result;
+    if (rules) out.rules = rules;
+    const job = store.state.jobs.find((j) => j.id === result.task.jobId);
+    if (job?.description?.trim()) out.job = { id: job.id, title: job.title, description: job.description.trim() };
+    return out;
   }
 
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });

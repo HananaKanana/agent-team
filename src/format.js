@@ -166,6 +166,9 @@ export function formatWait(result, agentId, waiting, round = 0) {
     default:
       out = `# ${kind} ${title}\n\n${formatTask(task)}`;
   }
+  if (result.job) {
+    out += `\n\n## 所属需求 ${result.job.id}：${result.job.title}\n\n${result.job.description}`;
+  }
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }

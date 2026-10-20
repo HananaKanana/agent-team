@@ -226,7 +226,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
-    'POST /api/join': (b) => ({ agent: store.join(b.role, b.name) }),
+    'POST /api/join': (b) => ({ agent: store.join(b.role, b.name, b.id) }),
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),
     'POST /api/submit': (b) => serial(async () => {
@@ -286,7 +286,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 原 worker 若正挂在 wait 上，立即告诉它租约已失效
       const waiter = agentId && waiters.get(agentId);
       if (waiter) {
-        finishWaiter(agentId, waiter, 400, { ok: false, code: 'LEASE_LOST', message: `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${task.role}` });
+        finishWaiter(agentId, waiter, 400, { ok: false, code: 'LEASE_LOST', message: `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${task.role} --id ${agentId}（沿用原编号）` });
       }
       return { task, agentId };
     },

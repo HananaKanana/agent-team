@@ -632,7 +632,7 @@ function dismissButtons(a) {
 
 function wakePrompt(a) {
   const doing = a.currentTask ? `继续做 ${a.currentTask}，做完提交后` : '';
-  return `继续。你是 ateam worker ${a.id}（角色 ${a.role}）。${doing}运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。如果提示租约已失效，就重新 ateam join --role ${a.role}${a.name ? ` --name ${a.name}` : ''}。`;
+  return `继续。你是 ateam worker ${a.id}（角色 ${a.role}）。${doing}运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。如果提示租约已失效，就重新 ateam join --role ${a.role} --id ${a.id}${a.name ? ` --name ${a.name}` : ''}。`;
 }
 
 
@@ -665,7 +665,7 @@ let reconnectOpen = null; // 展开了重连提示词的掉线 worker 编号
 function reconnectPrompt(a) {
   const name = a.name ? ` --name ${a.name}` : '';
   const dir = data.root ? `项目目录是 ${data.root}。` : '';
-  return `继续。你之前是 ateam worker ${a.id}（角色 ${a.role}），这个编号已经掉线失效。${dir}请按 ateam-worker skill 运行 ateam join --role ${a.role}${name} 重新加入，然后进入 ateam wait 主循环；如果领到「⚠ 接手任务」，先看历史和 git status，在已有改动上继续。中途不要停下来汇报。`;
+  return `继续。你是 ateam worker ${a.id}（角色 ${a.role}），已经掉线。${dir}请按 ateam-worker skill 运行 ateam join --role ${a.role} --id ${a.id}${name} 重新加入（沿用原编号），然后进入 ateam wait 主循环；如果领到「⚠ 接手任务」，先看历史和 git status，在已有改动上继续。中途不要停下来汇报。`;
 }
 
 function renderOfflinePanel(panel) {
@@ -679,7 +679,7 @@ function renderOfflinePanel(panel) {
       el('span', { class: 'prompt', style: 'margin: 0' },
         el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
         el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); close(); } }, '关闭'))),
-    el('p', { class: 'hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
+    el('p', { class: 'hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会用原编号重新加入、接着干活。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
     offline.map((a) => el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' },
         el('span', { class: 'grow' },
@@ -794,7 +794,7 @@ function renderHelper(force = false) {
     tab === 'rules' ? null : el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
     tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
-    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
+    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。话的开头就是这个窗口的编号（比如 backend-4），窗口标题会带上它，方便你分清哪个窗口是哪个 worker；标题没带上的话，可以在 agent 里手动给窗口改名。每开一个窗口，编号自动加一，记得复制最新的。想起名字就在第一行末尾加「，名字 账号B」。'),
     roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)),
       promptBlock(workerPrompt(role), renderHelper)))
@@ -816,7 +816,7 @@ function renderHelper(force = false) {
       promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '没有在线的 worker。'),
     offline.length ? [
       el('div', { class: 'helper-sec' }, el('h4', null, `③ 掉线了：重连（${offline.length}）`)),
-      el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会重新加入、接着干活（编号会换成新的）。'),
+      el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会用原编号重新加入、接着干活，窗口标题不用改。'),
       offline.map((a) => el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' },
           el('span', { class: 'grow' },
@@ -1134,9 +1134,23 @@ function leadPrompt() {
 如果「待你处理」里有事，先接着处理；没有的话，简单告诉我现状（有哪些 worker 在线、有没有没做完的需求），然后等我说需求。不要自己找活干。`;
 }
 
+// 这个角色下一个新 worker 会拿到的编号（和服务端分配规则一致：角色-序号，序号递增不复用）。
+// 写进开场话的最前面，agent 窗口的标题就会带上编号，用户能分清哪个窗口是哪个 worker。
+function nextAgentId(role) {
+  const slug = role.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '') || 'worker';
+  let n = data.state.seq?.agents?.[slug] ?? 0;
+  for (const a of data.state.agents) {
+    const m = a.id.match(/^(.*)-(\d+)$/);
+    if (m && m[1] === slug) n = Math.max(n, Number(m[2]));
+  }
+  return `${slug}-${n + 1}`;
+}
+
 function workerPrompt(role) {
   const dir = data.root ? `\n项目目录：${data.root}` : '';
-  return `使用 ateam-worker skill，角色 ${role}${dir}`;
+  if (role.startsWith('<')) return `使用 ateam-worker skill，角色 ${role}${dir}`;
+  const id = nextAgentId(role);
+  return `${id}：使用 ateam-worker skill，角色 ${role}，编号 ${id}${dir}`;
 }
 
 function promptBox(role) {

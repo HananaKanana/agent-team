@@ -208,17 +208,52 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // ---------- worker ----------
 
   // name：用户给窗口起的好记名字（比如「账号A」），只用于显示；编号 id 仍然唯一
-  function join(role, name = '') {
+  // wantId：想用的编号（看板给的提示词里预先写好，让 agent 窗口的标题和编号对得上）。
+  // - 编号没人用、格式是「本角色-序号」：直接用它。
+  // - 是本角色一个已掉线的旧编号（同一个窗口掉线后重连）：沿用它，窗口标题不用变。
+  // - 其它情况（正在线上、已下线、角色不符、格式不对）：照常分配新编号，加入结果里会说明。
+  function claimId(role, wantId) {
+    wantId = String(wantId ?? '').trim();
+    if (!wantId) return { id: newAgentId(role) };
+    const slug = roleSlug(role);
+    const m = wantId.match(/^(.*)-(\d+)$/);
+    if (!m || m[1] !== slug) return { id: newAgentId(role), refused: `编号 ${wantId} 和角色 ${role} 对不上` };
+    const old = findAgent(wantId);
+    if (!old) {
+      state.seq.agents ??= {};
+      state.seq.agents[slug] = Math.max(state.seq.agents[slug] ?? 0, Number(m[2]));
+      return { id: wantId };
+    }
+    if (old.status === 'offline' && !old.dismissed && sameRole(old.role, role)) return { id: wantId, revive: old };
+    const why = old.status === 'online' ? '正被另一个在线的 worker 使用' : '已经下线，不能再用';
+    return { id: newAgentId(role), refused: `编号 ${wantId} ${why}` };
+  }
+
+  function join(role, name = '', wantId = '') {
     role = requireText(role, '角色（--role）');
     name = String(name ?? '').trim().slice(0, 40);
     const ts = now();
-    const agent = { id: newAgentId(role), role, status: 'online', currentTask: null, joinedAt: ts, lastSeenAt: ts };
+    const { id, revive, refused } = claimId(role, wantId);
+    if (revive) {
+      revive.status = 'online';
+      revive.currentTask = null;
+      revive.lastSeenAt = ts;
+      delete revive.hidden;
+      delete revive.idleSince;
+      delete revive.leaveAsked;
+      if (name) revive.name = name;
+      const who = revive.name ? `${revive.name}（${revive.id}）` : revive.id;
+      emit('worker_joined', { agentId: revive.id, text: `${who}，角色 ${role}，重新加入` });
+      changed();
+      return { ...revive, rejoined: true };
+    }
+    const agent = { id, role, status: 'online', currentTask: null, joinedAt: ts, lastSeenAt: ts };
     if (name) agent.name = name;
     state.agents.push(agent);
     const who = name ? `${name}（${agent.id}）` : agent.id;
     emit('worker_joined', { agentId: agent.id, text: `${who}，角色 ${role}，加入` });
     changed();
-    return agent;
+    return refused ? { ...agent, refused } : agent;
   }
 
   function touch(agentId) {
@@ -228,7 +263,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (!agent || agent.status !== 'online') {
       const role = agent?.role ?? '<角色>';
-      throw new AteamError('LEASE_LOST', `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${role}`);
+      const keep = agent ? ` --id ${agent.id}` : '';
+      throw new AteamError('LEASE_LOST', `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${role}${keep}（沿用原编号）`);
     }
     agent.lastSeenAt = now();
     changed();

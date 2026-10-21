@@ -310,9 +310,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     return [
       `你手上的任务 ${task.id} 已被 leader 作废${why}。立即停手，不要提交。`,
-      `把你为它做的、还没提交的改动还原掉，在任务路径所在的仓库里运行（还原改过的文件、删掉新建的文件）：`,
-      `git checkout -- ${task.paths.join(' ')} ; git clean -fd -- ${task.paths.join(' ')}`,
-      '（多仓库时用 git -C <仓库目录>，路径写成相对那个仓库的）。只还原这些路径，别的路径不要动；git checkout 报「pathspec did not match」说明那是新建的目录，忽略即可。',
+      '把你为这个任务做的改动还原掉，**只动你自己改过的文件**（同一目录里可能有别的 worker 正在改的文件，不要碰）：',
+      '- 你改过的已有文件：逐个 git checkout -- <文件路径>',
+      '- 你新建的文件：逐个删掉',
+      '不要用 git clean、git stash，也不要对整个目录 git checkout。没有改动就跳过这一步。',
       `然后运行 ateam wait --as ${agentId} 领取下一个任务。`,
     ].join('\n');
   }

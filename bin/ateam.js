@@ -331,7 +331,7 @@ const commands = {
     const { task } = await request('POST', '/api/cancel', { id, text: positional[1] ?? '' });
     // 正在等任务的 worker 马上收到；正在写代码的，下一次调用 ateam 命令（按规则最多约 5 分钟一次）时收到
     const who = task.cancelledWhileHeld
-      ? `。${task.assignee} 手上拿着它：等待中的话马上收到作废通知，正在写代码的话下一次调用 ateam 命令时收到（一般几分钟内）。它会停手、不提交，并把已做的改动收进 git stash（git stash list 里能找到「ateam: ${task.id} 已作废」，需要时可以恢复）`
+      ? `。${task.assignee} 手上拿着它：等待中的话马上收到作废通知，正在写代码的话下一次调用 ateam 命令时收到（一般几分钟内）。它会停手、不提交，并还原已做的改动`
       : '';
     return `已作废 ${task.id}。它不再派发，也不计入进度和汇报${who}。`;
   },

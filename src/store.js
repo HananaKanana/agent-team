@@ -310,9 +310,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     return [
       `你手上的任务 ${task.id} 已被 leader 作废${why}。立即停手，不要提交。`,
-      `把你为它做的、还没提交的改动收起来（保留在 git stash 里，以后需要还能找回），在任务路径所在的仓库里运行：`,
-      `git stash push -u -m "ateam: ${task.id} 已作废" -- ${task.paths.join(' ')}`,
-      '（多仓库时用 git -C <仓库目录>，路径写成相对那个仓库的）。没有改动就跳过这一步。',
+      `把你为它做的、还没提交的改动还原掉，在任务路径所在的仓库里运行（还原改过的文件、删掉新建的文件）：`,
+      `git checkout -- ${task.paths.join(' ')} ; git clean -fd -- ${task.paths.join(' ')}`,
+      '（多仓库时用 git -C <仓库目录>，路径写成相对那个仓库的）。只还原这些路径，别的路径不要动；git checkout 报「pathspec did not match」说明那是新建的目录，忽略即可。',
       `然后运行 ateam wait --as ${agentId} 领取下一个任务。`,
     ].join('\n');
   }
@@ -728,7 +728,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const agent = task.assignee && findAgent(task.assignee);
     task.cancelledWhileHeld = !!(agent && agent.currentTask === task.id);
     // worker 正拿着这个任务：记一条作废通知。它下一次调用任何 ateam 命令（wait、progress、submit……）
-    // 都会先收到这条通知，停手并把改动收进 git stash，不会不知情地去领下一个任务
+    // 都会先收到这条通知，停手并还原改动，不会不知情地去领下一个任务
     if (task.cancelledWhileHeld) {
       agent.cancelNotice = { taskId: task.id, wasWorking: task.status === 'working' || task.status === 'asking' };
     }

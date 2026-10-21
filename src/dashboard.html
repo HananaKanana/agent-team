@@ -649,7 +649,7 @@ function pendingCancel(a) {
 }
 
 function stopPrompt(a, t) {
-  return `停下。你手上的任务 ${t.id} 已被作废，立即停手，不要提交。在任务路径所在的仓库里运行 git stash push -u -m "ateam: ${t.id} 已作废" -- ${t.paths.join(' ')}（没有改动就跳过；多仓库时用 git -C <仓库目录>），然后运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。`;
+  return `停下。你手上的任务 ${t.id} 已被作废，立即停手，不要提交。把你为它做的改动还原掉：在任务路径所在的仓库里运行 git checkout -- ${t.paths.join(' ')} ; git clean -fd -- ${t.paths.join(' ')}（只动这些路径；checkout 报 pathspec did not match 可以忽略；多仓库时用 git -C <仓库目录>），然后运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。`;
 }
 
 function wakePrompt(a) {

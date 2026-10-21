@@ -131,6 +131,9 @@ export function formatWait(result, agentId, waiting, round = 0) {
       '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
     ].join('\n');
   }
+  if (result.kind === 'cancelled') {
+    return `# 任务 ${result.task?.id ?? ''} 已作废\n\n${result.text}`;
+  }
   if (result.kind === 'dismissed') {
     return [
       '# 已下线',

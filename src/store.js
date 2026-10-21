@@ -294,6 +294,29 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return agent;
   }
 
+  function takeCancelNotice(agent) {
+    const { taskId, wasWorking } = agent.cancelNotice;
+    delete agent.cancelNotice;
+    changed();
+    return { task: state.tasks.find((t) => t.id === taskId), wasWorking };
+  }
+
+  // 作废通知的文字：命令报错和 wait 输出共用
+  function cancelMessage(task, wasWorking, agentId) {
+    if (!task) return `你手上的任务已被作废。请运行 ateam wait --as ${agentId} 领取下一个任务。`;
+    const why = task.cancelReason ? `（原因：${task.cancelReason}）` : '';
+    if (!wasWorking) {
+      return `你提交的任务 ${task.id} 已被 leader 作废${why}，不用再等它的 review。请运行 ateam wait --as ${agentId} 领取下一个任务。`;
+    }
+    return [
+      `你手上的任务 ${task.id} 已被 leader 作废${why}。立即停手，不要提交。`,
+      `把你为它做的、还没提交的改动收起来（保留在 git stash 里，以后需要还能找回），在任务路径所在的仓库里运行：`,
+      `git stash push -u -m "ateam: ${task.id} 已作废" -- ${task.paths.join(' ')}`,
+      '（多仓库时用 git -C <仓库目录>，路径写成相对那个仓库的）。没有改动就跳过这一步。',
+      `然后运行 ateam wait --as ${agentId} 领取下一个任务。`,
+    ].join('\n');
+  }
+
   // 「可能停了」的 worker 又有了动静：恢复正常
   function clearStale(agent) {
     if (!agent.stale) return;
@@ -339,6 +362,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // spec §4.1：返回 { kind, task, delivery? } 或 null（asking 中、或没有可派发的任务）
   function nextFor(agentId) {
     const agent = touch(agentId);
+
+    // 手上的任务刚被作废：先告诉它，再谈领新任务
+    if (agent.cancelNotice && !agent.currentTask) {
+      const notice = takeCancelNotice(agent);
+      return { kind: 'cancelled', task: notice.task, wasWorking: notice.wasWorking, text: cancelMessage(notice.task, notice.wasWorking, agent.id) };
+    }
 
     // 已安排下线、手上没有任务 → 正式下线（手上有任务的，等任务通过、作废或收回后再下线）
     if (agent.dismiss && !agent.currentTask) {
@@ -540,9 +569,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function workingTaskOf(agentId) {
     const agent = touch(agentId);
     if (!agent.currentTask) {
-      const cancelled = state.tasks.find((t) => t.assignee === agent.id && t.status === 'cancelled' && t.cancelledWhileHeld);
-      if (cancelled) {
-        throw new AteamError('BAD_STATE', `你手上的任务 ${cancelled.id} 已被 leader 作废${cancelled.cancelReason ? `（${cancelled.cancelReason}）` : ''}。停止这个任务，不要提交。请运行 ateam wait --as ${agent.id} 领取下一个任务。`);
+      if (agent.cancelNotice) {
+        const notice = takeCancelNotice(agent);
+        throw new AteamError('BAD_STATE', cancelMessage(notice.task, notice.wasWorking, agent.id));
       }
       throw new AteamError('BAD_STATE', `你当前没有进行中的任务。请运行 ateam wait --as ${agent.id} 领取任务。`);
     }
@@ -698,6 +727,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     const agent = task.assignee && findAgent(task.assignee);
     task.cancelledWhileHeld = !!(agent && agent.currentTask === task.id);
+    // worker 正拿着这个任务：记一条作废通知。它下一次调用任何 ateam 命令（wait、progress、submit……）
+    // 都会先收到这条通知，停手并把改动收进 git stash，不会不知情地去领下一个任务
+    if (task.cancelledWhileHeld) {
+      agent.cancelNotice = { taskId: task.id, wasWorking: task.status === 'working' || task.status === 'asking' };
+    }
     releaseAgentOf(task);
     task.status = 'cancelled';
     task.handoff = false;

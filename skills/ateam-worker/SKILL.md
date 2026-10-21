@@ -35,14 +35,6 @@ description: 作为 agent-team 的 worker 加入团队、领取并完成开发�
 
 角色由用户在开场时告诉你（比如 frontend、backend）。用户没说就先问用户，不要自己猜。
 
-用户的开场话里通常写好了编号（比如「backend-4：使用 ateam-worker skill，角色 backend，编号 backend-4」），**一定要用 `--id` 带上这个编号**，这样用户的窗口标题和你的编号对得上：
-
-```
-ateam join --role backend --id backend-4
-```
-
-开场话里没有编号，就不带 `--id`：
-
 ```
 ateam join --role <角色>
 ```
@@ -53,7 +45,7 @@ ateam join --role <角色>
 ateam join --role frontend --name 账号A
 ```
 
-输出里有你的 worker 编号，比如 `frontend-1`。记住它，之后**每条命令都要带 `--as <编号>`**。如果输出说编号对不上、分配了新编号，用新编号，并告诉用户一句「这个窗口的编号是 xxx」。
+输出里有你的 worker 编号，比如 `frontend-1`。记住它，之后**每条命令都要带 `--as <编号>`**。
 
 ## 2. 主循环
 

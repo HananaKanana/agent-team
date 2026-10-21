@@ -199,7 +199,7 @@ const commands = {
       : `已加入团队。你的 worker 编号是 **${agent.id}**（角色 ${agent.role}${named}）。之后每条命令都要带 --as ${agent.id}。`;
     return [
       head,
-      ...(agent.refused ? [`（${agent.refused}，所以分配了新编号 ${agent.id}。请告诉用户：这个窗口的编号是 ${agent.id}，方便用户给窗口改名。）`] : []),
+      ...(agent.refused ? [`（${agent.refused}，所以分配了新编号 ${agent.id}，之后用新编号。）`] : []),
       '',
       `下一步：ateam wait --as ${agent.id}`,
     ].join('\n');

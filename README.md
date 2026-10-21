@@ -164,18 +164,14 @@ leader 在线时，看板顶部最前面是绿点「leader 在线」。
 
 ### 4. 开 worker
 
-按 leader 说的角色和数量开 WorkBuddy 窗口，**工作目录选同一个项目**，把看板「使用说明 → worker」里对应角色的那句话发过去。那句话开头就是这个窗口的编号：
+按 leader 说的角色和数量开 WorkBuddy 窗口，**工作目录选同一个项目**，分别对它们说：
 
 ```
-backend-4：使用 ateam-worker skill，角色 backend，编号 backend-4
-项目目录：……
+使用 ateam-worker skill，角色 backend
+使用 ateam-worker skill，角色 frontend
 ```
 
-worker 会用这个编号加入（`ateam join --id backend-4`），而 agent 窗口的标题一般取自第一句话，所以窗口列表里能直接看出哪个窗口是哪个 worker；标题没带上的话，手动给窗口改个名。每加入一个 worker，看板上的编号自动加一，开下一个窗口时记得重新复制。窗口掉线后重连，沿用原来的编号，标题不用改。
-
-不用看板也行，直接说「使用 ateam-worker skill，角色 backend」，编号由服务分配。
-
-同一个角色可以开多个窗口。还想加个好记的名字，就在后面加上，看板和 `ateam status` 上会显示「账号A（frontend-2）」：
+同一个角色可以开多个窗口。想区分它们，就在后面加个名字，看板和 `ateam status` 上会显示「账号A（frontend-2）」：
 
 ```
 使用 ateam-worker skill，角色 frontend，名字 账号A

@@ -120,7 +120,12 @@ async function commitInRepo(top, paths, message) {
       await git(top, ['add', '-A', '--', p]);
       valid.push(p);
     } catch (err) {
-      if (/did not match any files|are ignored by one of your \.gitignore/.test(err.stderr ?? '')) continue;
+      // 找不到文件不一定是没改动：worker 用 git rm 删掉的路径，磁盘和暂存区里都没有了，git add 会报
+      // did not match any files，但删除已经暂存好了。照样留下，交给下面的 diff --cached 判断有没有暂存改动
+      if (/did not match any files|are ignored by one of your \.gitignore/.test(err.stderr ?? '')) {
+        valid.push(p);
+        continue;
+      }
       throw gitError('git add', err);
     }
   }

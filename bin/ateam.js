@@ -24,7 +24,7 @@ const USAGE = `用法：ateam <命令> [参数]
 worker
   ateam join --role <角色> [--id <编号>] [--name <名字>]
   ateam wait --as <ID> [--timeout 90] [--round N]
-  ateam progress --as <ID> "<笔记>"
+  ateam progress --as <ID> "<笔记>" [--expect <分钟>]
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
 
@@ -215,8 +215,9 @@ const commands = {
   async progress({ flags, positional }) {
     const as = requireAs(flags);
     const text = requireArg(positional[0], '进度笔记', `ateam progress --as ${as} "改完了 web/login.js"`);
-    const { task } = await request('POST', '/api/progress', { as, text });
-    return `已记录 ${task.id} 的进度。继续工作；完成后运行：ateam submit --as ${as} "<做了什么、怎么验证的>"`;
+    const { task } = await request('POST', '/api/progress', { as, text, expect: flags.expect });
+    const busy = flags.expect ? `接下来 ${Math.min(Number(flags.expect), 180)} 分钟内不调用 ateam 也不会被当成停住。` : '';
+    return `已记录 ${task.id} 的进度。${busy}继续工作；完成后运行：ateam submit --as ${as} "<做了什么、怎么验证的>"`;
   },
 
   async ask({ flags, positional }) {

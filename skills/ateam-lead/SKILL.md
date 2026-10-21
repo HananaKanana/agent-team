@@ -67,7 +67,9 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 |---|---|
 | `submitted` | review（第 4 节） |
 | `question` | `ateam answer T3 "<答复>"`。答不了就问用户 |
-| （用户说某个 worker 窗口没了） | `ateam reclaim T3`：立即收回任务交给同角色的其他 worker 接手，不必等租约过期；原 worker 会被标记掉线 |
+| `worker_stale` | worker 手上有任务，但 15 分钟没动静：可能在跑很长的命令，也可能窗口停了。**任务不会自动转手，你也不要自己收回。** 问用户那个窗口还在不在（看板上也会弹框问用户）。还在就不用管；停住了就请用户发叫醒话 |
+| `worker_back` | 它又有动静了，或用户确认窗口还在，了解即可 |
+| （用户确认某个 worker 窗口没了） | `ateam reclaim T3`：收回任务交给同角色的其他 worker 接手；原 worker 会被标记掉线。**只在用户确认后做** |
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |

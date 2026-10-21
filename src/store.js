@@ -7,6 +7,9 @@ export function emptyState() {
   return { seq: { job: 0, task: 0, event: 0 }, jobs: [], tasks: [], agents: [], events: [] };
 }
 
+// leaseMs：多久没动静算「可能停了」。手上有进行中任务的 worker 只标记、提醒用户，任务不动，
+// 用户确认窗口没了（看板上点「换人接手」，或 leader 问过用户后 ateam reclaim）才转手；
+// 空闲（手上没有进行中任务）的 worker 到时直接判掉线，没有任务要转手。
 export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, idleMs = 3 * 60 * 1000, onChange = () => {} } = {}) {
   state = state ?? emptyState();
   const changed = () => onChange();
@@ -264,11 +267,38 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!agent || agent.status !== 'online') {
       const role = agent?.role ?? '<角色>';
       const keep = agent ? ` --id ${agent.id}` : '';
-      throw new AteamError('LEASE_LOST', `你的租约已失效，任务已被收回。请重新运行 ateam join --role ${role}${keep}（沿用原编号）`);
+      // 原来手上的任务已经被别人接手：明确告诉它别再改，免得两个人同时改同一批文件
+      const taken = agent && state.tasks.find((t) => t.prevAssignee === agent.id && t.assignee && t.assignee !== agent.id
+        && ['working', 'asking', 'submitted'].includes(t.status));
+      const lost = taken
+        ? `你被判定掉线，手上的任务 ${taken.id} 已交给 ${taken.assignee} 接手。**不要再改 ${taken.id} 的文件**（${taken.paths.join('、')}），也不要提交它。`
+        : '你的租约已失效（被判定掉线）。';
+      throw new AteamError('LEASE_LOST', `${lost}请重新运行 ateam join --role ${role}${keep}（沿用原编号）；如果你掉线前的任务还没人接手，会还给你。`);
     }
     agent.lastSeenAt = now();
+    clearStale(agent);
     changed();
     return agent;
+  }
+
+  // 用户确认「窗口还在」：再给它一个租约周期，期间不再提醒
+  function keepWaiting(agentId) {
+    const agent = findAgent(agentId);
+    if (!agent || agent.status !== 'online') throw new AteamError('NOT_FOUND', `worker ${agentId} 不在线。`);
+    agent.lastSeenAt = now();
+    if (agent.stale) {
+      delete agent.stale;
+      emit('worker_back', { agentId: agent.id, taskId: agent.currentTask ?? undefined, text: `用户确认 ${agent.id} 的窗口还在，继续等它` });
+    }
+    changed();
+    return agent;
+  }
+
+  // 「可能停了」的 worker 又有了动静：恢复正常
+  function clearStale(agent) {
+    if (!agent.stale) return;
+    delete agent.stale;
+    emit('worker_back', { agentId: agent.id, taskId: agent.currentTask ?? undefined, text: `${agent.id} 又有动静了，恢复正常` });
   }
 
   // ---------- 派发 ----------
@@ -331,11 +361,26 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
 
     // 规则 3：领取新任务，派发顺序见 dispatchOrder
+    // 掉线前自己在做、还没被别人领走的任务，优先还给自己
+    const own = (t) => t.handoff && t.prevAssignee === agent.id;
     const candidates = state.tasks
       .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && depsMet(t))
-      .sort(dispatchOrder);
+      .sort((a, b) => (own(b) - own(a)) || dispatchOrder(a, b));
     const task = candidates[0];
     if (!task) return null;
+
+    if (own(task)) {
+      task.status = 'working';
+      task.assignee = agent.id;
+      task.handoff = false;
+      agent.currentTask = task.id;
+      const delivery = task.pendingDelivery ?? undefined;
+      task.pendingDelivery = null;
+      addHistory(task, 'claimed', agent.id, '重新加入，拿回掉线前自己在做的任务');
+      emit('claimed', { taskId: task.id, agentId: agent.id, text: `${agent.id} 重新加入，拿回了 ${task.id}` });
+      changed();
+      return { kind: 'own', task, delivery };
+    }
 
     const isHandoff = task.handoff;
     task.status = 'working';
@@ -511,10 +556,22 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return { agent, task };
   }
 
-  function progress(agentId, text) {
+  // expectMin：接下来要跑一个很长的命令（导入数据、全量构建……），预计多少分钟不会调用 ateam。
+  // 这段时间算作有动静，不提醒、不收回；最多 180 分钟。
+  function progress(agentId, text, expectMin) {
     text = requireText(text, '进度笔记');
     const { agent, task } = workingTaskOf(agentId);
-    addHistory(task, 'progress', agent.id, text);
+    const min = Number(expectMin);
+    if (expectMin != null && expectMin !== '' && (!Number.isFinite(min) || min <= 0)) {
+      throw new AteamError('INVALID', '--expect 必须是正数（分钟）。');
+    }
+    if (min > 0) {
+      const capped = Math.min(min, 180);
+      agent.busyUntil = now() + capped * 60 * 1000;
+      addHistory(task, 'progress', agent.id, `${text}（预计 ${capped} 分钟不调用 ateam）`);
+    } else {
+      addHistory(task, 'progress', agent.id, text);
+    }
     changed();
     return task;
   }
@@ -703,9 +760,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (agent) {
       agent.status = 'offline';
       agent.currentTask = null;
+      delete agent.stale;
     }
     task.status = 'pending';
     task.handoff = true;
+    task.prevAssignee = task.assignee;
     task.assignee = null;
     reason = String(reason ?? '').trim();
     addHistory(task, 'handoff', 'lead', `收回 ${who} 手上的任务，等待接手${reason ? `：${reason}` : ''}`);
@@ -727,21 +786,40 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return count;
   }
 
+  // 租约扫描：
+  // - 手上有进行中任务的 worker：没动静超过 leaseMs 只标记「可能停了」并提醒（它可能在跑很长的命令），
+  //   任务一直留在它手上，等用户确认后才收回（reclaim）。worker 用 progress --expect 报备过的时长也算有动静。
+  // - 其它 worker（空闲、或任务已提交等 review）：超过 leaseMs 直接判掉线，没有任务要转手。
   function sweep(isWaiting) {
     let count = 0;
     for (const agent of state.agents) {
-      if (agent.status !== 'online') continue;
-      if (now() - agent.lastSeenAt <= leaseMs || isWaiting(agent.id)) continue;
+      if (agent.status !== 'online' || isWaiting(agent.id)) continue;
+      const seen = Math.max(agent.lastSeenAt, agent.busyUntil ?? 0);
+      const quiet = now() - seen;
+      if (quiet <= leaseMs) continue;
+      const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
+      const active = task && (task.status === 'working' || task.status === 'asking');
+      if (active) {
+        if (!agent.stale) {
+          agent.stale = true;
+          emit('worker_stale', {
+            agentId: agent.id, taskId: task.id,
+            text: `${agent.id} 已经 ${Math.round(quiet / 60000)} 分钟没动静（手上 ${task.id}），可能在跑很长的命令，也可能窗口停了。任务仍留在它手上，等用户确认`,
+          });
+          count += 1;
+        }
+        continue;
+      }
       agent.status = 'offline';
+      delete agent.stale;
       count += 1;
       let reclaimed = null;
       if (agent.currentTask) {
-        const task = state.tasks.find((t) => t.id === agent.currentTask);
-        if (task && (task.status === 'working' || task.status === 'asking')) {
+        if (active) {
           task.status = 'pending';
           task.handoff = true;
+          task.prevAssignee = agent.id;
           task.assignee = null;
-          addHistory(task, 'handoff', 'system', `${agent.id} 掉线，任务退回待领取`);
           reclaimed = task.id;
         }
         agent.currentTask = null;
@@ -765,6 +843,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const agent = findAgent(agentId);
     if (!agent || agent.status !== 'online' || !(ts > agent.lastSeenAt)) return false;
     agent.lastSeenAt = Math.min(ts, now());
+    clearStale(agent);
     changed();
     return true;
   }
@@ -794,7 +873,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, setPriority, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, checkIdle, report, sweep, noteActivity,
+    acceptJobs, setPriority, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
   };
 }

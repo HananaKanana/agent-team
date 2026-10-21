@@ -200,6 +200,16 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .btn.warn:hover { background: var(--rework); filter: brightness(1.08); }
 
 /* 汇报阅读页：全屏，正文居中 */
+.modal-back { position: fixed; inset: 0; z-index: 30; background: rgba(15, 25, 20, .35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal-back[hidden] { display: none; }
+.modal {
+  width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(15, 25, 20, .3); padding: 18px 20px;
+}
+.modal h3 { margin: 0 0 4px; font-size: 16px; }
+.modal .stale-item + .stale-item { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+.modal .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .report-page { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; }
 .report-page[hidden] { display: none; }
 .report-top {
@@ -347,6 +357,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
+<div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
 
 <script>
 'use strict';
@@ -1205,6 +1216,52 @@ function renderNeeds() {
   box.hidden = false;
 }
 
+// ---------- worker 可能停了：弹框请用户确认 ----------
+// 手上有进行中任务、但很久没动静的 worker（服务标记 stale）。任务不会自动转手，
+// 用户确认「窗口没了」才收回交给别人；确认「还在」就继续等它。点「稍后」只是这次先不弹。
+const staleLater = new Set();
+let staleError = null;
+
+async function staleAction(path, body) {
+  try {
+    const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const out = await res.json();
+    staleError = out.ok ? null : out.message;
+  } catch { staleError = '连不上 ateam 服务。'; }
+  await poll();
+  renderStaleDialog();
+}
+
+function staleAgents() {
+  return data.state.agents.filter((a) => a.status === 'online' && a.stale && a.currentTask);
+}
+
+function renderStaleDialog() {
+  const box = document.getElementById('stale-dialog');
+  for (const id of [...staleLater]) if (!staleAgents().some((a) => a.id === id)) staleLater.delete(id);
+  const list = staleAgents().filter((a) => !staleLater.has(a.id));
+  if (!list.length) { box.hidden = true; box.replaceChildren(); return; }
+  const items = list.map((a) => {
+    const t = data.state.tasks.find((x) => x.id === a.currentTask);
+    return el('div', { class: 'stale-item' },
+      el('p', null, el('b', null, agentLabel(a.id)), `（${a.role}）已经 ${Math.round((Date.now() - a.lastSeenAt) / 60000)} 分钟没动静，手上是 `,
+        el('b', null, `${a.currentTask}${t ? ` ${t.title}` : ''}`), '。'),
+      el('p', { class: 'hint' }, '它可能在跑很长的命令（导入数据、构建），也可能窗口停了或 token 用完了。去它的 agent 窗口看一眼：'),
+      el('div', { class: 'actions' },
+        el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); staleAction('/api/agents/still-there', { id: a.id }); } }, '还在干活，继续等'),
+        el('button', { class: 'btn warn', onclick: (e) => { e.stopPropagation(); staleAction('/api/reclaim', { id: a.currentTask, text: '用户确认原窗口没了' }); } }, '窗口没了，换人接手'),
+        el('button', { class: 'btn ghost', onclick: (e) => { e.stopPropagation(); staleLater.add(a.id); renderStaleDialog(); } }, '稍后再说')),
+      el('p', { class: 'hint' }, '窗口还在但停住了：把下面这句叫醒话发给它，不用换人。'),
+      promptBlock(wakePrompt(a), renderStaleDialog));
+  });
+  fill(box, el('div', { class: 'modal', onclick: (e) => e.stopPropagation() },
+    el('h3', null, list.length > 1 ? `${list.length} 个 worker 可能停了` : 'worker 可能停了'),
+    el('p', { class: 'hint' }, '任务还在它手上，不会自动交给别人。你确认之后才会换人。'),
+    items,
+    staleError ? el('p', { class: 'hint' }, staleError) : null));
+  box.hidden = false;
+}
+
 function render() {
   if (!data) return;
   renderNeeds();
@@ -1214,6 +1271,7 @@ function render() {
   renderMain();
   renderDrawer(false);
   renderReport();
+  renderStaleDialog();
 }
 
 function openReport() {
@@ -1291,6 +1349,11 @@ function attentionItems() {
     items.push({ key: `needs:${role.toLowerCase()}`, text: `${role} 缺 worker`, body: `${role} 的任务没人做，需要开一个 ${role} worker` });
   }
   if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
+  for (const a of data.state.agents) {
+    if (a.status === 'online' && a.stale && a.currentTask) {
+      items.push({ key: `quiet:${a.id}`, text: `${a.id} 可能停了`, body: `${a.id} 很久没动静（手上 ${a.currentTask}），请确认窗口还在不在` });
+    }
+  }
   const busy = data.state.jobs.some((j) => j.status === 'planning' || j.status === 'active');
   if (busy && data.leader && !data.leader.online) items.push({ key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
   return items;
@@ -1406,7 +1469,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (!view.task) return;
-  if (e.target.closest('#drawer, .card')) return;
+  if (e.target.closest('#drawer, .card, #stale-dialog')) return;
   closeDrawer();
 });
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });

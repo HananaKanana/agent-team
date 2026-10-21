@@ -19,7 +19,7 @@ const MAX_HOLD_SEC = 110;
 const LEADER_FRESH_MS = 3 * 60 * 1000;
 const MAX_RULES = 20 * 1024;
 // 新领到、接手、继续的任务附上项目规则；打回意见和答复只是补充消息，不重复附
-const RULES_KINDS = new Set(['task', 'handoff', 'resume']);
+const RULES_KINDS = new Set(['task', 'handoff', 'resume', 'own']);
 
 // 服务端代码指纹：src/*.js 和 bin/ateam.js 的内容哈希。启动时记一份，之后比对，
 // 代码被更新（git pull、改了代码）而服务没重启时，看板和 status 提示重启。
@@ -227,7 +227,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
     'POST /api/join': (b) => ({ agent: store.join(b.role, b.name, b.id) }),
-    'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text) }),
+    'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text, b.expect) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),
     'POST /api/submit': (b) => serial(async () => {
       const task = store.taskForSubmit(b.as);
@@ -280,6 +280,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { dismissed };
     },
+    'POST /api/agents/still-there': (b) => ({ agent: store.keepWaiting(String(b.id ?? '')) }),
     'POST /api/agents/keep': (b) => ({ kept: store.keepAgents(b.ids) }),
     'POST /api/reclaim': (b) => {
       const { task, agentId } = store.reclaim(requireId(b), b.text ?? '');

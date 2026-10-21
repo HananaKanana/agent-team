@@ -155,6 +155,11 @@ export function formatWait(result, agentId, waiting, round = 0) {
         + '上一位 worker 中途掉线。先阅读下方历史，再在任务路径所在的 git 仓库里运行 git log --oneline -5 和 git status 了解现状（多仓库时用 git -C <仓库目录> ...），在已有改动基础上继续，不要从头做起。\n\n'
         + `${formatTask(task)}${deliverySection(delivery)}`;
       break;
+    case 'own':
+      out = `# 继续任务 ${title}（你掉线前在做的）\n\n`
+        + '你刚才被判定掉线，这个任务退回过待领取，没人接手，现在还给你。先在任务路径所在的仓库里运行 git status，确认改动还和你离开时一样，再接着做。\n\n'
+        + `${formatTask(task)}${deliverySection(delivery)}`;
+      break;
     case 'rejected':
       out = `# 打回 ${task.id}（第 ${task.rejectCount} 次）\n\n`
         + `## 修改意见\n\n${delivery?.text ?? ''}\n\n逐条修改后再次提交。\n\n`
@@ -182,6 +187,7 @@ const EVENT_HINT = {
   leave_request: (e) => (e.last
     ? `它是 ${e.role} 角色最后一个 worker，下线需要你和用户都同意：近期不会再有 ${e.role} 任务的话，先问用户，用户同意后 ateam dismiss ${e.agentId} --user-approved；要留着就不用管，它会继续等待`
     : `近期不会再有 ${e.role} 任务的话：ateam dismiss ${e.agentId}；要留着就不用管，它会继续等待`),
+  worker_stale: (e) => `不要自己收回。问用户 ${e.agentId} 的窗口还在不在（看板上也会弹框问用户）：还在就不用管；用户确认窗口没了，才 ateam reclaim ${e.taskId}`,
   worker_offline: (e) => (e.taskId ? `任务 ${e.taskId} 已退回待领取；用 ateam status 确认，需要时提醒用户开新的 worker 窗口` : ''),
 };
 
@@ -235,7 +241,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
   const agents = state.agents.filter((a) => !a.hidden);
   if (agents.length) {
     for (const a of agents) {
-      const online = a.status === 'online' ? '在线' : (a.dismissed ? '已下线' : '掉线');
+      const online = a.status === 'online' ? (a.stale ? '在线，但很久没动静（可能停了，等用户确认）' : '在线') : (a.dismissed ? '已下线' : '掉线');
       const task = (a.currentTask ? `，当前任务 ${a.currentTask}` : '，空闲') + (a.dismiss ? '，做完后下线' : '');
       const who = a.name ? `${a.name}（${a.id}）` : a.id;
       lines.push(`- ${who}，角色 ${a.role}，${online}${task}，上次心跳 ${ago(a.lastSeenAt, now)}`);

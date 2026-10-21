@@ -20,7 +20,7 @@
 | leader | 带团队的那个 agent（Claude Code，加载 `ateam-lead` skill）。你只和它对话：它拆任务、派任务、review、回答提问、写汇报 |
 | worker | 干活的 agent（加载 `ateam-worker` skill）。领任务、写代码、提交。一个 worker 就是一个 agent 窗口，同一时间只做一个任务 |
 | 角色 | worker 的工作分类，比如 frontend、backend、test。任务只派给同角色的 worker。按「做什么活」起名，不要按窗口起名 |
-| 编号 | worker 加入时服务分配的唯一身份，比如 `frontend-2`（角色 + 序号。序号按角色递增、不会复用：掉线后重新加入会拿到新序号）。worker 的每条命令都带 `--as <编号>` |
+| 编号 | worker 加入时服务分配的唯一身份，比如 `frontend-2`（角色 + 序号。序号按角色递增，不会分给别的窗口；同一个窗口掉线后用原编号重新加入，编号不变）。worker 的每条命令都带 `--as <编号>` |
 | 名字 | 可选的好记名称，比如「账号A」，加入时用 `--name` 指定，只用于显示；身份仍以编号为准 |
 
 **工作单位**

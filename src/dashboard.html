@@ -81,6 +81,18 @@ button.worker:hover { border-color: var(--muted); }
 .helper-btn { margin-left: auto; }
 .btn.attention { border-color: var(--rework); color: var(--rework); font-weight: 600; }
 .btn.attention[hidden] { display: none; }
+.att-list {
+  position: fixed; top: 56px; right: 120px; z-index: 16; width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 80px); overflow-y: auto; scrollbar-width: thin;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 25, 20, .22); padding: 6px;
+}
+.att-list[hidden] { display: none; }
+.att-item {
+  display: block; width: 100%; text-align: left; cursor: pointer; padding: 8px 10px;
+  border: none; border-radius: 6px; background: none; font-size: 13px; line-height: 1.5;
+}
+.att-item:hover { background: var(--sunken); }
 .btn.attention + .helper-btn, #notify-btn + .helper-btn { margin-left: 0; }
 #notify-btn[hidden] { display: none; }
 /* 提示词面板：顶部右侧弹出 */
@@ -355,6 +367,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <main id="main"></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
+<div class="att-list" id="attention-list" hidden role="menu" aria-label="需要你处理的事"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 <div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
@@ -1352,7 +1365,7 @@ let lastBadge = null;
 function attentionItems() {
   if (!data) return [];
   const items = [];
-  for (const j of data.state.jobs) {
+  for (const j of data.state.jobs.slice().reverse()) {
     if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待你验收`, body: `${j.id} ${j.title} 待你验收` });
   }
   for (const role of rolesNeedingWorkers().keys()) {
@@ -1442,6 +1455,7 @@ function renderAttention() {
   setBadge(items.length ? String(items.length) : '', '#d9534f');
   checkNotify(items);
   renderNotifyButton();
+  if (attentionOpen) renderAttentionList();
   const btn = document.getElementById('attention');
   if (!items.length) { btn.hidden = true; return; }
   btn.hidden = false;
@@ -1475,12 +1489,14 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
   if (view.report) closeReport();
   else if (view.task) closeDrawer();
 });
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
+  if (attentionOpen && !e.target.closest('#attention, #attention-list')) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (!view.task) return;
   if (e.target.closest('#drawer, .card, #stale-dialog')) return;
@@ -1488,24 +1504,50 @@ document.addEventListener('click', (e) => {
 });
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });
 
-// 「需要你处理」：跳到第一件事——待验收的需求、缺 worker 的提示条、或 leader 的连接说明
-document.getElementById('attention').addEventListener('click', (e) => {
-  e.stopPropagation();
-  // 还在做已作废任务的 worker：打开它的卡片，上面有叫停的话
-  const stopping = data.state.agents.find((a) => pendingCancel(a));
-  if (stopping) { helper = { open: true, focus: stopping.id }; renderHelper(); return; }
-  const job = data.state.jobs.find((j) => j.status === 'awaiting_acceptance');
-  if (job) {
-    view = { job: job.id, task: null, report: false };
+// 「需要你处理」：点开一个列表，每件事一行，点哪件就去处理哪件
+let attentionOpen = false;
+
+function goAttention(key) {
+  attentionOpen = false;
+  renderAttentionList();
+  const [kind, id] = key.split(':');
+  if (kind === 'accept') {
+    view = { job: id, task: null, report: false };
     saveView();
     render();
     document.getElementById('main').scrollTop = 0;
-    return;
+  } else if (kind === 'needs') {
+    showPrompts = true;
+    render();
+    document.getElementById('needs').scrollIntoView({ block: 'nearest' });
+  } else if (kind === 'leader') {
+    helper = { open: true, focus: null, tab: 'lead' };
+    renderHelper();
+  } else if (kind === 'quiet') {
+    staleLater.delete(id);
+    renderStaleDialog();
+  } else if (kind === 'cancel') {
+    helper = { open: true, focus: id };
+    renderHelper();
   }
-  if (rolesNeedingWorkers().size) { document.getElementById('needs').scrollIntoView({ block: 'nearest' }); return; }
-  if (data.stale) return; // 顶部的黄色提示条已经说明了怎么做
-  helper = { open: true, focus: null, tab: 'lead' };
-  renderHelper();
+  // stale（服务需要重启）：顶部黄色提示条已经写了怎么做
+}
+
+function renderAttentionList() {
+  const box = document.getElementById('attention-list');
+  const items = attentionOpen ? attentionItems() : [];
+  if (!items.length) { attentionOpen = false; box.hidden = true; box.replaceChildren(); return; }
+  fill(box, items.map((i) => el('button', {
+    type: 'button', class: 'att-item',
+    onclick: (e) => { e.stopPropagation(); goAttention(i.key); },
+  }, i.body)));
+  box.hidden = false;
+}
+
+document.getElementById('attention').addEventListener('click', (e) => {
+  e.stopPropagation();
+  attentionOpen = !attentionOpen;
+  renderAttentionList();
 });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();

@@ -81,18 +81,12 @@ button.worker:hover { border-color: var(--muted); }
 .helper-btn { margin-left: auto; }
 .btn.attention { border-color: var(--rework); color: var(--rework); font-weight: 600; }
 .btn.attention[hidden] { display: none; }
-.att-list {
-  position: fixed; top: 56px; right: 120px; z-index: 16; width: min(420px, calc(100vw - 32px));
-  max-height: calc(100vh - 80px); overflow-y: auto; scrollbar-width: thin;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(15, 25, 20, .22); padding: 6px;
-}
-.att-list[hidden] { display: none; }
-.att-item {
-  display: block; width: 100%; text-align: left; cursor: pointer; padding: 8px 10px;
-  border: none; border-radius: 6px; background: none; font-size: 13px; line-height: 1.5;
-}
-.att-item:hover { background: var(--sunken); }
+.att-modal { width: min(640px, 100%); }
+.att-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.att-head h4 { font-size: 13px; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+.att-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.att-pick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.att-pick input { margin-top: 3px; }
 .btn.attention + .helper-btn, #notify-btn + .helper-btn { margin-left: 0; }
 #notify-btn[hidden] { display: none; }
 /* 提示词面板：顶部右侧弹出 */
@@ -367,7 +361,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <main id="main"></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
-<div class="att-list" id="attention-list" hidden role="menu" aria-label="需要你处理的事"></div>
+<div class="modal-back" id="attention-list" hidden role="dialog" aria-modal="true" aria-label="需要你处理"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 <div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
@@ -1295,6 +1289,7 @@ function render() {
   renderDrawer(false);
   renderReport();
   renderStaleDialog();
+  if (attentionOpen) renderAttentionList(); // 只在数据变化时重画，免得每次轮询都替换掉正在点的勾选框
 }
 
 function openReport() {
@@ -1455,7 +1450,6 @@ function renderAttention() {
   setBadge(items.length ? String(items.length) : '', '#d9534f');
   checkNotify(items);
   renderNotifyButton();
-  if (attentionOpen) renderAttentionList();
   const btn = document.getElementById('attention');
   if (!items.length) { btn.hidden = true; return; }
   btn.hidden = false;
@@ -1496,7 +1490,7 @@ document.addEventListener('keydown', (e) => {
 });
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
-  if (attentionOpen && !e.target.closest('#attention, #attention-list')) { attentionOpen = false; renderAttentionList(); }
+  if (attentionOpen && (e.target.id === 'attention-list' || !e.target.closest('#attention, #attention-list'))) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (!view.task) return;
   if (e.target.closest('#drawer, .card, #stale-dialog')) return;
@@ -1533,20 +1527,78 @@ function goAttention(key) {
   // stale（服务需要重启）：顶部黄色提示条已经写了怎么做
 }
 
+// 弹框：待验收的需求可以勾选后一次验收通过；其它事每件一行，点「去处理」跳过去
+let acceptPick = null;    // 勾选的需求编号；null 表示还没动过，默认全选
+let acceptConfirm = false; // 「验收通过」两步确认
+let acceptMsg = '';
+
 function renderAttentionList() {
   const box = document.getElementById('attention-list');
   const items = attentionOpen ? attentionItems() : [];
   if (!items.length) { attentionOpen = false; box.hidden = true; box.replaceChildren(); return; }
-  fill(box, items.map((i) => el('button', {
-    type: 'button', class: 'att-item',
-    onclick: (e) => { e.stopPropagation(); goAttention(i.key); },
-  }, i.body)));
+  const jobs = data.state.jobs.filter((j) => j.status === 'awaiting_acceptance').reverse();
+  if (acceptPick === null) acceptPick = new Set(jobs.map((j) => j.id));
+  for (const id of [...acceptPick]) if (!jobs.some((j) => j.id === id)) acceptPick.delete(id);
+  const others = items.filter((i) => !i.key.startsWith('accept:'));
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const picked = jobs.filter((j) => acceptPick.has(j.id));
+  const allOn = picked.length === jobs.length;
+
+  const acceptSec = jobs.length ? [
+    el('div', { class: 'att-head' },
+      el('h4', null, `待你验收（${jobs.length}）`),
+      el('button', { class: 'btn ghost sm', onclick: stop(() => { acceptPick = new Set(allOn ? [] : jobs.map((j) => j.id)); acceptConfirm = false; renderAttentionList(); }) }, allOn ? '全不选' : '全选')),
+    jobs.map((j) => {
+      const tasks = data.state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
+      const box2 = el('input', { type: 'checkbox' });
+      box2.checked = acceptPick.has(j.id);
+      box2.addEventListener('change', () => { if (box2.checked) acceptPick.add(j.id); else acceptPick.delete(j.id); acceptConfirm = false; renderAttentionList(); });
+      return el('div', { class: 'att-row' },
+        el('label', { class: 'att-pick' }, box2,
+          el('span', null, el('b', null, j.id), ` ${j.title}`, el('span', { class: 'hint' }, `　${tasks.length} 个任务，${fmtTime(j.updatedAt)} 提交汇报`))),
+        el('button', { class: 'btn ghost sm', onclick: stop(() => { attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); }) }, '看汇报'));
+    }),
+    el('div', { class: 'actions' },
+      acceptConfirm ? el('button', { class: 'btn ghost', onclick: stop(() => { acceptConfirm = false; renderAttentionList(); }) }, '取消') : null,
+      el('button', {
+        class: 'btn primary', disabled: picked.length === 0,
+        onclick: stop(async () => {
+          if (!acceptConfirm) { acceptConfirm = true; renderAttentionList(); return; }
+          acceptConfirm = false;
+          try {
+            const res = await fetch('/api/jobs/accept', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: picked.map((j) => j.id) }) });
+            const out = await res.json();
+            acceptMsg = out.ok ? `已验收通过 ${picked.length} 个需求。` : out.message;
+          } catch { acceptMsg = '连不上 ateam 服务。'; }
+          acceptPick = null;
+          await poll();
+          renderAttentionList();
+        }),
+      }, acceptConfirm ? `确认验收通过这 ${picked.length} 个` : `验收通过选中的（${picked.length}）`),
+      acceptMsg ? el('span', { class: 'hint' }, acceptMsg) : null),
+  ] : (acceptMsg ? el('p', { class: 'hint' }, acceptMsg) : null);
+
+  const otherSec = others.length ? [
+    el('div', { class: 'att-head' }, el('h4', null, `其它（${others.length}）`)),
+    others.map((i) => el('div', { class: 'att-row' },
+      el('span', null, i.body),
+      i.key === 'stale' ? el('span', { class: 'hint' }, '见页面顶部提示') : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理'))),
+  ] : null;
+
+  fill(box, el('div', { class: 'modal att-modal', onclick: (e) => e.stopPropagation() },
+    el('div', { class: 'att-head' },
+      el('h3', null, `需要你处理（${items.length}）`),
+      el('button', { class: 'btn ghost sm', onclick: stop(() => { attentionOpen = false; renderAttentionList(); }) }, '关闭')),
+    acceptSec, otherSec));
   box.hidden = false;
 }
 
 document.getElementById('attention').addEventListener('click', (e) => {
   e.stopPropagation();
   attentionOpen = !attentionOpen;
+  acceptPick = null;
+  acceptConfirm = false;
+  acceptMsg = '';
   renderAttentionList();
 });
 document.getElementById('helper-btn').addEventListener('click', (e) => {

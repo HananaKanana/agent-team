@@ -257,6 +257,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       });
       return { task, overlaps: store.overlapsFor(task) };
     },
+    'POST /api/tasks/assign': (b) => ({ task: store.assignTask(requireId(b), b.to) }),
     'POST /api/tasks/priority': (b) => ({ task: store.setPriority(requireId(b), !!b.top) }),
     'POST /api/tasks/edit': (b) => {
       const { id, ...patch } = b;

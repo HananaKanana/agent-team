@@ -340,6 +340,41 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return ((b.priority ?? 0) - (a.priority ?? 0)) || (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1)));
   }
 
+  // 用户在看板上把任务指派给某个 worker（agentId 为空表示取消指派）。只有它能领这个任务，而且它优先领。
+  // 只能指派给同角色、在线的 worker；只对还没开始的任务（待领取、已挂起）有意义。
+  function assignTask(taskId, agentId) {
+    const task = getTask(taskId);
+    if (task.status !== 'pending' && task.status !== 'held') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有待领取或已挂起的任务可以指派。`);
+    }
+    agentId = String(agentId ?? '').trim();
+    if (!agentId) {
+      if (!task.assignTo) return task;
+      addHistory(task, 'edited', 'user', `取消指派（原来指派给 ${task.assignTo}）`);
+      delete task.assignTo;
+      changed();
+      return task;
+    }
+    const agent = findAgent(agentId);
+    if (!agent || agent.status !== 'online') throw new AteamError('BAD_STATE', `worker ${agentId} 不在线，不能指派给它。`);
+    if (!sameRole(agent.role, task.role)) {
+      throw new AteamError('INVALID', `${agentId} 的角色是 ${agent.role}，任务 ${task.id} 的角色是 ${task.role}，不能指派。`);
+    }
+    task.assignTo = agent.id;
+    addHistory(task, 'edited', 'user', `指派给 ${agent.id}：只有它能领，它优先领`);
+    changed();
+    return task;
+  }
+
+  // worker 正式离开（下线）后，指派给它的任务恢复成谁都能领
+  function releaseAssignments(agentId, why) {
+    for (const t of state.tasks) {
+      if (t.assignTo !== agentId) continue;
+      delete t.assignTo;
+      if (t.status === 'pending' || t.status === 'held') addHistory(t, 'edited', 'system', `${agentId} ${why}，取消指派，谁都能领`);
+    }
+  }
+
   // 设为优先 / 取消优先。只对还没开始的任务（待领取、已挂起）有意义。
   // 优先只影响同角色 worker 领任务的先后，不会越过依赖。
   function setPriority(taskId, top) {
@@ -392,10 +427,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
     // 规则 3：领取新任务，派发顺序见 dispatchOrder
     // 掉线前自己在做、还没被别人领走的任务，优先还给自己
+    // 用户在看板上指派给别人的任务不领；指派给自己的排在最前（仅次于掉线前自己在做的）
     const own = (t) => t.handoff && t.prevAssignee === agent.id;
+    const mine = (t) => t.assignTo === agent.id;
     const candidates = state.tasks
-      .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && depsMet(t))
-      .sort((a, b) => (own(b) - own(a)) || dispatchOrder(a, b));
+      .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && depsMet(t) && (!t.assignTo || mine(t)))
+      .sort((a, b) => (own(b) - own(a)) || (mine(b) - mine(a)) || dispatchOrder(a, b));
     const task = candidates[0];
     if (!task) return null;
 
@@ -429,6 +466,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   function finishDismiss(agent) {
+    releaseAssignments(agent.id, '已下线');
     agent.status = 'offline';
     agent.dismissed = true;
     agent.hidden = true; // 正常下线，不出现在「已掉线」里
@@ -815,6 +853,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     for (const agent of state.agents) {
       if (!want.has(agent.id) || agent.status === 'online' || agent.hidden) continue;
       agent.hidden = true;
+      releaseAssignments(agent.id, '已移除');
       count += 1;
     }
     if (count > 0) changed();
@@ -863,6 +902,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         agent.dismissed = true;
         agent.hidden = true;
         delete agent.dismiss;
+        releaseAssignments(agent.id, '已下线');
       }
       emit('worker_offline', {
         agentId: agent.id, taskId: reclaimed ?? undefined,
@@ -908,7 +948,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, setPriority, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, keepWaiting, checkIdle, report, sweep, noteActivity,
+    acceptJobs, setPriority, assignTask, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
   };
 }

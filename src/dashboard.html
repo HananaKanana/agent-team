@@ -259,6 +259,11 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .tag.warn { background: var(--rework); color: #fff; }
 .tag.handoff { background: var(--asking); color: #fff; }
 .tag.urgent { background: var(--rework); color: #fff; }
+.tag.assigned { background: var(--focus); color: #fff; }
+.assign-select {
+  width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--ink); font: inherit; font-size: 13px;
+}
 
 /* 任务详情抽屉 */
 .drawer {
@@ -975,7 +980,8 @@ function card(t, lane) {
       t.assignee ? el('span', { class: 'tag', title: t.assignee }, agentName(t.assignee)) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
-      t.priority && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag urgent' }, '优先') : null));
+      t.priority && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag urgent' }, '优先') : null,
+      t.assignTo && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `→ ${agentName(t.assignTo)}`) : null));
 }
 
 function renderDrawer(fresh) {
@@ -1009,7 +1015,7 @@ function renderDrawer(fresh) {
       el('dt', null, '依赖'), el('dd', null, t.dependsOn.length ? t.dependsOn.join('、') : '无'),
       el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
-    t.status === 'pending' || t.status === 'held' ? priorityBox(t) : null,
+    t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t)] : null,
     (() => {
       // 作废了、但拿着它的 worker 还不知道：给出叫停的话
       const a = t.status === 'cancelled' && data.state.agents.find((x) => pendingCancel(x)?.id === t.id);
@@ -1057,6 +1063,40 @@ function closeDrawer() {
 
 // 设为优先 / 取消优先：只影响同角色 worker 领任务的先后
 let priorityError = null;
+// 指派：用户在看板上把任务交给某个 worker（比如难的任务交给 Claude 的窗口）。只有它能领，它优先领。
+let assignError = null;
+function assignBox(t) {
+  const role = t.role.trim().toLowerCase();
+  const online = data.state.agents.filter((a) => a.status === 'online' && a.role.trim().toLowerCase() === role);
+  const current = t.assignTo && data.state.agents.find((a) => a.id === t.assignTo);
+  const select = el('select', { class: 'assign-select' },
+    el('option', { value: '' }, '不指派（同角色谁都能领）'),
+    online.map((a) => el('option', { value: a.id }, `${agentLabel(a.id)}${a.currentTask ? `（正在做 ${a.currentTask}）` : '（空闲）'}`)),
+    current && current.status !== 'online' ? el('option', { value: current.id }, `${agentLabel(current.id)}（不在线）`) : null);
+  select.value = t.assignTo || '';
+  select.addEventListener('click', (e) => e.stopPropagation());
+  select.addEventListener('change', async () => {
+    try {
+      const res = await fetch('/api/tasks/assign', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, to: select.value }) });
+      const out = await res.json();
+      assignError = out.ok ? null : out.message;
+    } catch { assignError = '连不上 ateam 服务。'; }
+    await poll();
+    renderDrawer(false);
+  });
+  let hint;
+  if (!t.assignTo) hint = `想交给某个 worker（比如难的任务交给 Claude 的窗口），在这里选它。只有它能领，它优先领。只能选 ${t.role} 角色在线的 worker。`;
+  else if (!current || current.status !== 'online') hint = `${t.assignTo} 现在不在线，这个任务会一直等它。它回不来的话，改派给别人或选「不指派」。`;
+  else if (current.currentTask) hint = `${agentLabel(t.assignTo)} 正在做 ${current.currentTask}，做完就领这个${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
+  else hint = `${agentLabel(t.assignTo)} 下一次来领任务时就会领到它${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
+  return [
+    el('h4', null, '指派给'),
+    select,
+    el('p', { class: 'hint' }, hint),
+    assignError ? el('p', { class: 'hint' }, assignError) : null,
+  ];
+}
+
 function priorityBox(t) {
   const on = !!t.priority;
   return [
@@ -1367,6 +1407,13 @@ function attentionItems() {
     items.push({ key: `needs:${role.toLowerCase()}`, text: `${role} 缺 worker`, body: `${role} 的任务没人做，需要开一个 ${role} worker` });
   }
   if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
+  for (const t of data.state.tasks) {
+    if (!t.assignTo || (t.status !== 'pending' && t.status !== 'held')) continue;
+    const a = data.state.agents.find((x) => x.id === t.assignTo);
+    if (!a || a.status !== 'online') {
+      items.push({ key: `assign:${t.id}`, text: `${t.id} 指派的 ${t.assignTo} 不在线`, body: `${t.id} 指派给了 ${t.assignTo}，但它不在线，任务在等它` });
+    }
+  }
   for (const a of data.state.agents) {
     const cancelled = pendingCancel(a);
     if (cancelled) {
@@ -1520,6 +1567,9 @@ function goAttention(key) {
   } else if (kind === 'quiet') {
     staleLater.delete(id);
     renderStaleDialog();
+  } else if (kind === 'assign') {
+    const t = data.state.tasks.find((x) => x.id === id);
+    if (t) { view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }
   } else if (kind === 'cancel') {
     helper = { open: true, focus: id };
     renderHelper();

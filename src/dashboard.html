@@ -405,9 +405,10 @@ main > * { flex: none; }
 .drawer .who { display: inline-flex; align-items: center; gap: 6px; }
 .drawer .who .av { width: 22px; height: 22px; font-size: 10px; }
 .drawer-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 32px; margin-top: 4px; }
-.drawer-side { order: -1; }
+/* 「详情」在 DOM 里排在正文前：窄抽屉时在正文上方，宽屏时排到右侧一栏 */
 .drawer.wide .drawer-grid { grid-template-columns: minmax(0, 1fr) 280px; }
-.drawer.wide .drawer-side { order: 0; }
+.drawer.wide .drawer-side { order: 1; }
+.drawer.wide .drawer-main > :first-child { margin-top: 16px; }
 .drawer.wide .drawer-side .facts-box { position: sticky; top: 70px; }
 .facts-box { margin-top: 16px; border: 1px solid var(--line); border-radius: 6px; }
 .facts-box h5 { margin: 0; padding: 9px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--line); }

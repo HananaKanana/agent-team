@@ -1352,6 +1352,8 @@ function renderMain() {
     const cards = tasks.filter((t) => laneOf(t) === lane.key);
     // 待领取一列按派发顺序排：优先的在最上面（与服务端 dispatchOrder 一致）
     if (lane.key === 'pending') cards.sort((a, b) => ((b.priority ?? 0) - (a.priority ?? 0)) || (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
+    // 已通过一列：越新通过的越靠上
+    if (lane.key === 'approved') cards.sort((a, b) => (approvedAt(b) - approvedAt(a)) || (Number(b.id.slice(1)) - Number(a.id.slice(1))));
     return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key },
       el('h3', null, el('span', { class: 'label' }, lane.label), el('span', { class: 'n' }, cards.length)),
       el('div', { class: 'cards' }, cards.length ? cards.map((t) => card(t, lane.key)) : el('div', { class: 'empty-hint' }, '暂无')));
@@ -1365,6 +1367,11 @@ function renderMain() {
   main.removeAttribute('aria-busy');
   fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : emptyState('split', 'leader 正在拆任务', '拆好后任务会出现在这里。需要哪些角色的 worker，leader 会在对话里告诉你。'), cancelledBox);
   for (const c of main.querySelectorAll('.lane[data-lane] .cards')) c.scrollTop = scrolls[c.parentNode.dataset.lane] || 0;
+}
+
+function approvedAt(t) {
+  const h = t.history.findLast((x) => x.type === 'approved');
+  return h ? new Date(h.ts).getTime() || 0 : 0;
 }
 
 function card(t, lane) {

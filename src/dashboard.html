@@ -460,10 +460,32 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .decide-modal { width: min(720px, 100%); }
 .decide-modal .origin { background: var(--sunken); border-radius: 4px; padding: 4px 12px; font-size: 13px; max-height: 180px; overflow-y: auto; }
 .critique-item .reply { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
-.assign-select {
-  width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px;
-  background: var(--surface); color: var(--ink); font: inherit; font-size: 13px;
+/* 指派给：参考 Jira 的经办人选择器，按钮显示头像 + 名字，展开是带头像和状态的列表 */
+.assign-picker { position: relative; width: min(360px, 100%); }
+.assign-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 10px 0 6px;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
 }
+.assign-btn:hover { background: var(--raised-hover); }
+.assign-btn[aria-expanded="true"] { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+.assign-btn .chev { margin-left: auto; width: 14px; height: 14px; color: var(--muted); }
+.assign-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; margin: 0; padding: 6px 0; list-style: none;
+  background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-pop); max-height: 300px; overflow-y: auto;
+}
+.assign-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 12px; border: none;
+  background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+  box-shadow: inset 2px 0 0 transparent;
+}
+.assign-menu button:hover, .assign-menu button:focus-visible { background: var(--raised-hover); outline: none; }
+.assign-menu button[aria-selected="true"] { background: color-mix(in srgb, var(--brand) 10%, var(--raised)); box-shadow: inset 2px 0 0 var(--brand); }
+.assign-menu .name { display: flex; flex-direction: column; min-width: 0; }
+.assign-menu .sub { font-size: 12px; color: var(--muted); }
+.assign-menu .ok { margin-left: auto; width: 14px; height: 14px; color: var(--brand); }
+.assign-menu .sep { height: 1px; margin: 6px 0; background: var(--line-soft); }
+.assign-picker .av.none { width: 24px; height: 24px; }
 
 /* 任务详情抽屉（参考 Jira 的任务详情）：顶部固定一条工具栏；宽屏时右侧是「详情」栏 */
 .drawer {
@@ -580,6 +602,8 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-expand" viewBox="0 0 16 16"><path d="M13.5 2.5v11M10.5 8h-8M5.5 5L2.5 8l3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-tick" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l2.5-7.5A2 2 0 017.4 4h9.2a2 2 0 011.9 1.5L21 13v5a2 2 0 01-2 2H5a2 2 0 01-2-2z M3 13h5l1.5 2.5h5L16 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 12.3l2.7 2.7L16.2 9.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -1397,7 +1421,7 @@ function card(t, lane) {
 function renderDrawer(fresh) {
   const drawer = document.getElementById('drawer');
   const t = view.task && data.state.tasks.find((x) => x.id === view.task);
-  if (!t) { drawer.hidden = true; drawer.replaceChildren(); return; }
+  if (!t) { drawer.hidden = true; drawer.replaceChildren(); assignOpen = null; return; }
   const scroll = fresh ? 0 : drawer.scrollTop;
   const lane = laneOf(t);
   // 子节点里有条件出现的数组和 null：走 fill，与 el() 一样展开并过滤
@@ -1591,25 +1615,41 @@ function renderDecideDialog() {
 
 // 指派：用户在看板上把任务交给某个 worker（比如难的任务交给 Claude 的窗口）。只有它能领，它优先领。
 let assignError = null;
+let assignOpen = null; // 展开着「指派给」列表的任务编号
 function assignBox(t) {
   const role = t.role.trim().toLowerCase();
   const online = data.state.agents.filter((a) => a.status === 'online' && a.role.trim().toLowerCase() === role);
   const current = t.assignTo && data.state.agents.find((a) => a.id === t.assignTo);
-  const select = el('select', { class: 'assign-select' },
-    el('option', { value: '' }, '不指派（同角色谁都能领）'),
-    online.map((a) => el('option', { value: a.id }, `${agentLabel(a.id)}${a.currentTask ? `（正在做 ${a.currentTask}）` : '（空闲）'}`)),
-    current && current.status !== 'online' ? el('option', { value: current.id }, `${agentLabel(current.id)}（不在线）`) : null);
-  select.value = t.assignTo || '';
-  select.addEventListener('click', (e) => e.stopPropagation());
-  select.addEventListener('change', async () => {
+  const choose = async (to) => {
+    assignOpen = null;
+    if (to === (t.assignTo || '')) { renderDrawer(false); return; }
     try {
-      const res = await fetch('/api/tasks/assign', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, to: select.value }) });
+      const res = await fetch('/api/tasks/assign', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, to }) });
       const out = await res.json();
       assignError = out.ok ? null : out.message;
     } catch { assignError = '连不上 ateam 服务。'; }
     await poll();
     renderDrawer(false);
-  });
+  };
+  const options = [
+    { id: '', av: avatar(null), name: '不指派', sub: `${t.role} 角色谁都能领` },
+    ...online.map((a) => ({ id: a.id, av: avatar(a.id, a.role), name: agentLabel(a.id), sub: a.currentTask ? `正在做 ${a.currentTask}` : '空闲' })),
+    ...(current && current.status !== 'online' ? [{ id: current.id, av: avatar(current.id, current.role), name: agentLabel(current.id), sub: '不在线' }] : []),
+  ];
+  const selected = options.find((o) => o.id === (t.assignTo || '')) || options[0];
+  const open = assignOpen === t.id;
+  const picker = el('div', { class: 'assign-picker' },
+    el('button', {
+      class: 'assign-btn', 'aria-haspopup': 'listbox', 'aria-expanded': open ? 'true' : 'false',
+      onclick: (e) => { e.stopPropagation(); assignOpen = open ? null : t.id; renderDrawer(false); },
+    }, selected.av, selected.id ? selected.name : '不指派（同角色谁都能领）', icon('chev-down', 'chev')),
+    open ? el('div', { class: 'assign-menu', role: 'listbox' }, options.map((o, i) => [
+      i === 1 ? el('div', { class: 'sep' }) : null,
+      el('button', {
+        role: 'option', 'aria-selected': o === selected ? 'true' : 'false',
+        onclick: (e) => { e.stopPropagation(); choose(o.id); },
+      }, o.av, el('span', { class: 'name' }, o.name, el('span', { class: 'sub' }, o.sub)), o === selected ? icon('tick', 'ok') : null),
+    ])) : null);
   let hint;
   if (!t.assignTo) hint = `想交给某个 worker（比如难的任务交给 Claude 的窗口），在这里选它。只有它能领，它优先领。只能选 ${t.role} 角色在线的 worker。`;
   else if (!current || current.status !== 'online') hint = `${t.assignTo} 现在不在线，这个任务会一直等它。它回不来的话，改派给别人或选「不指派」。`;
@@ -1617,7 +1657,7 @@ function assignBox(t) {
   else hint = `${agentLabel(t.assignTo)} 下一次来领任务时就会领到它${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
   return [
     el('h4', null, '指派给'),
-    select,
+    picker,
     el('p', { class: 'hint' }, hint),
     assignError ? el('p', { class: 'hint' }, assignError) : null,
   ];
@@ -2112,6 +2152,7 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
   if (view.report) closeReport();
@@ -2121,6 +2162,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   if (attentionOpen && (e.target.id === 'attention-list' || !e.target.closest('#attention, #attention-list'))) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
+  if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
   if (!view.task) return;
   if (e.target.closest('#drawer, .card, #stale-dialog, #decide-dialog')) return;
   closeDrawer();

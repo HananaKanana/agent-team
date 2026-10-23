@@ -718,8 +718,8 @@ async function dismissAgents(body) {
 const SETTING_ITEMS = [
   { group: 'worker' },
   { key: 'idleMin', type: 'num', label: '空闲多久申请下线（分钟）', hint: 'worker 没活干超过这个时间，向 leader 申请下线，省得空等浪费 token。' },
-  { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少留一个 worker', hint: '开启时，会让某个角色一个不剩的下线要你同意（leader 会先问你）。关掉后 leader 可以直接让最后一个下线。' },
   { key: 'leaseMin', type: 'num', label: '多久没动静算「可能停了」（分钟）', hint: '手上有任务的 worker 超过这个时间没动静，弹框问你；空闲的直接算掉线。跑长命令的 worker 会先报备，不受影响。' },
+  { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少留一个 worker', hint: '开启时，会让某个角色一个不剩的下线要你同意（leader 会先问你）。关掉后 leader 可以直接让最后一个下线。' },
   { group: '审卡' },
   { key: 'criticAutoLeave', type: 'bool', label: '审完自动下线', hint: '审卡 worker 审完所有待审的卡就下线（新开的也一样）；之后有新卡要审，再开一个。关掉时审卡 worker 常驻，只有你要求才下线。' },
   { group: 'review' },

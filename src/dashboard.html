@@ -455,9 +455,9 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .card .foot { margin-top: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); min-width: 0; }
 .card .key { font-weight: 600; color: var(--muted); }
 .card.c-approved .key { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
-.card .elapsed { font-size: 11.5px; white-space: nowrap; }
-.card .spent { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
-.card .spent svg { width: 12px; height: 12px; }
+.card .since { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.card .since svg { width: 12px; height: 12px; }
+.card .since.late { color: var(--rework); font-weight: 600; }
 .card .ico { width: 16px; height: 16px; flex: none; }
 .card .ico.ok { color: var(--approved); }
 .card .ico.top { color: var(--rework); }
@@ -803,6 +803,37 @@ function spent(t) {
   const start = t.history.find((h) => h.type === 'claimed');
   const end = t.history.findLast((h) => h.type === 'approved');
   return start && end ? new Date(end.ts) - new Date(start.ts) : null;
+}
+
+// 卡片上的时间：在当前这一列待了多久。等 leader 的（等待答复、待 review）超过 10 分钟、
+// 做了超过 30 分钟就标橙色。已通过显示总用时；待领取但依赖还没通过的显示「等依赖」
+const SINCE = {
+  pending: ['排队', ['created', 'released', 'handoff', 'rejected', 'cancelled']],
+  working: ['做了', ['claimed'], 30], rework: ['返工', ['rejected'], 30],
+  asking: ['等了', ['asked'], 10], submitted: ['等了', ['submitted'], 10],
+  held: ['挂起', ['rejected', 'handoff', 'released', 'created']],
+};
+const LANE_TIME_TIP = { pending: '进入待领取后', working: '这一轮领取后', rework: '被打回后', asking: 'worker 提问后', submitted: 'worker 交付后', held: '挂起后' };
+function laneTime(t, lane) {
+  if (lane === 'approved') {
+    const ms = spent(t);
+    return ms == null ? null : el('span', { class: 'since', title: '第一次领取到通过的总用时' }, icon('clock'), `用时 ${dur(ms)}`);
+  }
+  if (lane === 'pending' && t.dependsOn.some((id) => data.state.tasks.find((x) => x.id === id)?.status !== 'approved')) {
+    return el('span', { class: 'since', title: `等 ${t.dependsOn.join('、')} 通过后才能领` }, icon('clock'), '等依赖');
+  }
+  const rule = SINCE[lane];
+  const h = rule && t.history.findLast((x) => rule[1].includes(x.type));
+  if (!h) return null;
+  const since = new Date(h.ts).getTime();
+  const node = el('span', { class: 'since', title: `${LANE_TIME_TIP[lane]}过了多久`, 'data-since': since, 'data-label': rule[0], 'data-late': rule[2] ? rule[2] * 60000 : null }, icon('clock'), el('span'));
+  tickSince(node);
+  return node;
+}
+function tickSince(n) {
+  const ms = Date.now() - Number(n.dataset.since);
+  n.lastChild.textContent = `${n.dataset.label} ${dur(ms)}`;
+  n.classList.toggle('late', !!n.dataset.late && ms > Number(n.dataset.late));
 }
 
 function laneOf(t) {
@@ -1440,8 +1471,6 @@ function card(t, lane) {
   const handedOff = t.history.some((h) => h.type === 'handoff');
   const waiting = t.status === 'pending' || t.status === 'held';
   const top = t.priority && waiting;
-  // 进行中：显示这一轮领取后过了多久
-  const claimed = t.status === 'working' ? [...t.history].reverse().find((h) => h.type === 'claimed') : null;
   return el('button', {
     class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}`, title: `${t.id} ${t.title}`,
     onclick: () => { view.task = t.id; saveView(); renderDrawer(true); },
@@ -1453,14 +1482,13 @@ function card(t, lane) {
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
       critiqueTag(t),
-      lane === 'approved' && spent(t) != null ? el('span', { class: 'spent', title: '第一次领取到通过的总用时' }, icon('clock'), `用时 ${dur(spent(t))}`) : null),
+      lane === 'cancelled' ? null : laneTime(t, lane)),
     el('div', { class: 'foot' },
       top ? icon('top', 'top') : null,
       lane === 'approved' ? icon('check', 'ok') : null,
       lane === 'working' || lane === 'rework' ? el('span', { class: 'pulse' }) : null,
       el('span', { class: 'key' }, t.id),
       el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role),
-      claimed ? el('span', { class: 'elapsed', 'data-since': claimed.ts }, ago(claimed.ts).replace('前', '')) : null,
       avatar(t.assignee, t.role)));
 }
 
@@ -2341,10 +2369,8 @@ document.getElementById('helper-btn').addEventListener('click', (e) => {
 loadView();
 poll();
 setInterval(poll, 3000);
-// 卡片上「领取后过了多久」每秒走一次，不等数据变化
-setInterval(() => {
-  for (const n of document.querySelectorAll('.elapsed[data-since]')) n.textContent = ago(Number(n.dataset.since)).replace('前', '');
-}, 1000);
+// 卡片上的时间每秒走一次，不等数据变化
+setInterval(() => { for (const n of document.querySelectorAll('.since[data-since]')) tickSince(n); }, 1000);
 // 服务有变化时推送过来，立即刷新：后台标签页的定时器会被浏览器暂停，推送不会，标题上的提醒才能及时更新
 let pollPending = false;
 function pollSoon() {

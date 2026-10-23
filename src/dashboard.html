@@ -126,25 +126,36 @@ button.worker:hover { background: var(--sunken); }
 .btn.attention[hidden] { display: none; }
 .att-modal { width: min(640px, 100%); }
 .att-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.att-head h4 { font-size: 13px; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
-.att-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.att-head h4 { font-size: 13px; color: var(--faint); margin: 14px 0 4px; font-weight: 600; }
+.att-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13px; }
+.att-head + .att-row { border-top: none; }
 .att-pick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
 .att-pick input { margin-top: 3px; }
 .btn.attention + .helper-btn, #notify-btn + .helper-btn { margin-left: 0; }
 .helper-btn + .btn.icon { margin-left: -10px; }
 #notify-btn[hidden] { display: none; }
 /* 提示词面板：顶部右侧弹出 */
+/* 使用说明：右侧整高面板，和任务抽屉同一套样式；顶部标题和标签页固定 */
 .helper {
-  position: fixed; top: 56px; right: 16px; z-index: 15; width: min(520px, calc(100vw - 32px));
-  max-height: calc(100vh - 80px); overflow-y: auto;
-  background: var(--surface); border-radius: 8px;
-  box-shadow: var(--shadow-pop); padding: 14px 16px 16px;
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 15; width: min(560px, 100vw); overflow-y: auto;
+  background: var(--surface); box-shadow: var(--shadow-pop), -16px 0 32px -12px rgba(9, 30, 66, .18);
 }
+.panel-top { position: sticky; top: 0; z-index: 1; background: var(--surface); padding: 12px 12px 0 24px; border-bottom: 1px solid var(--line-soft); }
+.panel-body { padding: 4px 24px 32px; }
 .helper[hidden] { display: none; }
-.setting { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; font-size: 13px; cursor: pointer; }
-.setting > span { display: flex; flex-direction: column; gap: 2px; }
-.setting input[type="checkbox"] { margin-top: 3px; }
-.setting-num { width: 64px; height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
+/* 设置：每项一行，开关在右边 */
+.setting { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line-soft); font-size: 13px; cursor: pointer; }
+.helper-sec + .setting { border-top: none; }
+.setting > span { display: flex; flex-direction: column; gap: 2px; flex: 1; order: -1; }
+.setting > span .hint { line-height: 1.6; }
+.switch {
+  appearance: none; flex: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 99px; cursor: pointer;
+  background: color-mix(in srgb, var(--faint) 40%, transparent); transition: background-color .15s;
+}
+.switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch:checked { background: var(--brand); }
+.switch:checked::after { transform: translateX(16px); }
+.setting-num { width: 72px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
 .rules-editor {
   display: block; width: 100%; margin-top: 8px; padding: 10px 12px; resize: vertical;
   border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink);
@@ -152,35 +163,49 @@ button.worker:hover { background: var(--sunken); }
 }
 .rules-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .btn:disabled { opacity: .45; cursor: default; }
-.helper-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-.helper-head b { font-size: 15px; }
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 8px 0 10px; }
+.helper-head { display: flex; align-items: center; gap: 6px; }
+.helper-head b { font-size: 17px; font-weight: 650; margin-right: auto; }
+.tabs { display: flex; gap: 2px; margin: 6px 0 0 -14px; }
+.tab-hint { margin: 14px 0 0; padding: 8px 12px; border-radius: 4px; background: var(--sunken); color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
 .tab {
   appearance: none; border: none; background: none; cursor: pointer; font: inherit; font-size: 13px;
   color: var(--muted); padding: 6px 14px; margin-bottom: -1px; border-bottom: 2px solid transparent;
 }
 .tab:hover { color: var(--ink); }
 .tab.on { color: var(--brand); font-weight: 600; border-bottom-color: var(--brand); }
-.helper-sec { display: flex; align-items: center; gap: 8px; margin: 18px 0 2px; }
-.helper-sec h4 { font-size: 13px; color: var(--muted); margin: 0; font-weight: 600; margin-right: auto; }
-.helper .hint { margin: 2px 0 0; }
+.helper-sec { display: flex; align-items: center; gap: 8px; margin: 24px 0 4px; }
+.helper-sec h4 { font-size: 14px; color: var(--ink); margin: 0; font-weight: 650; margin-right: auto; }
+.helper .hint { margin: 2px 0 0; line-height: 1.6; }
 /* 每个 worker 一张卡片：上面一行信息 + 操作，下面是提示词 */
-.wcard { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px 12px; margin-top: 10px; }
+.wcard { background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-card); padding: 12px 14px 14px; margin-top: 10px; }
+.wcard-head > .av { width: 28px; height: 28px; font-size: 11px; }
+.wcard .who-line { display: flex; flex-direction: column; min-width: 0; }
+.wcard .who-line .hint { font-size: 12px; }
 .wcard.focus { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); background: color-mix(in srgb, var(--brand-soft) 50%, transparent); }
 .wcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.wcard-head .grow { margin-right: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
-.pill { padding: 1px 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: color-mix(in srgb, var(--asking) 18%, transparent); color: var(--asking); }
+.wcard-head .grow { margin-right: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.pill { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 3px; font-size: 11.5px; font-weight: 700; background: color-mix(in srgb, var(--asking) 16%, transparent); color: var(--asking); }
 
 .worker.offline .dot { background: var(--pending); }
 .worker .meta { color: var(--muted); }
-.banner { padding: 8px 20px; background: var(--rework); color: #fff; font-size: 13px; }
-.banner[hidden] { display: none; }
-.banner.stale { background: var(--asking); }
-.needs { padding: 10px 20px; background: var(--surface); border-bottom: 1px solid var(--line); border-left: 4px solid var(--asking); }
-.needs[hidden] { display: none; }
+/* 页面顶部的提示条：浅色底、左侧色条、圆形图标 */
+.banner, .needs {
+  --c: var(--rework);
+  position: relative; margin: 12px 20px 0; padding: 10px 16px 10px 46px; border-radius: 6px; font-size: 13px; line-height: 1.6;
+  background: color-mix(in srgb, var(--c) 9%, var(--surface)); color: var(--ink);
+  box-shadow: inset 3px 0 0 var(--c), 0 0 0 1px color-mix(in srgb, var(--c) 28%, transparent);
+}
+.banner::before, .needs::before {
+  content: "!"; position: absolute; left: 16px; top: 11px; width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 800; color: var(--on-color); background: var(--c);
+}
+.banner[hidden], .needs[hidden] { display: none; }
+.banner.stale { --c: var(--asking); }
+.needs { --c: var(--asking); }
 .needs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .needs-row + .needs-row { margin-top: 8px; }
-.needs b { font-weight: 600; }
+.needs b, .banner b { font-weight: 650; }
+.needs .pblock code { background: var(--surface); }
 .prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 /* 提示词块：文字铺满，复制按钮嵌在右上角 */
 .pblock { position: relative; margin-top: 8px; }
@@ -248,7 +273,24 @@ nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); m
 
 main { padding: 22px 28px 16px; min-width: 0; display: flex; flex-direction: column; }
 main > * { flex: none; }
-.empty { color: var(--muted); padding: 40px 0; max-width: 46ch; }
+/* 空状态：居中的图标 + 一句标题 + 下一步该做什么 */
+.empty-state { margin: auto; padding: 48px 16px; max-width: 420px; text-align: center; color: var(--muted); }
+.empty-state .ico-wrap { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center; background: var(--sunken); color: var(--faint); }
+.empty-state .ico-wrap svg { width: 26px; height: 26px; }
+.empty-state h3 { margin: 0 0 6px; font-size: 15px; font-weight: 650; color: var(--ink); }
+.empty-state p { margin: 0 0 14px; font-size: 13px; line-height: 1.7; }
+nav.jobs .empty-state { padding: 28px 8px; }
+nav.jobs .empty-state .ico-wrap { width: 44px; height: 44px; }
+nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
+/* 骨架屏：第一次拿到数据前的占位 */
+.sk { border-radius: 4px; background: linear-gradient(90deg, var(--sunken) 0, color-mix(in srgb, var(--sunken) 40%, var(--surface)) 50%, var(--sunken) 100%); background-size: 200% 100%; animation: sk 1.4s ease-in-out infinite; }
+@keyframes sk { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sk-job { height: 64px; margin: 4px 0; }
+.sk-line { height: 14px; margin: 8px 0; }
+.sk-title { height: 26px; width: 55%; margin: 18px 0 12px; }
+.sk-board { flex: 1 0 0; min-height: 420px; display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); gap: 8px; margin-top: 22px; }
+.sk-lane { border-radius: 6px; background: var(--sunken); padding: 40px 6px 6px; }
+.sk-card { height: 116px; margin-bottom: 6px; background: color-mix(in srgb, var(--raised) 70%, transparent); border-radius: 4px; }
 .job-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 24px; align-items: start; }
 .job-head .crumbs { grid-column: 1 / -1; font-size: 12.5px; color: var(--faint); }
 .job-head h2.job-title { font-size: 22px; line-height: 1.4; color: var(--ink); font-weight: 650; margin: 0; }
@@ -285,33 +327,74 @@ main > * { flex: none; }
 .modal-back { position: fixed; inset: 0; z-index: 30; background: var(--backdrop); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .modal-back[hidden] { display: none; }
 .modal {
-  width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
-  background: var(--surface); border-radius: 8px;
-  box-shadow: var(--shadow-pop); padding: 20px 24px;
+  width: min(560px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+  background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-pop); overflow: hidden;
+  animation: pop .14s ease-out;
 }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.985); } }
+.modal-head { display: flex; align-items: center; gap: 8px; padding: 16px 12px 12px 24px; flex: none; }
+.modal-head h3 { margin: 0 auto 0 0; font-size: 17px; font-weight: 650; }
+.modal-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 16px; overscroll-behavior: contain; }
+.modal-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid var(--line-soft); }
+.modal-foot .hint { margin-right: auto; }
 .modal h3 { margin: 0 0 6px; font-size: 17px; font-weight: 650; }
-.modal .stale-item + .stale-item { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+.modal .lead { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.modal .stale-item { background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-card); padding: 12px 14px; margin-top: 10px; }
+.modal .stale-item p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.6; }
 .modal .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* 决定框：每个选项是一张可点的卡片，标题 + 一句说明 */
+.choices { display: grid; gap: 8px; margin-top: 8px; }
+.choice {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised);
+}
+.choice:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand-soft) 45%, var(--raised)); }
+.choice.on { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.choice .radio { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--faint); }
+.choice:hover .radio, .choice.on .radio { border-color: var(--brand); box-shadow: inset 0 0 0 3px var(--raised), inset 0 0 0 8px var(--brand); }
+.choice b { display: block; font-size: 13.5px; font-weight: 600; }
+.choice span.d { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.55; margin-top: 2px; }
+/* 「需要你处理」列表：每件事一行，前面是类别小色块 */
+.att-row .kind { flex: none; margin-right: 8px; }
+.att-row .what { flex: 1; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; }
 .report-page { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; }
 .report-page[hidden] { display: none; }
 .report-top {
-  position: sticky; top: 0; display: flex; align-items: center; gap: 14px;
-  padding: 12px 20px; background: var(--surface); border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--line);
 }
-.report-top .crumb { color: var(--muted); font-size: 13px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-top .crumb { color: var(--faint); font-size: 13px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-top .crumb b { color: var(--ink); font-weight: 600; }
+.report-top .btn svg { width: 16px; height: 16px; }
+/* 正文居中，宽屏时右边是目录 */
+.report-wrap { display: grid; grid-template-columns: minmax(0, 780px); justify-content: center; gap: 32px; padding: 32px 20px 80px; }
+@media (min-width: 1180px) { .report-wrap.has-toc { grid-template-columns: minmax(0, 780px) 220px; } }
+.report-toc { display: none; }
+@media (min-width: 1180px) {
+  .report-wrap.has-toc .report-toc { display: block; position: sticky; top: 88px; align-self: start; font-size: 13px; }
+}
+.report-toc h5 { margin: 0 0 8px; font-size: 12px; color: var(--faint); font-weight: 600; }
+.report-toc a { display: block; padding: 4px 0 4px 12px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; line-height: 1.5; }
+.report-toc a:hover { color: var(--brand); border-left-color: var(--brand); }
 .report-sheet {
-  max-width: 760px; margin: 32px auto 80px; padding: 36px 48px 44px;
-  background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-card);
+  min-width: 0; padding: 36px 48px 44px;
+  background: var(--raised); border-radius: 8px; box-shadow: var(--shadow-card);
 }
-.report-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 13px; padding-bottom: 18px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
-.report-meta b { color: var(--ink); font-weight: 600; }
+.report-title { margin: 0 0 14px; font-size: 26px; line-height: 1.35; font-weight: 700; }
+.report-meta { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 20px; margin-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+.report-meta span { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 4px; background: var(--sunken); color: var(--faint); font-size: 12.5px; }
+.report-meta b { color: var(--ink); font-weight: 650; font-size: 13px; }
 .report-sheet .md { font-size: 15px; line-height: 1.8; }
-.report-sheet .md h1 { font-size: 24px; line-height: 1.35; margin: 18px 0 14px; }
-.report-sheet .md h2 { font-size: 18px; margin: 30px 0 10px; padding-top: 4px; }
-.report-sheet .md h3 { font-size: 15.5px; margin: 22px 0 8px; }
+.report-sheet .md h1 { font-size: 22px; line-height: 1.35; margin: 24px 0 14px; }
+.report-sheet .md h2 { font-size: 18px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); scroll-margin-top: 72px; }
+.report-sheet .md h3 { font-size: 15.5px; margin: 24px 0 8px; }
+.report-sheet .md blockquote { border-left-color: var(--brand); background: var(--sunken); padding: 6px 14px; border-radius: 0 4px 4px 0; }
+.report-sheet .md table { font-size: 13.5px; }
+.report-sheet .md th { background: var(--sunken); }
+.report-sheet .accept-tip { margin-top: 28px; padding: 12px 16px; border-radius: 6px; background: color-mix(in srgb, var(--approved) 9%, var(--surface)); box-shadow: inset 3px 0 0 var(--approved); color: var(--ink); font-size: 13.5px; }
 .report-sheet .md li { margin: 4px 0; }
 .report-sheet .md code { font-size: 13px; }
-@media (max-width: 700px) { .report-sheet { margin: 0; border: none; border-radius: 0; padding: 20px 16px 40px; } }
+@media (max-width: 700px) { .report-wrap { padding: 0; } .report-sheet { border-radius: 0; box-shadow: none; padding: 20px 16px 40px; } }
 
 /* 看板：七列等宽，铺满剩余高度，列内各自滚动（参考 Jira） */
 .board { flex: 1 0 0; min-height: 420px; display: grid; grid-template-columns: repeat(7, minmax(188px, 1fr)); gap: 8px; overflow-x: auto; }
@@ -490,7 +573,8 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   .lane .cards { overflow: visible; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .drawer, .card { transition: none; }
+  .drawer, .card, .switch, .switch::after { transition: none; }
+  .modal, .sk { animation: none; }
   .pulse, .strip.big span.s-working::after { animation: none; }
 }
 </style>
@@ -503,6 +587,11 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-expand" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l2.5-7.5A2 2 0 017.4 4h9.2a2 2 0 011.9 1.5L21 13v5a2 2 0 01-2 2H5a2 2 0 01-2-2z M3 13h5l1.5 2.5h5L16 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 12.3l2.7 2.7L16.2 9.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2"/></symbol>
+  <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13 7H9V3M3 9h4v4M9 7l4.5-4.5M7 9l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 <header class="top">
@@ -515,11 +604,11 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <button class="btn ghost icon" id="theme-btn" type="button"></button>
 </header>
 <section class="needs" id="needs" hidden aria-label="需要 worker"></section>
-<div class="banner" id="banner" hidden>连不上 ateam 服务，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
-<div class="banner stale" id="stale" hidden>ateam 的代码已经更新，但服务还在跑旧代码：在运行 ateam serve 的终端里按 Ctrl+C，再重新运行 ateam serve，然后刷新本页。状态不会丢，worker 和 leader 会自动重连。</div>
+<div class="banner" id="banner" hidden><b>连不上 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
+<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 的代码已经更新，但服务还在跑旧代码。在运行 ateam serve 的终端里按 Ctrl+C，再重新运行 ateam serve，然后刷新本页。状态不会丢，worker 和 leader 会自动重连。</div>
 <div class="layout">
-  <nav class="jobs" id="jobs" aria-label="需求列表"></nav>
-  <main id="main"></main>
+  <nav class="jobs" id="jobs" aria-label="需求列表"><h2>需求</h2><div class="sk sk-job"></div><div class="sk sk-job"></div><div class="sk sk-job"></div></nav>
+  <main id="main" aria-busy="true"><div class="sk sk-line" style="width: 90px"></div><div class="sk sk-title"></div><div class="sk sk-line" style="width: 70%"></div><div class="sk sk-line" style="width: 48%"></div><div class="sk-board"><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div><div class="sk-lane"></div><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div></div></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
 <div class="modal-back" id="attention-list" hidden role="dialog" aria-modal="true" aria-label="需要你处理"></div>
@@ -624,6 +713,23 @@ function avatar(id, role) {
   const a = data.state.agents.find((x) => x.id === id);
   return el('span', { class: 'av', style: roleStyle(role ?? a?.role ?? ''), title: agentLabel(id) }, avText(a?.name || id));
 }
+
+// 空状态：图标 + 标题 + 下一步做什么（可带一个按钮）
+function emptyState(iconId, title, text, action) {
+  return el('div', { class: 'empty-state' },
+    el('div', { class: 'ico-wrap' }, icon(iconId)),
+    el('h3', null, title),
+    text ? el('p', null, text) : null,
+    action || null);
+}
+// 弹框的标题栏：标题 + 右侧按钮（默认一个关闭图标）
+function modalHead(title, onClose, extra) {
+  return el('div', { class: 'modal-head' },
+    el('h3', null, title),
+    extra || null,
+    onClose ? el('button', { class: 'btn ghost icon', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); onClose(); } }, icon('close')) : null);
+}
+const openGuide = (tab) => el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab }; renderHelper(); } }, tab === 'lead' ? '查看 leader 提示词' : '打开使用说明');
 
 const pad = (n) => String(n).padStart(2, '0');
 function fmtTime(ts) {
@@ -783,7 +889,7 @@ function renderWorkers() {
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
     }, `${offline.length} 个已掉线`));
   }
-  if (chips.length === 1) chips.push(el('span', { class: 'meta' }, '还没有 worker 加入。点右边「使用说明」，按步骤开 leader 和 worker。'));
+  if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '还没有 worker 加入，点右边「使用说明」开 worker'));
   box.replaceChildren(...chips);
   renderHelper();
 }
@@ -914,12 +1020,12 @@ function settingsPage() {
   const cfg = data.config || {};
   if (!data.config) return el('p', { class: 'hint' }, '服务还是旧版本，没有设置功能。请重启 ateam serve。');
   return [
-    el('p', { class: 'hint' }, '这些设置对整个项目生效，改完马上生效，重启服务也不会丢。'),
+    el('p', { class: 'tab-hint' }, '这些设置对整个项目生效，改完马上生效，重启服务也不会丢。'),
     SETTING_ITEMS.map((it) => {
       if (it.group) return el('div', { class: 'helper-sec' }, el('h4', null, it.group));
       let input;
       if (it.type === 'bool') {
-        input = el('input', { type: 'checkbox' });
+        input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
         input.checked = !!cfg[it.key];
         input.addEventListener('change', () => saveSetting(it.key, input.checked));
       } else {
@@ -964,24 +1070,25 @@ function renderOfflinePanel(panel) {
   const close = () => { helper = { open: false, focus: null }; renderHelper(); };
   if (!offline.length) { close(); return; }
   fill(panel,
-    el('div', { class: 'helper-head' },
-      el('b', null, `掉线的 worker（${offline.length}）`),
-      el('span', { class: 'prompt', style: 'margin: 0' },
+    el('div', { class: 'panel-top', style: 'padding-bottom: 12px' },
+      el('div', { class: 'helper-head' },
+        el('b', null, `掉线的 worker（${offline.length}）`),
         el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
-        el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); close(); } }, '关闭'))),
-    el('p', { class: 'hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会用原编号重新加入、接着干活。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
+        el('button', { class: 'btn ghost icon', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); close(); } }, icon('close')))),
+    el('div', { class: 'panel-body' },
+    el('p', { class: 'tab-hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会用原编号重新加入、接着干活。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
     offline.map((a) => el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' },
+        avatar(a.id, a.role),
         el('span', { class: 'grow' },
-          el('b', null, agentLabel(a.id)),
-          el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-          el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`)),
+          el('span', { class: 'who-line' }, el('b', null, agentLabel(a.id)), el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`)),
+          el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role)),
         el('button', {
           class: reconnectOpen === a.id ? 'btn primary sm' : 'btn sm',
           onclick: (e) => { e.stopPropagation(); reconnectOpen = reconnectOpen === a.id ? null : a.id; renderHelper(); },
         }, '重连'),
         el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); hideAgents([a.id]); } }, '移除')),
-      reconnectOpen === a.id ? promptBlock(reconnectPrompt(a), renderHelper) : null)));
+      reconnectOpen === a.id ? promptBlock(reconnectPrompt(a), renderHelper) : null))));
   panel.hidden = false;
 }
 
@@ -1031,7 +1138,7 @@ function rulesEditor() {
   const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); saveRules(); } }, '保存');
   const resetBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); rules = { ...rules, draft: rules.saved, status: '' }; renderHelper(true); } }, '还原');
   return [
-    el('p', { class: 'hint' }, '每个任务都要遵守的约定。worker 领到任务时，这里的内容会自动附在任务后面，leader 不用在每个任务里重复写。一行一条，支持 markdown。'),
+    el('p', { class: 'tab-hint' }, '每个任务都要遵守的约定。worker 领到任务时，这里的内容会自动附在任务后面，leader 不用在每个任务里重复写。一行一条，支持 markdown。'),
     area,
     el('div', { class: 'rules-actions' }, saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null),
     el('p', { class: 'hint' }, '保存在项目的 .ateam/rules.md。leader 也可以用 ateam rules add "<一条规则>" 添加。'),
@@ -1054,7 +1161,7 @@ function renderHelper(force = false) {
   for (const t of tasks) if (t.status !== 'approved' && t.status !== 'cancelled') roles.set(t.role.trim().toLowerCase(), t.role);
   for (const a of agents) if (!a.hidden) roles.set(a.role.trim().toLowerCase(), a.role);
   const ordered = online.slice().sort((x, y) => (y.id === helper.focus) - (x.id === helper.focus) || isStale(y) - isStale(x));
-  const closeBtn = el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; dismissAllArm = false; renderHelper(); } }, '关闭');
+  const closeBtn = el('button', { class: 'btn ghost icon', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; dismissAllArm = false; renderHelper(); } }, icon('close'));
   const dismissAll = online.length ? [
     dismissAllArm ? el('button', { class: 'btn ghost sm', onclick: (e) => { e.stopPropagation(); dismissAllArm = false; renderHelper(); } }, '取消') : null,
     el('button', {
@@ -1080,10 +1187,13 @@ function renderHelper(force = false) {
       renderHelper(true);
     },
   }, label);
+  const scroll = panel.hidden ? 0 : panel.scrollTop;
   fill(panel,
-    el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-    el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('settings', '设置')),
-    tab === 'rules' || tab === 'settings' ? null : el('p', { class: 'hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
+    el('div', { class: 'panel-top' },
+      el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
+      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('settings', '设置'))),
+    el('div', { class: 'panel-body' },
+    tab === 'rules' || tab === 'settings' ? null : el('p', { class: 'tab-hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
     tab === 'settings' ? settingsPage() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
@@ -1106,10 +1216,12 @@ function renderHelper(force = false) {
       : 'worker 停下来不动时，复制它的叫醒话，发到它自己的 agent 窗口。'),
     ordered.length ? ordered.map((a) => el('div', { class: `wcard${a.id === helper.focus ? ' focus' : ''}` },
       el('div', { class: 'wcard-head' },
+        avatar(a.id, a.role),
         el('span', { class: 'grow' },
-          el('b', null, agentLabel(a.id)),
-          el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-          el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask || '空闲')}，心跳 ${ago(a.lastSeenAt)}`),
+          el('span', { class: 'who-line' },
+            el('b', null, agentLabel(a.id)),
+            el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask ? `在做 ${a.currentTask}` : '空闲')} · 心跳 ${ago(a.lastSeenAt)}`)),
+          el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role),
           isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null,
           a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null,
           a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审完待审的卡后下线' : '做完手上的任务后下线，不再领新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完下线' : '做完下线') : null,
@@ -1124,10 +1236,10 @@ function renderHelper(force = false) {
       el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会用原编号重新加入、接着干活，窗口标题不用改。'),
       offline.map((a) => el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' },
+          avatar(a.id, a.role),
           el('span', { class: 'grow' },
-            el('b', null, agentLabel(a.id)),
-            el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-            el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`))),
+            el('span', { class: 'who-line' }, el('b', null, agentLabel(a.id)), el('span', { class: 'hint' }, `最后心跳 ${ago(a.lastSeenAt)}`)),
+            el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role))),
         promptBlock(reconnectPrompt(a), renderHelper))),
     ] : null,
     el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
@@ -1138,9 +1250,10 @@ function renderHelper(force = false) {
       el('div', { class: 'wcard-head' }, el('b', null, '加入'), el('span', { class: 'hint' }, '新开会话、或者上下文满了重开会话，都用这一句')),
       promptBlock(leadPrompt(), renderHelper)),
     el('p', { class: 'hint' }, '加入后直接在对话里跟 leader 说需求，比如「需求是……」。它会拆任务、派给 worker，并告诉你需要开几个什么角色的 worker。'),
-    ],
+    ]),
   );
   panel.hidden = false;
+  panel.scrollTop = scroll;
 }
 
 // 已验收的需求收进左侧底部一个可展开的分组，默认收起
@@ -1175,8 +1288,8 @@ function renderJobs() {
     }, el('span', null, acceptedOpen ? '▾' : '▸'), `已验收（${done.length}）`),
     acceptedOpen ? done.map(jobItem) : null,
   ] : [];
-  const empty = jobs.length ? (open.length ? [] : [el('p', { class: 'hint' }, '需求都验收完了。')])
-    : [el('p', { class: 'empty' }, '还没有需求。对 Claude Code 说出你的需求，leader 会在这里建立任务。')];
+  const empty = jobs.length ? (open.length ? [] : [emptyState('done', '需求都验收完了', '有新需求时直接跟 leader 说。')])
+    : [emptyState('inbox', '还没有需求', '对 leader 说出你的需求，它会在这里建立任务。')];
   fill(nav, el('h2', null, '需求'), open.map(jobItem), empty, doneGroup);
 }
 
@@ -1184,7 +1297,12 @@ function renderMain() {
   const main = document.getElementById('main');
   const job = data.state.jobs.find((j) => j.id === view.job);
   if (!job) {
-    main.replaceChildren(el('p', { class: 'empty' }, data.state.jobs.length ? '在左侧选择一个需求，查看任务看板。' : '等待 leader 创建第一个需求。'));
+    main.removeAttribute('aria-busy');
+    fill(main, data.state.jobs.length
+      ? emptyState('pointer', '选一个需求', '在左侧选择一个需求，查看它的任务看板。')
+      : emptyState('inbox', '等 leader 建第一个需求',
+        data.leader?.online ? 'leader 已经在线，直接在它的对话里说需求就行，比如「需求是……」。' : '先开一个 leader：在项目目录里开 Claude Code 会话，发 leader 的加入提示词，然后跟它说需求。',
+        data.leader?.online ? null : openGuide('lead')));
     return;
   }
   const all = data.state.tasks.filter((t) => t.jobId === job.id);
@@ -1244,7 +1362,8 @@ function renderMain() {
     el('div', { class: 'cancelled-list' }, cancelled.map((t) => card(t, 'cancelled')))) : null;
 
   const scrolls = Object.fromEntries([...main.querySelectorAll('.lane[data-lane] .cards')].map((c) => [c.parentNode.dataset.lane, c.scrollTop]));
-  fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : el('p', { class: 'empty' }, 'leader 还在拆分任务。'), cancelledBox);
+  main.removeAttribute('aria-busy');
+  fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : emptyState('split', 'leader 正在拆任务', '拆好后任务会出现在这里。需要哪些角色的 worker，leader 会在对话里告诉你。'), cancelledBox);
   for (const c of main.querySelectorAll('.lane[data-lane] .cards')) c.scrollTop = scrolls[c.parentNode.dataset.lane] || 0;
 }
 
@@ -1446,29 +1565,34 @@ function renderDecideDialog() {
   const origin = el('div', { class: 'md origin' });
   origin.innerHTML = renderMarkdown(job?.origin || '（这个需求没有存你的原话）');
   const area = el('textarea', { class: 'rules-editor', rows: '4', placeholder: '写下你要 leader 怎么改，比如「按审卡意见改，但按钮文案保留原来的」' });
+  // 每个选项一张卡片：点了就按它决定
+  const choice = (title, desc, fn, on) => el('button', { class: `choice${on ? ' on' : ''}`, onclick: stop(fn) },
+    el('span', { class: 'radio' }), el('span', null, el('b', null, title), el('span', { class: 'd' }, desc)));
   const options = agreed ? [
-    el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'leader')) }, '按 leader 的方案改'),
-    el('button', { class: 'btn', onclick: stop(() => decide(t, 'critic')) }, '按审卡意见原样改'),
-    el('button', { class: 'btn', onclick: stop(() => decide(t, 'none')) }, '都不改'),
+    choice('按 leader 的方案改', 'leader 同意审卡的意见，并给出了改法，就照它的改。', () => decide(t, 'leader')),
+    choice('按审卡意见原样改', '不用 leader 的改法，照审卡提的原样改。', () => decide(t, 'critic')),
+    choice('都不改', '两边都不采纳，卡片保持现状，到此结束。', () => decide(t, 'none')),
   ] : [
-    el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'critic')) }, '按审卡意见改'),
-    el('button', { class: 'btn', onclick: stop(() => decide(t, 'leader')) }, '维持原样（同意 leader）'),
+    choice('按审卡意见改', '审卡说得对，leader 照审卡的意见改卡。', () => decide(t, 'critic')),
+    choice('维持原样', '同意 leader 的看法，卡片不改，到此结束。', () => decide(t, 'leader')),
   ];
+  const later = () => { decideLater.add(t.id); decideFocus = null; decideCustom = false; renderDecideDialog(); };
   fill(box, el('div', { class: 'modal decide-modal', onclick: (e) => e.stopPropagation() },
-    el('div', { class: 'att-head' },
-      el('h3', null, all.length > 1 ? `审卡有分歧，等你决定（共 ${all.length} 张卡）` : '审卡有分歧，等你决定'),
-      el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); decideFocus = null; decideCustom = false; renderDecideDialog(); }) }, '稍后再说')),
-    el('p', null, el('b', null, `${t.id} ${t.title}`), el('span', { class: 'hint' }, `　需求 ${t.jobId}，${t.role}，${t.status}　`),
-      el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '看卡片全文')),
-    job?.origin ? [el('div', { class: 'ci-label' }, `你提需求时的原话（需求 ${t.jobId}）`), origin] : null,
-    waiting.map(critiqueItem),
-    el('div', { class: 'ci-label' }, '你的决定'),
-    el('div', { class: 'actions' }, options,
-      el('button', { class: decideCustom ? 'btn ghost' : 'btn', onclick: stop(() => { decideCustom = !decideCustom; renderDecideDialog(); }) }, decideCustom ? '收起' : '我来写意见')),
-    decideCustom ? [area, el('div', { class: 'actions' },
-      el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'custom', area.value)) }, '按我的意见改'))] : null,
-    el('p', { class: 'hint' }, '决定之后 leader 照做（改卡、告诉正在做的 worker，或者加修复任务），做完会写明改了什么；选「不改」就到此结束。'),
-    decideError ? el('p', { class: 'hint' }, decideError) : null));
+    modalHead(all.length > 1 ? `审卡有分歧，等你决定（共 ${all.length} 张）` : '审卡有分歧，等你决定', later),
+    el('div', { class: 'modal-body' },
+      el('p', { class: 'lead' }, el('b', { style: 'color: var(--ink)' }, `${t.id} ${t.title}`), `　需求 ${t.jobId} · ${t.role} · ${LANE_LABEL[laneOf(t)] || t.status}　`,
+        el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '看卡片全文')),
+      job?.origin ? [el('div', { class: 'ci-label' }, `你提需求时的原话（需求 ${t.jobId}）`), origin] : null,
+      waiting.map(critiqueItem),
+      el('div', { class: 'ci-label', style: 'margin-top: 16px' }, '你的决定'),
+      el('div', { class: 'choices' }, options,
+        choice('我来写意见', '两边都不完全对：写下你要 leader 怎么改。', () => { decideCustom = !decideCustom; renderDecideDialog(); }, decideCustom)),
+      decideCustom ? [area, el('div', { class: 'actions' },
+        el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'custom', area.value)) }, '按我的意见改'))] : null,
+      decideError ? el('p', { class: 'hint', style: 'color: var(--rework)' }, decideError) : null),
+    el('div', { class: 'modal-foot' },
+      el('span', { class: 'hint' }, '决定之后 leader 照做，做完会写明改了什么。'),
+      el('button', { class: 'btn', onclick: stop(later) }, '稍后再说'))));
   box.hidden = false;
 }
 
@@ -1718,8 +1842,9 @@ function renderStaleDialog() {
   const items = list.map((a) => {
     const t = data.state.tasks.find((x) => x.id === a.currentTask);
     return el('div', { class: 'stale-item' },
-      el('p', null, el('b', null, agentLabel(a.id)), `（${a.role}）已经 ${Math.round((Date.now() - a.lastSeenAt) / 60000)} 分钟没动静，手上是 `,
-        el('b', null, `${a.currentTask}${t ? ` ${t.title}` : ''}`), '。'),
+      el('div', { class: 'wcard-head', style: 'margin-bottom: 8px' }, avatar(a.id, a.role),
+        el('span', { class: 'who-line' }, el('b', null, agentLabel(a.id)), el('span', { class: 'hint' }, `${a.role} · ${Math.round((Date.now() - a.lastSeenAt) / 60000)} 分钟没动静`))),
+      el('p', null, '手上是 ', el('b', null, `${a.currentTask}${t ? ` ${t.title}` : ''}`), '。'),
       el('p', { class: 'hint' }, '它可能在跑很长的命令（导入数据、构建），也可能窗口停了或 token 用完了。去它的 agent 窗口看一眼：'),
       el('div', { class: 'actions' },
         el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); staleAction('/api/agents/still-there', { id: a.id }); } }, '还在干活，继续等'),
@@ -1729,10 +1854,11 @@ function renderStaleDialog() {
       promptBlock(wakePrompt(a), renderStaleDialog));
   });
   fill(box, el('div', { class: 'modal', onclick: (e) => e.stopPropagation() },
-    el('h3', null, list.length > 1 ? `${list.length} 个 worker 可能停了` : 'worker 可能停了'),
-    el('p', { class: 'hint' }, '任务还在它手上，不会自动交给别人。你确认之后才会换人。'),
-    items,
-    staleError ? el('p', { class: 'hint' }, staleError) : null));
+    modalHead(list.length > 1 ? `${list.length} 个 worker 可能停了` : 'worker 可能停了', null),
+    el('div', { class: 'modal-body' },
+      el('p', { class: 'lead' }, '任务还在它手上，不会自动交给别人。你确认之后才会换人。'),
+      items,
+      staleError ? el('p', { class: 'hint', style: 'color: var(--rework)' }, staleError) : null)));
   box.hidden = false;
 }
 
@@ -1809,21 +1935,31 @@ function renderReport() {
     el('h2', { class: 'crit-head' }, `审卡改动（${crit.length} 条）`),
     crit.map(({ t, c }) => [el('div', { class: 'hint' }, `${t.id} ${t.title}`), critiqueItem(c)]),
   ] : null;
+  // 目录：取正文和「审卡改动」的二级标题
+  const heads = [...body.querySelectorAll('h2')];
+  heads.forEach((h, i) => { h.id = `sec-${i}`; });
+  const toc = heads.length + (critSec ? 1 : 0) >= 3 ? el('nav', { class: 'report-toc', 'aria-label': '目录' },
+    el('h5', null, '目录'),
+    heads.map((h) => el('a', { href: `#${h.id}`, onclick: (e) => { e.preventDefault(); h.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, h.textContent)),
+    critSec ? el('a', { href: '#crit', onclick: (e) => { e.preventDefault(); page.querySelector('.crit-head')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, '审卡改动') : null) : null;
   fill(page,
     el('div', { class: 'report-top' },
-      el('button', { class: 'btn', onclick: closeReport }, '返回看板'),
-      el('span', { class: 'crumb' }, `${job.id} ${job.title}`),
+      el('button', { class: 'btn ghost', onclick: closeReport }, icon('back'), '返回看板'),
+      el('span', { class: 'crumb' }, `需求 ${job.id} / `, el('b', null, '汇报')),
       acceptButtons(job)),
-    el('article', { class: 'report-sheet' },
-      el('div', { class: 'report-meta' },
-        el('span', null, '状态 ', el('b', null, JOB_STATUS[job.status] || job.status)),
-        el('span', null, '提交于 ', el('b', null, fmtTime(job.updatedAt))),
-        el('span', null, '任务 ', el('b', null, `${st.approved}/${tasks.length}`), ' 已通过'),
-        el('span', null, 'review ', el('b', null, st.reviews), ' 次'),
-        el('span', null, '一次通过率 ', el('b', null, st.rate))),
-      body,
-      critSec,
-      job.status === 'awaiting_acceptance' ? el('p', { class: 'hint' }, ACCEPT_HINT) : null));
+    el('div', { class: `report-wrap${toc ? ' has-toc' : ''}` },
+      el('article', { class: 'report-sheet' },
+        body.firstElementChild?.tagName === 'H1' ? null : el('h1', { class: 'report-title' }, job.title), // 汇报自己带标题就不重复
+        el('div', { class: 'report-meta' },
+          el('span', null, '状态', el('b', null, JOB_STATUS[job.status] || job.status)),
+          el('span', null, '提交于', el('b', null, fmtTime(job.updatedAt))),
+          el('span', null, '已通过', el('b', null, `${st.approved} / ${tasks.length}`)),
+          el('span', null, 'review', el('b', null, `${st.reviews} 次`)),
+          el('span', null, '一次通过率', el('b', null, st.rate))),
+        body,
+        critSec,
+        job.status === 'awaiting_acceptance' ? el('p', { class: 'accept-tip' }, ACCEPT_HINT) : null),
+      toc));
   page.hidden = false;
   page.scrollTop = scroll;
   document.body.style.overflow = 'hidden';
@@ -2034,6 +2170,11 @@ function goAttention(key) {
   // stale（服务需要重启）：顶部黄色提示条已经写了怎么做
 }
 
+// 「其它」里每件事前面的类别：[文字, 颜色]
+const ATT_KIND = {
+  needs: ['缺人', 'asking'], stale: ['重启', 'rework'], dispute: ['分歧', 'submitted'], assign: ['指派', 'working'],
+  cancel: ['作废', 'rework'], quiet: ['停了', 'asking'], leader: ['leader', 'rework'],
+};
 // 弹框：待验收的需求可以勾选后一次验收通过；其它事每件一行，点「去处理」跳过去
 let acceptPick = null;    // 勾选的需求编号；null 表示还没动过，默认全选
 let acceptConfirm = false; // 「验收通过」两步确认
@@ -2062,10 +2203,11 @@ function renderAttentionList() {
       box2.addEventListener('change', () => { if (box2.checked) acceptPick.add(j.id); else acceptPick.delete(j.id); acceptConfirm = false; renderAttentionList(); });
       return el('div', { class: 'att-row' },
         el('label', { class: 'att-pick' }, box2,
-          el('span', null, el('b', null, j.id), ` ${j.title}`, el('span', { class: 'hint' }, `　${tasks.length} 个任务，${fmtTime(j.updatedAt)} 提交汇报`))),
+          el('span', null, el('b', null, j.id), ` ${j.title}`, el('div', { class: 'hint' }, `${tasks.length} 个任务 · ${fmtTime(j.updatedAt)} 提交汇报`))),
         el('button', { class: 'btn ghost sm', onclick: stop(() => { attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); }) }, '看汇报'));
     }),
-    el('div', { class: 'actions' },
+    el('div', { class: 'actions', style: 'justify-content: flex-end' },
+      acceptMsg ? el('span', { class: 'hint', style: 'margin-right: auto' }, acceptMsg) : null,
       acceptConfirm ? el('button', { class: 'btn ghost', onclick: stop(() => { acceptConfirm = false; renderAttentionList(); }) }, '取消') : null,
       el('button', {
         class: 'btn primary', disabled: picked.length === 0,
@@ -2081,22 +2223,19 @@ function renderAttentionList() {
           await poll();
           renderAttentionList();
         }),
-      }, acceptConfirm ? `确认验收通过这 ${picked.length} 个` : `验收通过选中的（${picked.length}）`),
-      acceptMsg ? el('span', { class: 'hint' }, acceptMsg) : null),
+      }, acceptConfirm ? `确认验收通过这 ${picked.length} 个` : `验收通过选中的（${picked.length}）`)),
   ] : (acceptMsg ? el('p', { class: 'hint' }, acceptMsg) : null);
 
   const otherSec = others.length ? [
     el('div', { class: 'att-head' }, el('h4', null, `其它（${others.length}）`)),
     others.map((i) => el('div', { class: 'att-row' },
-      el('span', null, i.body),
+      el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其它'), el('span', null, i.body)),
       i.key === 'stale' ? el('span', { class: 'hint' }, '见页面顶部提示') : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理'))),
   ] : null;
 
   fill(box, el('div', { class: 'modal att-modal', onclick: (e) => e.stopPropagation() },
-    el('div', { class: 'att-head' },
-      el('h3', null, `需要你处理（${items.length}）`),
-      el('button', { class: 'btn ghost sm', onclick: stop(() => { attentionOpen = false; renderAttentionList(); }) }, '关闭')),
-    acceptSec, otherSec));
+    modalHead(`需要你处理（${items.length}）`, () => { attentionOpen = false; renderAttentionList(); }),
+    el('div', { class: 'modal-body' }, acceptSec, otherSec)));
   box.hidden = false;
 }
 

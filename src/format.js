@@ -204,6 +204,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
 // 给审卡 worker 的待审清单
 function formatCritiqueList(tasks, agentId) {
   const lines = [`# 待审的卡（${tasks.length} 张）`, ''];
+  lines.push('**你只读不写：不要修改、新建、删除项目里的任何文件，也不要运行会改文件的命令（git、npm install、构建、格式化、代码生成都不行）。** 你的改动没人提交，会混进别的 worker 的提交里。发现代码问题就写进审卡意见，由 leader 派人改。', '');
   lines.push('逐张审：对照所属需求的说明、设计文档、同需求的其他卡，以及现有代码，找卡本身的问题。');
   lines.push('看全部的卡（包括审过的，用来查冲突）：ateam cards，或 ateam cards --job J1。', '');
   for (const t of tasks) {

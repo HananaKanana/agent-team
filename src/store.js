@@ -407,7 +407,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
 
     // 已安排下线、手上没有任务 → 正式下线（手上有任务的，等任务通过、作废或收回后再下线）
-    if (agent.dismiss && !agent.currentTask) {
+    // 审卡 worker 安排了「审完再下线」：还有待审的卡就接着审，审完才下线
+    if (agent.dismiss && !agent.currentTask && !(isCritic(agent) && critiqueQueue().length)) {
       finishDismiss(agent);
       return { kind: 'dismissed' };
     }
@@ -530,6 +531,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     for (const agent of picked) {
       let returned = null;
       const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
+      // 审卡 worker：还有待审的卡就审完再下线
+      if (afterTask && isCritic(agent) && critiqueQueue().length) {
+        if (!agent.dismiss) {
+          agent.dismiss = true;
+          emit('worker_leaving', { agentId: agent.id, text: `${agent.id} 审完待审的卡后下线` });
+        }
+        result.push({ id: agent.id, later: '待审的卡' });
+        continue;
+      }
       if (afterTask && task) {
         if (!agent.dismiss) {
           agent.dismiss = true;

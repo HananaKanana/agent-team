@@ -562,7 +562,8 @@ function criticProgress(a) {
   const left = (a.critiqueBatch || [])
     .map((id) => data.state.tasks.find((t) => t.id === id))
     .filter((t) => t && t.status !== 'cancelled' && !reviewed(t));
-  if (left.length) return `审 ${left[0].id}${left.length > 1 ? `，这批还剩 ${left.length} 张` : ''}`;
+  const leaving = a.dismiss ? '，审完下线' : '';
+  if (left.length) return `审 ${left[0].id}${left.length > 1 ? `，这批还剩 ${left.length} 张` : ''}${leaving}`;
   const last = a.lastCritiqued?.length ? `，刚审完 ${a.lastCritiqued.join('、')}` : '';
   return `等新卡${last}`;
 }
@@ -638,18 +639,32 @@ function dismissButtons(a) {
       el('button', { class: 'btn ghost sm', title: '立即下线；进行中的任务退回待领取', onclick: stop(() => dismissAgents({ ids: [a.id], userApproved: true })) }, '立即下线'),
     ];
   }
+  const critic = a.role.trim().toLowerCase() === 'critic';
   if (dismissArm !== a.id) {
     return el('button', {
       class: 'btn ghost sm',
       onclick: stop(() => {
-        // 手上有任务（可以选做完再下线），或是本角色最后一个 worker：先确认
-        if (a.currentTask || last) { dismissArm = a.id; renderHelper(); return; }
+        // 手上有任务（可以选做完再下线）、审卡 worker（可以选审完再下线），或是本角色最后一个 worker：先确认
+        if (a.currentTask || last || critic) { dismissArm = a.id; renderHelper(); return; }
         dismissAgents({ ids: [a.id] });
       }),
     }, '下线');
   }
   const cancel = el('button', { class: 'btn ghost sm', onclick: stop(() => { dismissArm = null; renderHelper(); }) }, '取消');
   const suffix = last ? `（${a.role} 最后一个）` : '';
+  if (critic) {
+    return [
+      cancel,
+      el('button', {
+        class: 'btn sm', title: '把待审的卡（包括审的过程中新来的）都审完，没有待审的卡了才下线',
+        onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true, afterTask: true }); }),
+      }, '审完再下线'),
+      el('button', {
+        class: 'btn warn sm', title: '马上停下，没审的卡留着，下次开审卡 worker 再审',
+        onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
+      }, '立即下线'),
+    ];
+  }
   if (!a.currentTask) {
     return [cancel, el('button', {
       class: 'btn warn sm', title: lastTip,
@@ -870,7 +885,7 @@ function renderHelper(force = false) {
           el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask || '空闲')}，心跳 ${ago(a.lastSeenAt)}`),
           isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null,
           a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null,
-          a.dismiss ? el('span', { class: 'pill', title: '做完手上的任务后下线，不再领新任务' }, '做完下线') : null,
+          a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审完待审的卡后下线' : '做完手上的任务后下线，不再领新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完下线' : '做完下线') : null,
           pendingCancel(a) ? el('span', { class: 'pill', title: '它还在做一个已作废的任务' }, `${pendingCancel(a).id} 已作废，它还不知道`) : null),
         dismissButtons(a)),
       pendingCancel(a) ? [

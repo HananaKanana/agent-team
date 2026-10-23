@@ -5,38 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ateam 调度台</title>
 <style>
-/* 配色参考 Jira：浅色是压暗过的灰白（不用纯白，免得刺眼）；深色中性深灰。
+/* 浅色沿用最初的灰绿底色（不用纯白，免得刺眼），卡片样式参考 Jira；深色中性深灰。
    默认跟随系统，右上角可以手动切换（data-theme） */
 :root {
-  --bg: #e9ebee;
-  --rail: #eef0f2;
-  --surface: #f5f6f7;
-  --raised: #fafafb;
-  --raised-hover: #f2f3f5;
-  --sunken: #e1e4e8;
-  --ink: #172b4d;
-  --muted: #44546f;
-  --faint: #5e6c84;
-  --line: #d3d7dd;
-  --line-soft: #dfe2e6;
-  --brand: #0c66e4;
-  --brand-soft: #dde9fb;
-  --brand-ink: #0b4fb3;
+  --bg: #e9ece6;
+  --rail: #e3e7e0;
+  --surface: #f4f6f1;
+  --raised: #f9faf7;
+  --raised-hover: #f1f4ee;
+  --sunken: #dde2da;
+  --ink: #1f2a24;
+  --muted: #4c5a51;
+  --faint: #66746b;
+  --line: #c9cfc6;
+  --line-soft: #d8ddd5;
+  --brand: #2d5d9f;
+  --brand-soft: #dbe4ee;
+  --brand-ink: #24508c;
   --on-color: #ffffff;
-  --pending: #8590a2;
-  --working: #0c66e4;
-  --rework: #c9372c;
-  --asking: #b38600;
-  --submitted: #6e5dc6;
-  --approved: #1f845a;
-  --held: #ae4787;
-  --focus: #0c66e4;
+  --pending: #8b958e;
+  --working: #2d5d9f;
+  --rework: #b5562b;
+  --asking: #a87f0e;
+  --submitted: #6a4fa3;
+  --approved: #2f7d4f;
+  --held: #8a3b5c;
+  --focus: #2d5d9f;
   /* 角色色：按角色名固定分配，前端/后端等常用名有固定颜色 */
-  --role-0: #0c66e4; --role-1: #c25100; --role-2: #1f845a; --role-3: #6e5dc6; --role-4: #ae2e24; --role-5: #946f00;
-  --shadow-card: 0 1px 1px rgba(9,30,66,.25), 0 0 1px rgba(9,30,66,.31);
-  --shadow-lift: 0 4px 8px -2px rgba(9,30,66,.25), 0 0 1px rgba(9,30,66,.31);
-  --shadow-pop: 0 8px 12px rgba(9,30,66,.15), 0 0 1px rgba(9,30,66,.31);
-  --backdrop: rgba(9, 30, 66, .45);
+  --role-0: #1d6f8c; --role-1: #9c4f1c; --role-2: #5b6b1e; --role-3: #7a3f8f; --role-4: #a3324a; --role-5: #8a6a0c;
+  --shadow-card: 0 1px 1px rgba(22,38,28,.22), 0 0 1px rgba(22,38,28,.3);
+  --shadow-lift: 0 4px 8px -2px rgba(22,38,28,.22), 0 0 1px rgba(22,38,28,.3);
+  --shadow-pop: 0 8px 12px rgba(22,38,28,.14), 0 0 1px rgba(22,38,28,.3);
+  --backdrop: rgba(20, 30, 24, .4);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {

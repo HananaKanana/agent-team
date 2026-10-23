@@ -792,8 +792,8 @@ function renderHelper(force = false) {
   const online = agents.filter((a) => a.status === 'online');
   const offline = agents.filter((a) => a.status !== 'online' && !a.hidden)
     .sort((x, y) => y.lastSeenAt - x.lastSeenAt);
-  // 角色：还没完成的任务的角色 + 所有（未移除的）worker 用过的角色
-  const roles = new Map();
+  // 角色：标准四个角色 + 还没完成的任务用到的角色 + 所有（未移除的）worker 用过的角色
+  const roles = new Map(STANDARD_ROLES.map((r) => [r.key, r.key]));
   for (const t of tasks) if (t.status !== 'approved' && t.status !== 'cancelled') roles.set(t.role.trim().toLowerCase(), t.role);
   for (const a of agents) if (!a.hidden) roles.set(a.role.trim().toLowerCase(), a.role);
   const ordered = online.slice().sort((x, y) => (y.id === helper.focus) - (x.id === helper.focus) || isStale(y) - isStale(x));
@@ -829,10 +829,19 @@ function renderHelper(force = false) {
     tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
-    roles.size ? [...roles.values()].map((role) => el('div', { class: 'wcard' },
-      el('div', { class: 'wcard-head' }, el('span', { class: 'tag role', style: roleStyle(role) }, role)),
-      promptBlock(workerPrompt(role), renderHelper)))
-      : promptBlock(workerPrompt('<角色，比如 frontend>'), renderHelper),
+    [...roles.values()].map((role) => {
+      const key = role.trim().toLowerCase();
+      const std = STANDARD_ROLES.find((r) => r.key === key);
+      const waiting = tasks.filter((t) => t.status === 'pending' && t.role.trim().toLowerCase() === key).length;
+      const working = online.filter((a) => a.role.trim().toLowerCase() === key).length;
+      return el('div', { class: 'wcard' },
+        el('div', { class: 'wcard-head' },
+          el('span', { class: 'tag role', style: roleStyle(role) }, role),
+          std ? el('b', null, std.label) : null,
+          el('span', { class: 'hint grow' }, std ? std.what : ''),
+          el('span', { class: 'hint' }, `在线 ${working}，待领取 ${waiting}`)),
+        promptBlock(workerPrompt(role), renderHelper));
+    }),
     el('div', { class: 'helper-sec' }, el('h4', null, `② 干活中：在线的 worker（${online.length}）`), dismissAll),
     el('p', { class: 'hint' }, dismissAllArm
       ? '确认后所有 worker 立即下线；进行中的任务退回待领取，已有改动保留。'
@@ -1168,7 +1177,7 @@ function agentLabel(id) {
 }
 
 // 角色 → 颜色。常用名固定，其他按名字哈希，同一角色永远同一颜色
-const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, docs: 3, 文档: 3 };
+const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, product: 3, pm: 3, 产品: 3, docs: 4, 文档: 4 };
 function roleStyle(role) {
   const key = String(role).trim().toLowerCase();
   let i = ROLE_FIXED[key];
@@ -1215,6 +1224,14 @@ function leadPrompt() {
 先运行 ateam status 了解现状，再用 Monitor 后台启动 ateam watch --follow 监听。
 如果「待你处理」里有事，先接着处理；没有的话，简单告诉我现状（有哪些 worker 在线、有没有没做完的需求），然后等我说需求。不要自己找活干。`;
 }
+
+// 标准角色：看板上总是列出来，leader skill 里也按这几个拆任务
+const STANDARD_ROLES = [
+  { key: 'product', label: '产品', what: '写产品文档，不写代码' },
+  { key: 'frontend', label: '前端', what: '页面和交互' },
+  { key: 'backend', label: '后端', what: '接口和数据' },
+  { key: 'test', label: '测试', what: '按验收标准验证，写报告' },
+];
 
 function workerPrompt(role) {
   const dir = data.root ? `\n项目目录：${data.root}` : '';

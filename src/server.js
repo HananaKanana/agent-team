@@ -244,7 +244,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null };
     }),
-    'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description }) }),
+    'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description, origin: b.origin }) }),
     'POST /api/jobs/edit': (b) => {
       const { jobId, ...patch } = b;
       return { job: store.editJob(jobId, patch) };
@@ -257,9 +257,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       });
       return { task, overlaps: store.overlapsFor(task) };
     },
-    'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because) }),
+    'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because, b.basis) }),
     'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text) }),
-    'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side) }),
+    'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side, b.text) }),
     'POST /api/note': (b) => ({ task: store.noteTask(requireId(b), b.text) }),
     'GET /api/cards': (_b, url) => ({ cards: store.cards({ jobId: url.searchParams.get('job') ?? '', todo: url.searchParams.get('todo') === '1' }) }),
     'POST /api/tasks/assign': (b) => ({ task: store.assignTask(requireId(b), b.to) }),

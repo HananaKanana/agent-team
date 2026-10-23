@@ -67,9 +67,12 @@ export function formatTask(task) {
     lines.push('## 审卡意见');
     lines.push('');
     for (const c of task.critiques) {
-      const reply = c.reply ? `；leader：${oneLine(c.reply)}` : '';
+      const basis = c.basis ? `（依据：${oneLine(c.basis)}）` : '';
+      const reply = c.reply ? `；leader${c.replyKind === 'agree' ? '同意' : c.replyKind === 'dispute' ? '不同意' : ''}：${oneLine(c.reply)}` : '';
+      const ruling = c.ruling ? `；用户决定：${oneLine(c.ruling)}` : '';
+      const done = c.doneText ? `；已改：${oneLine(c.doneText)}` : '';
       const because = c.because ? `（重新审：${c.because}）` : '';
-      lines.push(`- #${c.id} [${CRITIQUE_STATUS[c.status] ?? c.status}] ${c.by}${because}：${oneLine(c.text)}${reply}`);
+      lines.push(`- #${c.id} [${CRITIQUE_STATUS[c.status] ?? c.status}] ${c.by}${because}：${oneLine(c.text)}${basis}${reply}${ruling}${done}`);
     }
     lines.push('');
   }
@@ -85,7 +88,9 @@ export function formatTask(task) {
 const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复', note: 'leader 补充说明' };
 
 const CRITIQUE_STATUS = {
-  open: '待 leader 处理', resolved: '已处理', disputed: '等用户裁决', redo: '用户要求按意见改', overruled: '用户维持原样',
+  open: '等 leader 回复', proposed: 'leader 同意，等用户确认', disputed: 'leader 不同意，等用户裁决',
+  redo: '用户已决定，等 leader 照做', resolved: '已处理', closed: '用户决定不改',
+  overruled: '用户维持原样', // 旧数据
 };
 
 function footer(agentId) {
@@ -147,7 +152,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
     ].join('\n');
   }
   if (result.kind === 'critique_list') {
-    return formatCritiqueList(result.tasks, agentId);
+    return formatCritiqueList(result.tasks, agentId, result.jobs);
   }
   if (result.kind === 'cancelled') {
     return `# 任务 ${result.task?.id ?? ''} 已作废\n\n${result.text}`;
@@ -202,17 +207,23 @@ export function formatWait(result, agentId, waiting, round = 0) {
 }
 
 // 给审卡 worker 的待审清单
-function formatCritiqueList(tasks, agentId) {
+function formatCritiqueList(tasks, agentId, jobs = []) {
   const lines = [`# 待审的卡（${tasks.length} 张）`, ''];
   lines.push('**你只读不写：不要修改、新建、删除项目里的任何文件，也不要运行会改文件的命令（git、npm install、构建、格式化、代码生成都不行）。** 你的改动没人提交，会混进别的 worker 的提交里。发现代码问题就写进审卡意见，由 leader 派人改。', '');
   lines.push('逐张审：对照所属需求的说明、设计文档、同需求的其他卡，以及现有代码，找卡本身的问题。');
   lines.push('看全部的卡（包括审过的，用来查冲突）：ateam cards，或 ateam cards --job J1。', '');
+  lines.push('**以用户原话为准。** leader 的需求说明和卡都是 leader 的理解，可能一开始就偏了。审每张卡都要对照下面的用户原话：卡里有原话没要求的东西、漏了原话要求的东西、或者对原话的理解有别的可能，都算问题。', '');
+  for (const j of jobs) {
+    lines.push(`## 需求 ${j.id} ${j.title}：用户原话`, '', j.origin?.trim() || '（这个需求没有存用户原话，只能对照需求说明，提意见时注明这一点）', '');
+    if (j.description?.trim()) lines.push(`### leader 写的需求说明`, '', j.description.trim(), '');
+  }
   for (const t of tasks) {
     lines.push(`## ${t.id}：${t.title}（需求 ${t.jobId}${t.edited ? '，leader 改过，再审一次' : ''}）`, '', formatTask(t), '');
   }
   lines.push('---');
   lines.push(`没问题：ateam critique --as ${agentId} ok T1 T2 ...（可以一次标多张）`);
-  lines.push(`有问题：ateam critique --as ${agentId} issue T1 "<问题在哪、为什么是问题、建议怎么改>"`);
+  lines.push(`有问题：ateam critique --as ${agentId} issue T1 "<问题在哪、为什么是问题、建议怎么改>" --basis "<依据：用户原话的哪一句、设计文档哪一段、代码哪个文件第几行、命令的实际输出>"`);
+  lines.push('没有依据、只是「我觉得」的意见不要提。');
   lines.push(`发现和已经审过的旧卡冲突：对旧卡也提 issue，加上 --because "和 T12 冲突"（会记进历史）`);
   lines.push(`全部标完后运行 ateam wait --as ${agentId} 等新卡。不要结束本轮回复。`);
   return lines.join('\n');
@@ -230,8 +241,8 @@ export function formatCards(cards, { todo = false } = {}) {
 }
 
 const EVENT_HINT = {
-  critique: (e) => `处理审卡意见（ateam show ${e.taskId} 看全文）：待领取/已挂起的卡 ateam task edit ${e.taskId} ... 改；进行中的 ateam note ${e.taskId} "<补充说明>" 告诉 worker；已完成的加修复任务。处理完 ateam critique done ${e.taskId} "<改了什么>"；不同意就 ateam critique dispute ${e.taskId} "<理由>"（交给用户裁决）`,
-  critique_ruling: (e) => `用户要求按审卡意见改 ${e.taskId}：改完（或转告 worker、加修复任务）后 ateam critique done ${e.taskId} "<改了什么>"`,
+  critique: (e) => `先不要改卡。ateam show ${e.taskId} 看意见和依据，对照用户原话想清楚，然后回复：同意就 ateam critique agree ${e.taskId} "<打算怎么改>"，不同意就 ateam critique dispute ${e.taskId} "<理由>"。由用户在看板上决定`,
+  critique_ruling: (e) => `用户已决定，照做：待领取/已挂起的卡 ateam task edit ${e.taskId} ... 改；进行中的 ateam note ${e.taskId} "<补充说明>" 告诉 worker；已完成的加修复任务。做完 ateam critique done ${e.taskId} "<改了什么>"`,
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,
@@ -289,11 +300,17 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
   if (critiqued.length) {
     lines.push('', `## 审卡意见待你处理（${critiqued.length}）`, '');
     for (const t of critiqued) {
-      const open = t.critiques.filter((c) => c.status === 'open' || c.status === 'redo');
-      const tag = open.some((c) => c.status === 'redo') ? '用户要求按意见改' : '待处理';
-      lines.push(`- ${t.id} [${t.status}] ${t.title}（${tag}）：${open.map((c) => oneLine(c.text)).join('；')} —— 处理后 ateam critique done ${t.id} "<改了什么>"，不同意 ateam critique dispute ${t.id} "<理由>"`);
+      const redo = t.critiques.filter((c) => c.status === 'redo');
+      if (redo.length) {
+        lines.push(`- ${t.id} [${t.status}] ${t.title}（用户已决定，照做）：${redo.map((c) => oneLine(c.instruction)).join('；')} —— 做完 ateam critique done ${t.id} "<改了什么>"`);
+      } else {
+        const open = t.critiques.filter((c) => c.status === 'open');
+        lines.push(`- ${t.id} [${t.status}] ${t.title}（等你回复，先别改卡）：${open.map((c) => oneLine(c.text)).join('；')} —— ateam critique agree ${t.id} "<打算怎么改>" 或 dispute ${t.id} "<理由>"`);
+      }
     }
   }
+  const awaitingUser = state.tasks.filter((t) => (t.critiques ?? []).some((c) => c.status === 'proposed' || c.status === 'disputed'));
+  if (awaitingUser.length) lines.push('', `另有 ${awaitingUser.length} 张卡的审卡意见在等用户决定：${awaitingUser.map((t) => t.id).join('、')}（不用你做什么）`);
   const undelivered = state.events.filter((e) => !e.delivered).length;
   if (undelivered) lines.push('', `另有 ${undelivered} 条未读事件：ateam watch`);
 
@@ -362,6 +379,7 @@ export function formatJob(state, job) {
   lines.push(`- 状态：${JOB_STATUS[job.status] ?? job.status}`);
   if (job.createdAt) lines.push(`- 创建：${formatTime(job.createdAt)}`);
   if (job.acceptedAt) lines.push(`- 验收：${formatTime(job.acceptedAt)}`);
+  lines.push('', '## 用户原话', '', job.origin?.trim() || '（没有存）');
   lines.push('', '## 说明', '', job.description?.trim() || '（无）', '', '## 任务', '');
   if (!tasks.length) lines.push('（无）');
   for (const t of tasks) {
@@ -369,6 +387,13 @@ export function formatJob(state, job) {
     lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}，路径 ${t.paths.join('、')}${commits}）`);
   }
   lines.push('', '任务详情和历史：ateam show T1', '', '## 汇报', '', job.report?.trim() || '（还没有汇报）');
+  const crit = tasks.flatMap((t) => (t.critiques ?? []).map((c) => ({ t, c })));
+  if (crit.length) {
+    lines.push('', '## 审卡改动', '');
+    for (const { t, c } of crit) {
+      lines.push(`- ${t.id} #${c.id} [${CRITIQUE_STATUS[c.status] ?? c.status}]：${oneLine(c.text)}${c.ruling ? ` → ${oneLine(c.ruling)}` : ''}${c.doneText ? ` → 已改：${oneLine(c.doneText)}` : ''}`);
+    }
+  }
   return lines.join('\n');
 }
 

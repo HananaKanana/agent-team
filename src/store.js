@@ -145,12 +145,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   // ---------- 需求与任务 ----------
 
-  function createJob({ title, description = '' } = {}) {
+  // origin：用户提需求时的原话，原样保存、之后不能改。审卡对照它，防止 leader 和审卡一起理解偏了还互相印证
+  function createJob({ title, description = '', origin = '' } = {}) {
     title = requireText(title, '需求标题');
+    origin = requireText(origin, '用户原话（--origin-file）');
     state.seq.job += 1;
     const ts = now();
     const job = {
-      id: `J${state.seq.job}`, title, description: description ?? '',
+      id: `J${state.seq.job}`, title, description: description ?? '', origin,
       status: 'planning', report: null, createdAt: ts, updatedAt: ts,
     };
     state.jobs.push(job);
@@ -164,6 +166,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     let touched = false;
     if (patch.title !== undefined) { job.title = requireText(patch.title, '需求标题'); touched = true; }
     if (patch.description !== undefined) { job.description = String(patch.description ?? ''); touched = true; }
+    // 原话只能补（老需求没有原话时），不能改
+    if (patch.origin !== undefined) {
+      if (job.origin) throw new AteamError('BAD_STATE', `需求 ${job.id} 的用户原话已经存了，不能改。用户补充的话写进需求说明（--desc-file）。`);
+      job.origin = requireText(patch.origin, '用户原话');
+      touched = true;
+    }
     if (!touched) throw new AteamError('INVALID', '没有要修改的内容。请提供 --title 或 --desc-file。');
     job.updatedAt = now();
     changed();
@@ -440,7 +448,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       // 记下这批卡，看板据此显示它正在审哪张、还剩几张
       agent.critiqueBatch = tasks.map((t) => t.id);
       changed();
-      return { kind: 'critique_list', tasks: tasks.map((t) => critiqueView(t)) };
+      // 附上这些卡所属需求的用户原话和说明，审卡要对照原话，不能只对照 leader 的理解
+      const jobIds = [...new Set(tasks.map((t) => t.jobId))];
+      const jobs = jobIds.map((id) => state.jobs.find((j) => j.id === id)).filter(Boolean)
+        .map((j) => ({ id: j.id, title: j.title, origin: j.origin ?? '', description: j.description ?? '' }));
+      return { kind: 'critique_list', tasks: tasks.map((t) => critiqueView(t)), jobs };
     }
 
     if (agent.currentTask) {
@@ -798,13 +810,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   // 审卡 worker 给出结论。ids：一张或多张卡；verdict：ok 没问题 / issue 有问题（text 写问题和修改建议）。
   // because：重新审已经审过的卡时必须写明原因（比如和哪张新卡冲突），历史里留痕。
-  function submitCritique(agentId, ids, verdict, text = '', because = '') {
+  function submitCritique(agentId, ids, verdict, text = '', because = '', basis = '') {
     const agent = touch(agentId);
     if (!isCritic(agent)) throw new AteamError('BAD_STATE', '只有审卡角色（critic）的 worker 能提交审卡结论。');
     const list = (Array.isArray(ids) ? ids : [ids]).map((id) => String(id).trim()).filter(Boolean);
     if (!list.length) throw new AteamError('INVALID', '请写上要审的卡的编号，例如 T5（可以多个）。');
     if (verdict !== 'ok' && verdict !== 'issue') throw new AteamError('INVALID', '审卡结论只能是 ok 或 issue。');
-    if (verdict === 'issue') text = requireText(text, '审卡意见');
+    if (verdict === 'issue') {
+      text = requireText(text, '审卡意见');
+      basis = requireText(basis, '依据（--basis：用户原话的哪一句、设计文档哪一段、代码哪个文件第几行、命令的实际输出）');
+    }
     because = String(because ?? '').trim();
     const tasks = list.map(getTask);
     for (const t of tasks) {
@@ -820,8 +835,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       const prefix = again ? `重新审卡（${because}）` : '审卡';
       if (verdict === 'issue') {
         t.critiques ??= [];
-        t.critiques.push({ id: t.critiques.length + 1, by: agent.id, ts: now(), status: 'open', text, taskStatus: t.status, ...(again ? { because } : {}) });
-        addHistory(t, 'critique', agent.id, `${prefix}：${text}`);
+        t.critiques.push({ id: t.critiques.length + 1, by: agent.id, ts: now(), status: 'open', text, basis, taskStatus: t.status, ...(again ? { because } : {}) });
+        addHistory(t, 'critique', agent.id, `${prefix}：${text}（依据：${basis}）`);
         emit('critique', { taskId: t.id, agentId: agent.id, text: `${prefix}意见（${t.id}，${t.status}）：${text}` });
       } else {
         addHistory(t, 'critique', agent.id, `${prefix}通过${String(text ?? '').trim() ? `：${String(text).trim()}` : ''}`);
@@ -835,34 +850,81 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return (task.critiques ?? []).filter((c) => statuses.includes(c.status));
   }
 
-  // leader 处理意见：done 已按意见改（或已转告 worker / 已加修复任务）；dispute 不同意，交给用户裁决
+  // 审卡意见的流程（有分歧就交给用户，leader 不能自己拍板改卡）：
+  //   open      审卡提出，等 leader 回复
+  //   proposed  leader 同意，写了打算怎么改，等用户确认
+  //   disputed  leader 不同意，写了理由，等用户裁决
+  //   redo      用户定了怎么改（instruction），等 leader 照做
+  //   resolved  leader 改完了
+  //   closed    用户决定不改
+  // leader 回复：agree（同意，附改法）/ dispute（不同意，附理由）；用户定了以后 done（改完了）
   function handleCritique(taskId, action, text) {
-    text = requireText(text, action === 'done' ? '处理说明（改了什么）' : '不同意的理由');
     const task = getTask(taskId);
-    const open = openCritiques(task, ['open', 'redo']);
-    if (!open.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有待处理的审卡意见。`);
-    for (const c of open) {
-      c.reply = text;
-      c.status = action === 'done' ? 'resolved' : 'disputed';
-      c.repliedAt = now();
+    if (action === 'agree' || action === 'dispute') {
+      text = requireText(text, action === 'agree' ? '打算怎么改' : '不同意的理由');
+      const open = openCritiques(task, ['open']);
+      if (!open.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有等你回复的审卡意见。`);
+      for (const c of open) {
+        c.reply = text;
+        c.replyKind = action;
+        c.status = action === 'agree' ? 'proposed' : 'disputed';
+        c.repliedAt = now();
+      }
+      addHistory(task, 'critique', 'lead', action === 'agree' ? `同意审卡意见，打算：${text}（等用户确认）` : `不同意审卡意见：${text}（等用户裁决）`);
+    } else if (action === 'done') {
+      text = requireText(text, '处理说明（改了什么）');
+      const redo = openCritiques(task, ['redo']);
+      if (!redo.length) {
+        const waiting = openCritiques(task, ['open', 'proposed', 'disputed']);
+        throw new AteamError('BAD_STATE', waiting.length
+          ? `任务 ${task.id} 的审卡意见还没有用户的决定，不能自己改。先回复（ateam critique agree/dispute），等用户在看板上决定。`
+          : `任务 ${task.id} 没有待处理的审卡意见。`);
+      }
+      for (const c of redo) { c.status = 'resolved'; c.doneText = text; c.doneAt = now(); }
+      addHistory(task, 'critique', 'lead', `按用户的决定处理审卡意见：${text}`);
+    } else {
+      throw new AteamError('INVALID', '只能是 agree、dispute 或 done。');
     }
-    addHistory(task, 'critique', 'lead', action === 'done' ? `处理审卡意见：${text}` : `不同意审卡意见，交给用户裁决：${text}`);
     changed();
     return task;
   }
 
-  // 用户裁决：side 为 critic（按审卡意见改，退回 leader 再处理）或 leader（维持 leader 的做法，结案）
-  function ruleCritique(taskId, side) {
+  // 用户决定：critic 按审卡意见改；leader 按 leader 的方案（leader 同意时）或维持原样（leader 不同意时）；
+  // none 都不改；custom 按用户自己写的意见改（text）
+  function ruleCritique(taskId, side, text = '') {
     const task = getTask(taskId);
-    const disputed = openCritiques(task, ['disputed']);
-    if (!disputed.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有等你裁决的审卡意见。`);
-    for (const c of disputed) c.status = side === 'critic' ? 'redo' : 'overruled';
+    const waiting = openCritiques(task, ['proposed', 'disputed']);
+    if (!waiting.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有等你决定的审卡意见。`);
+    let instruction = null;
+    let label;
     if (side === 'critic') {
-      addHistory(task, 'critique', 'user', '用户裁决：按审卡意见改');
-      emit('critique_ruling', { taskId: task.id, text: `用户裁决 ${task.id}：按审卡意见改。意见：${disputed.map((c) => c.text).join('；')}` });
+      instruction = `按审卡意见改：${waiting.map((c) => c.text).join('；')}`;
+      label = '按审卡意见改';
+    } else if (side === 'leader') {
+      const agreed = waiting.filter((c) => c.replyKind === 'agree');
+      if (agreed.length) {
+        instruction = `按你的方案改：${agreed.map((c) => c.reply).join('；')}`;
+        label = '按 leader 的方案改';
+      } else {
+        label = '维持原样（同意 leader）';
+      }
+    } else if (side === 'none') {
+      label = '都不改';
+    } else if (side === 'custom') {
+      text = requireText(text, '你的意见');
+      instruction = `按用户的意见改：${text}`;
+      label = `按用户自己的意见改：${text}`;
     } else {
-      addHistory(task, 'critique', 'user', '用户裁决：维持 leader 的做法');
+      throw new AteamError('INVALID', '决定只能是 critic、leader、none 或 custom。');
     }
+    for (const c of waiting) {
+      c.ruling = label;
+      c.ruledAt = now();
+      c.status = instruction ? 'redo' : 'closed';
+      if (instruction) c.instruction = instruction;
+    }
+    addHistory(task, 'critique', 'user', `用户决定：${label}`);
+    if (instruction) emit('critique_ruling', { taskId: task.id, text: `用户决定 ${task.id}：${instruction}` });
     changed();
     return task;
   }

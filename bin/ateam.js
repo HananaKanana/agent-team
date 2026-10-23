@@ -44,8 +44,8 @@ worker
   ateam submit --as <ID> "<总结>" [--no-changes]
 
 leader
-  ateam job new "<标题>" [--desc-file f.md]
-  ateam job edit J1 [--title "..."] [--desc-file f.md]
+  ateam job new "<标题>" --origin-file origin.md [--desc-file f.md]
+  ateam job edit J1 [--title "..."] [--desc-file f.md] [--origin-file f.md（只能给没有原话的老需求补）]
   ateam job accept J1 [J2...]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]... [--top]
   ateam task top T3 [--off]
@@ -60,8 +60,8 @@ leader
   ateam answer T3 "<答复>"
   ateam status [--job J1 | --all]
   ateam cards [--job J1] [--todo]
-  ateam critique --as <ID> ok T5 [T6 ...] ／ issue T5 "<问题和建议>" [--because "<重新审的原因>"]
-  ateam critique done T5 "<改了什么>" ／ dispute T5 "<为什么不改>"
+  ateam critique --as <ID> ok T5 [T6 ...] ／ issue T5 "<问题和建议>" --basis "<依据>" [--because "<重新审的原因>"]
+  ateam critique agree T5 "<打算怎么改>" ／ dispute T5 "<为什么不改>" ／ done T5 "<改了什么>"
   ateam note T5 "<给正在做的 worker 的补充说明>"
   ateam rules [add "<一条规则>" | set --file rules.md]
   ateam jobs [--all] [--grep <关键词>]
@@ -292,7 +292,9 @@ const commands = {
   async 'job new'({ flags, positional }) {
     const title = requireArg(positional[0], '需求标题', 'ateam job new "用户登录"');
     const description = flags['desc-file'] ? readTextFile(flags['desc-file'], '--desc-file') : '';
-    const { job } = await request('POST', '/api/jobs', { title, description });
+    const origin = flags['origin-file'] ? readTextFile(flags['origin-file'], '--origin-file') : (flags.origin ?? '');
+    if (!String(origin).trim()) fail('缺少用户原话。把用户提这个需求时说的话原样写进一个文件（不要改写、不要总结；对话里补充的要求也一并贴上），用 --origin-file 传入：ateam job new "<标题>" --origin-file origin.md --desc-file job.md');
+    const { job } = await request('POST', '/api/jobs', { title, description, origin });
     return `已创建需求 ${job.id}：${job.title}\n\n下一步：ateam task add --job ${job.id} --role <角色> --paths <路径> --title "..." --desc-file <文件> --accept "..."`;
   },
 
@@ -308,7 +310,8 @@ const commands = {
     const body = { jobId };
     if (flags.title !== undefined) body.title = flags.title;
     if (flags['desc-file'] !== undefined) body.description = readTextFile(flags['desc-file'], '--desc-file');
-    if (body.title === undefined && body.description === undefined) fail('请提供 --title 或 --desc-file。示例：ateam job edit J1 --desc-file job.md');
+    if (flags['origin-file'] !== undefined) body.origin = readTextFile(flags['origin-file'], '--origin-file');
+    if (body.title === undefined && body.description === undefined && body.origin === undefined) fail('请提供 --title、--desc-file 或 --origin-file。示例：ateam job edit J1 --desc-file job.md');
     const { job } = await request('POST', '/api/jobs/edit', body);
     return `已修改需求 ${job.id}：${job.title}（说明 ${job.description.length} 字）`;
   },
@@ -467,19 +470,18 @@ const commands = {
   async critique({ flags, positional }) {
     const [verb, ...rest] = positional;
     if (flags.as) {
-      if (verb !== 'ok' && verb !== 'issue') fail(`用法：ateam critique --as ${flags.as} ok T5 [T6 ...] ／ ateam critique --as ${flags.as} issue T5 "<问题和修改建议>" [--because "<重新审的原因>"]`);
+      if (verb !== 'ok' && verb !== 'issue') fail(`用法：ateam critique --as ${flags.as} ok T5 [T6 ...] ／ ateam critique --as ${flags.as} issue T5 "<问题和修改建议>" --basis "<依据>" [--because "<重新审的原因>"]`);
       const ids = verb === 'ok' ? rest.filter((x) => /^T\d+$/i.test(x)) : rest.slice(0, 1);
       const text = verb === 'ok' ? rest.filter((x) => !/^T\d+$/i.test(x)).join(' ') : rest[1];
-      const { tasks } = await request('POST', '/api/critique', { as: flags.as, ids: ids.map((x) => x.toUpperCase()), verdict: verb, text: text ?? '', because: flags.because ?? '' });
-      const what = verb === 'ok' ? '审卡通过' : '已提交审卡意见，leader 会处理';
+      const { tasks } = await request('POST', '/api/critique', { as: flags.as, ids: ids.map((x) => x.toUpperCase()), verdict: verb, text: text ?? '', because: flags.because ?? '', basis: flags.basis ?? '' });
+      const what = verb === 'ok' ? '审卡通过' : '已提交审卡意见，leader 回复后交给用户决定';
       return `${what}：${tasks.map((t) => t.id).join('、')}。继续审下一张；都审完了运行 ateam wait --as ${flags.as}`;
     }
-    if (verb !== 'done' && verb !== 'dispute') fail('用法：ateam critique done T5 "<改了什么>" ／ ateam critique dispute T5 "<为什么不改>"');
+    if (!['agree', 'dispute', 'done'].includes(verb)) fail('用法：ateam critique agree T5 "<打算怎么改>" ／ ateam critique dispute T5 "<为什么不改>" ／ 用户决定后 ateam critique done T5 "<改了什么>"');
     const id = requireArg(rest[0], '任务编号', `ateam critique ${verb} T5 "..."`);
     const { task } = await request('POST', '/api/critique/handle', { id, action: verb, text: rest[1] ?? '' });
-    return verb === 'done'
-      ? `已处理 ${task.id} 的审卡意见。`
-      : `已把 ${task.id} 的审卡意见交给用户裁决（看板「需要你处理」里）。用户裁决按意见改的话，你会收到 critique_ruling 事件。`;
+    if (verb === 'done') return `已结案 ${task.id} 的审卡意见。`;
+    return `已回复 ${task.id} 的审卡意见，交给用户在看板上决定。先不要改这张卡；用户决定后你会收到 critique_ruling 事件（按什么改），照做后 ateam critique done ${task.id} "<改了什么>"。用户选「不改」就不会有事件。`;
   },
 
   // 给正在做的 worker 补充说明，它下一次调用 progress / wait / submit 时收到

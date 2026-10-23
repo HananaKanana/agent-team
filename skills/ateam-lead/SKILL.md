@@ -39,7 +39,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 - 告诉用户要开哪些 worker 时，把 product、test 也算上（比如「需要 1 个 product、1 个 backend、1 个 frontend、1 个 test」）。产品任务在最前、测试任务在最后，同一个窗口不能换角色，所以要分别开。
 
 1. 先定**接口约定**：接口路径、请求和响应格式、共享的类型和常量。写进每个相关任务的描述。
-2. 建需求：`ateam job new "<标题>" --desc-file job.md`。需求说明只写几句概要（用户选了什么、任务顺序、设计文档和计划文件在哪、这次需求所有任务都要注意的事），它会附在这个需求的每个任务后面发给 worker；细节写进各任务的描述，不要把整份计划塞进来。写错了用 `ateam job edit J1 [--title "..."] [--desc-file job.md]` 改
+2. 建需求：`ateam job new "<标题>" --origin-file origin.md --desc-file job.md`。**`origin.md` 放用户提这个需求时的原话，原样复制，不要改写、不要总结**；对话里用户后来补充的要求也一并原样贴上。原话存下后不能改，审卡 worker 会拿它对照每张卡，防止你和审卡一起理解偏了。需求说明只写几句概要（用户选了什么、任务顺序、设计文档和计划文件在哪、这次需求所有任务都要注意的事），它会附在这个需求的每个任务后面发给 worker；细节写进各任务的描述，不要把整份计划塞进来。写错了用 `ateam job edit J1 [--title "..."] [--desc-file job.md]` 改
 3. 加任务：
 
    ```
@@ -93,21 +93,27 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
-| `critique` | 审卡意见，按「审卡意见」一节处理 |
-| `critique_ruling` | 用户裁决按审卡意见改：照做后 `ateam critique done T5 "<改了什么>"` |
+| `critique` | 审卡意见，先别改卡，按「审卡意见」一节回复 agree 或 dispute |
+| `critique_ruling` | 用户决定了审卡意见怎么改：照做后 `ateam critique done T5 "<改了什么>"` |
 | `worker_joined` `claimed` `job_accepted` | 了解即可 |
 
 ## 审卡意见
 
-有审卡 worker 在线时，它会审每一张卡，你改过的卡它会再审一次。有问题会给你一条 `critique` 事件，`ateam status` 里也有「审卡意见待你处理」。**每条意见都必须处理**，按卡的状态：
+有审卡 worker 在线时，它会对照**用户原话**审每一张卡，你改过的卡它会再审一次。有问题会给你一条 `critique` 事件，`ateam status` 里也有「审卡意见待你处理」。每条意见都带依据（用户原话的哪一句、文档哪一段、代码哪一行）。
 
-- 待领取 / 已挂起：`ateam task edit T5 ...` 直接改卡；
+**审卡和你之间有分歧，由用户决定，你不能自己拍板改卡。** 收到意见后先不要改卡，对照用户原话想清楚，然后回复：
+
+- 同意：`ateam critique agree T5 "<打算怎么改>"`
+- 不同意：`ateam critique dispute T5 "<理由>"`（理由要说清楚，最好也引用原话或代码；不要因为嫌麻烦就不同意）
+
+回复后用户在看板上决定：按你的方案改、按审卡意见改、按用户自己写的意见改，或者不改。决定要改时你会收到 `critique_ruling` 事件，里面写着按什么改，照做：
+
+- 待领取 / 已挂起：`ateam task edit T5 ...` 改卡；
 - 进行中：`ateam note T5 "<补充说明>"` 告诉正在做的 worker（它下一次调用 progress、wait 或提交时收到，提交前一定会看到），需要的话卡也要改；
 - 已完成：加修复任务；
 - 意见针对的是多张卡的关系（比如两张卡冲突），每张都按上面处理。
 
-处理完：`ateam critique done T5 "<改了什么>"`。
-不同意：`ateam critique dispute T5 "<为什么不改>"`，交给用户在看板上裁决。用户要求按意见改时，你会收到 `critique_ruling` 事件，照做后再 `ateam critique done`。不要因为嫌麻烦就 dispute。
+做完：`ateam critique done T5 "<改了什么>"`。用户选「不改」就没有事件，到此结束。
 
 ## 作废任务
 

@@ -266,6 +266,13 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .tag.assigned { background: var(--focus); color: #fff; }
 .tag.critique { background: color-mix(in srgb, var(--role-5) 22%, transparent); color: var(--ink); }
 .critique-item { background: var(--bg); border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: 13px; }
+.critique-item .ci-label, .decide-modal .ci-label { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 8px; }
+.origin-box { margin: 8px 0 0; max-width: 72ch; font-size: 13px; }
+.origin-box summary { cursor: pointer; color: var(--muted); }
+.origin-box .md { background: var(--surface); border-radius: 6px; padding: 4px 12px; margin-top: 4px; }
+.crit-head { font-size: 16px; margin: 28px 0 4px; border-top: 1px solid var(--line); padding-top: 16px; }
+.decide-modal { width: min(720px, 100%); }
+.decide-modal .origin { background: var(--bg); border-radius: 6px; padding: 4px 12px; font-size: 13px; max-height: 180px; overflow-y: auto; }
 .critique-item .reply { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
 .assign-select {
   width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px;
@@ -376,6 +383,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 <div class="modal-back" id="attention-list" hidden role="dialog" aria-modal="true" aria-label="需要你处理"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
+<div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
 <div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
 
 <script>
@@ -1025,6 +1033,9 @@ function renderMain() {
       box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
       return box;
     })() : null,
+    job.origin ? el('details', { class: 'origin-box' },
+      el('summary', null, '你提需求时的原话'),
+      (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null,
     tasks.length ? strip(tasks, true) : null);
   const stats = el('div', { class: 'stats' },
     el('span', null, '状态 ', el('b', null, JOB_STATUS[job.status] || job.status)),
@@ -1160,51 +1171,107 @@ function closeDrawer() {
 // 设为优先 / 取消优先：只影响同角色 worker 领任务的先后
 let priorityError = null;
 // ---------- 审卡意见 ----------
-const CRITIQUE_STATUS = { open: '待 leader 处理', resolved: '已处理', disputed: '等你裁决', redo: '你要求按意见改，待 leader 处理', overruled: '你维持了原样' };
+const CRITIQUE_STATUS = {
+  open: '等 leader 回复', proposed: 'leader 同意，等你确认', disputed: 'leader 不同意，等你决定',
+  redo: '你已决定，等 leader 照做', resolved: '已处理', closed: '你决定不改', overruled: '你维持了原样',
+};
+
+const awaitingUser = (c) => c.status === 'proposed' || c.status === 'disputed';
 
 function critiqueTag(t) {
   const list = t.critiques || [];
-  if (list.some((c) => c.status === 'disputed')) return el('span', { class: 'tag warn' }, '审卡：待你裁决');
+  if (list.some(awaitingUser)) return el('span', { class: 'tag warn' }, '审卡：待你决定');
   const open = list.filter((c) => c.status === 'open' || c.status === 'redo').length;
   return open ? el('span', { class: 'tag critique' }, `审卡意见 ${open}`) : null;
 }
 
-let critiqueError = null;
+// 一条审卡意见的完整内容：意见、依据、leader 的回复、你的决定、改了什么
+function critiqueItem(c) {
+  const md = (text) => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(text); return d; }; // renderMarkdown 先转义了 HTML
+  const replyLabel = c.replyKind === 'agree' ? 'leader 同意，打算这样改：' : c.replyKind === 'dispute' ? 'leader 不同意，理由：' : 'leader：';
+  return el('div', { class: 'critique-item' },
+    el('div', { class: 'hint' }, `#${c.id} ${c.by}，${fmtTime(c.ts)}${c.because ? `，重新审：${c.because}` : ''}　`, el('b', null, CRITIQUE_STATUS[c.status] || c.status)),
+    el('div', { class: 'ci-label' }, '审卡意见'), md(c.text),
+    c.basis ? [el('div', { class: 'ci-label' }, '依据'), md(c.basis)] : null,
+    c.reply ? [el('div', { class: 'ci-label' }, replyLabel), md(c.reply)] : null,
+    c.ruling ? [el('div', { class: 'ci-label' }, '你的决定'), md(c.ruling)] : null,
+    c.doneText ? [el('div', { class: 'ci-label' }, 'leader 已改'), md(c.doneText)] : null);
+}
+
 function critiqueBox(t) {
   const list = t.critiques || [];
   if (!list.length) return null;
-  const disputed = list.some((c) => c.status === 'disputed');
-  const rule = async (side) => {
-    try {
-      const res = await fetch('/api/critique/rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, side }) });
-      const out = await res.json();
-      critiqueError = out.ok ? null : out.message;
-    } catch { critiqueError = '连不上 ateam 服务。'; }
-    await poll();
-    renderDrawer(false);
-  };
+  const waiting = list.some(awaitingUser);
   return [
     el('h4', null, `审卡意见（${list.length}）`),
-    list.map((c) => {
-      const box = el('div', { class: 'critique-item' },
-        el('div', { class: 'hint' }, `#${c.id} ${c.by}，${fmtTime(c.ts)}${c.because ? `，重新审：${c.because}` : ''}　`, el('b', null, CRITIQUE_STATUS[c.status] || c.status)),
-        el('div', { class: 'md' }));
-      box.lastChild.innerHTML = renderMarkdown(c.text); // renderMarkdown 先转义了 HTML
-      if (c.reply) {
-        const reply = el('div', { class: 'md reply' });
-        reply.innerHTML = renderMarkdown(`**leader：**${c.reply}`);
-        box.append(reply);
-      }
-      return box;
-    }),
-    disputed ? [
-      el('p', { class: 'hint' }, 'leader 不同意这条审卡意见（理由见上）。你来定听谁的：'),
-      el('div', { class: 'prompt' },
-        el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); rule('critic'); } }, '按审卡意见改'),
-        el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); rule('leader'); } }, '维持 leader 的做法')),
-    ] : null,
-    critiqueError ? el('p', { class: 'hint' }, critiqueError) : null,
+    list.map(critiqueItem),
+    waiting ? el('div', { class: 'prompt' },
+      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); decideLater.delete(t.id); decideFocus = t.id; renderDecideDialog(); } }, '去决定')) : null,
   ];
+}
+
+// ---------- 审卡分歧：弹框让你决定 ----------
+// leader 回复了审卡意见（同意或不同意）后，由你决定怎么办。一次显示一张卡，「稍后再说」这次先不弹。
+const decideLater = new Set();
+let decideFocus = null;
+let decideCustom = false;
+let decideError = null;
+
+function decideTasks() {
+  return data.state.tasks.filter((t) => (t.critiques || []).some(awaitingUser));
+}
+
+async function decide(t, side, text) {
+  try {
+    const res = await fetch('/api/critique/rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, side, text }) });
+    const out = await res.json();
+    decideError = out.ok ? null : out.message;
+  } catch { decideError = '连不上 ateam 服务。'; }
+  if (!decideError) { decideCustom = false; decideFocus = null; }
+  await poll();
+  renderDecideDialog();
+}
+
+function renderDecideDialog() {
+  const box = document.getElementById('decide-dialog');
+  // 正在写自己的意见：轮询刷新不重画，免得打字丢失
+  if (decideCustom && box.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') return;
+  const all = decideTasks();
+  for (const id of [...decideLater]) if (!all.some((t) => t.id === id)) decideLater.delete(id);
+  const list = all.filter((t) => !decideLater.has(t.id) || t.id === decideFocus);
+  if (!list.length) { box.hidden = true; box.replaceChildren(); return; }
+  const t = list.find((x) => x.id === decideFocus) || list[0];
+  const waiting = t.critiques.filter(awaitingUser);
+  const agreed = waiting.some((c) => c.replyKind === 'agree');
+  const job = data.state.jobs.find((j) => j.id === t.jobId);
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const origin = el('div', { class: 'md origin' });
+  origin.innerHTML = renderMarkdown(job?.origin || '（这个需求没有存你的原话）');
+  const area = el('textarea', { class: 'rules-editor', rows: '4', placeholder: '写下你要 leader 怎么改，比如「按审卡意见改，但按钮文案保留原来的」' });
+  const options = agreed ? [
+    el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'leader')) }, '按 leader 的方案改'),
+    el('button', { class: 'btn', onclick: stop(() => decide(t, 'critic')) }, '按审卡意见原样改'),
+    el('button', { class: 'btn', onclick: stop(() => decide(t, 'none')) }, '都不改'),
+  ] : [
+    el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'critic')) }, '按审卡意见改'),
+    el('button', { class: 'btn', onclick: stop(() => decide(t, 'leader')) }, '维持原样（同意 leader）'),
+  ];
+  fill(box, el('div', { class: 'modal decide-modal', onclick: (e) => e.stopPropagation() },
+    el('div', { class: 'att-head' },
+      el('h3', null, all.length > 1 ? `审卡有分歧，等你决定（共 ${all.length} 张卡）` : '审卡有分歧，等你决定'),
+      el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); decideFocus = null; decideCustom = false; renderDecideDialog(); }) }, '稍后再说')),
+    el('p', null, el('b', null, `${t.id} ${t.title}`), el('span', { class: 'hint' }, `　需求 ${t.jobId}，${t.role}，${t.status}　`),
+      el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '看卡片全文')),
+    el('div', { class: 'ci-label' }, `你提需求时的原话（需求 ${t.jobId}）`), origin,
+    waiting.map(critiqueItem),
+    el('div', { class: 'ci-label' }, '你的决定'),
+    el('div', { class: 'actions' }, options,
+      el('button', { class: decideCustom ? 'btn ghost' : 'btn', onclick: stop(() => { decideCustom = !decideCustom; renderDecideDialog(); }) }, decideCustom ? '收起' : '我来写意见')),
+    decideCustom ? [area, el('div', { class: 'actions' },
+      el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'custom', area.value)) }, '按我的意见改'))] : null,
+    el('p', { class: 'hint' }, '决定之后 leader 照做（改卡、告诉正在做的 worker，或者加修复任务），做完会写明改了什么；选「不改」就到此结束。'),
+    decideError ? el('p', { class: 'hint' }, decideError) : null));
+  box.hidden = false;
 }
 
 // 指派：用户在看板上把任务交给某个 worker（比如难的任务交给 Claude 的窗口）。只有它能领，它优先领。
@@ -1481,6 +1548,7 @@ function render() {
   renderDrawer(false);
   renderReport();
   renderStaleDialog();
+  renderDecideDialog();
   if (attentionOpen) renderAttentionList(); // 只在数据变化时重画，免得每次轮询都替换掉正在点的勾选框
 }
 
@@ -1514,6 +1582,12 @@ function renderReport() {
   const st = reviewStats(tasks);
   const body = el('div', { class: 'md' });
   body.innerHTML = renderMarkdown(job.report); // renderMarkdown 先转义了 HTML
+  // 汇报后面附上这个需求所有的审卡意见和处理结果，方便你看有没有跑偏
+  const crit = tasks.flatMap((t) => (t.critiques || []).map((c) => ({ t, c })));
+  const critSec = crit.length ? [
+    el('h2', { class: 'crit-head' }, `审卡改动（${crit.length} 条）`),
+    crit.map(({ t, c }) => [el('div', { class: 'hint' }, `${t.id} ${t.title}`), critiqueItem(c)]),
+  ] : null;
   fill(page,
     el('div', { class: 'report-top' },
       el('button', { class: 'btn', onclick: closeReport }, '返回看板'),
@@ -1527,6 +1601,7 @@ function renderReport() {
         el('span', null, 'review ', el('b', null, st.reviews), ' 次'),
         el('span', null, '一次通过率 ', el('b', null, st.rate))),
       body,
+      critSec,
       job.status === 'awaiting_acceptance' ? el('p', { class: 'hint' }, ACCEPT_HINT) : null));
   page.hidden = false;
   page.scrollTop = scroll;
@@ -1560,8 +1635,8 @@ function attentionItems() {
   }
   if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
   for (const t of data.state.tasks) {
-    if ((t.critiques || []).some((c) => c.status === 'disputed')) {
-      items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡意见等你裁决`, body: `${t.id} ${t.title}：leader 不同意审卡意见，等你裁决` });
+    if ((t.critiques || []).some(awaitingUser)) {
+      items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧等你决定`, body: `${t.id} ${t.title}：审卡和 leader 有分歧，等你决定` });
     }
   }
   for (const t of data.state.tasks) {
@@ -1697,7 +1772,7 @@ document.addEventListener('click', (e) => {
   if (attentionOpen && (e.target.id === 'attention-list' || !e.target.closest('#attention, #attention-list'))) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (!view.task) return;
-  if (e.target.closest('#drawer, .card, #stale-dialog')) return;
+  if (e.target.closest('#drawer, .card, #stale-dialog, #decide-dialog')) return;
   closeDrawer();
 });
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });
@@ -1724,7 +1799,11 @@ function goAttention(key) {
   } else if (kind === 'quiet') {
     staleLater.delete(id);
     renderStaleDialog();
-  } else if (kind === 'assign' || kind === 'dispute') {
+  } else if (kind === 'dispute') {
+    decideLater.delete(id);
+    decideFocus = id;
+    renderDecideDialog();
+  } else if (kind === 'assign') {
     const t = data.state.tasks.find((x) => x.id === id);
     if (t) { view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }
   } else if (kind === 'cancel') {

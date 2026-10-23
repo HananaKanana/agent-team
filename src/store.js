@@ -506,6 +506,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const picked = state.agents.filter((a) => a.status === 'online'
       && (all || wantIds.has(a.id) || (role && sameRole(a.role, role))));
     if (!userApproved) {
+      // 审卡 worker 只有用户要求才下线
+      const critics = picked.filter(isCritic);
+      if (critics.length) {
+        throw new AteamError('NEEDS_USER', `${critics.map((a) => a.id).join('、')} 是审卡 worker，只有用户要求才能下线。用户要求了的话，加 --user-approved 重新运行；只是想让其他 worker 下线，就别带上它（不要用 --all，改成指定编号或 --role）。`);
+      }
       const emptied = [];
       for (const a of picked) {
         if (a.dismiss) continue; // 已经安排过下线（当时已过这道检查）
@@ -564,6 +569,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     let dirty = false;
     for (const agent of state.agents) {
       if (agent.status !== 'online') continue;
+      // 审卡 worker 只有用户要求才下线，空闲也不申请
+      if (isCritic(agent)) {
+        if (agent.idleSince || agent.leaveAsked) {
+          delete agent.idleSince;
+          delete agent.leaveAsked;
+          dirty = true;
+        }
+        continue;
+      }
       const busy = isCritic(agent)
         ? critiqueQueue().length > 0
         : agent.currentTask || state.tasks.some((t) => t.status === 'pending' && sameRole(t.role, agent.role));

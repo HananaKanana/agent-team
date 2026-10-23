@@ -571,7 +571,9 @@ function renderWorkers() {
       : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
     onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
   }, el('span', { class: 'dot' }), el('b', null, 'leader'), el('span', { class: 'task' }, leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
-  const chips = [leaderChip, ...online.map((a) => {
+  // 审卡 worker 和 leader 一样常驻，紧挨着 leader 放
+  const isCriticAgent = (a) => a.role.trim().toLowerCase() === 'critic';
+  const chips = [leaderChip, ...[...online.filter(isCriticAgent), ...online.filter((a) => !isCriticAgent(a))].map((a) => {
     return el('button', {
       type: 'button',
       class: 'worker online',
@@ -583,7 +585,7 @@ function renderWorkers() {
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
     a.name ? el('span', { class: 'task' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-    el('span', { class: 'task' }, a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
+    el('span', { class: 'task' }, isCriticAgent(a) ? '审卡' : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
   );
   })];
   if (offline.length) {

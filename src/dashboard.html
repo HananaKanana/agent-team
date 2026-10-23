@@ -130,7 +130,19 @@ button.worker:hover { background: var(--sunken); }
 .att-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13px; }
 .att-head + .att-row { border-top: none; }
 .att-pick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
-.att-pick input { margin-top: 3px; }
+.att-pick input { margin-top: 2px; }
+/* 复选框：自绘，跟主题色走（开关样式的 .switch 另有定义） */
+input[type="checkbox"]:not(.switch) {
+  appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border-radius: 3px; cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--faint) 70%, transparent); background: var(--surface);
+  display: inline-grid; place-items: center; transition: background .12s, border-color .12s;
+}
+input[type="checkbox"]:not(.switch):hover { border-color: var(--brand); }
+input[type="checkbox"]:not(.switch):checked { background: var(--brand); border-color: var(--brand); }
+input[type="checkbox"]:not(.switch):checked::after {
+  content: ""; width: 4px; height: 8px; margin-top: -2px;
+  border: solid var(--on-color); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
 .btn.attention + .helper-btn, #notify-btn + .helper-btn { margin-left: 0; }
 .helper-btn + .btn.icon { margin-left: -10px; }
 #notify-btn[hidden] { display: none; }

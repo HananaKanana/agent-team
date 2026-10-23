@@ -1,13 +1,28 @@
 #!/usr/bin/env node
 // ateam 命令行：leader 和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { dirname, join, resolve } from 'node:path';
 import {
   formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait,
 } from '../src/format.js';
 
-const BASE = (process.env.ATEAM_URL || 'http://127.0.0.1:7700').replace(/\/+$/, '');
+// 服务地址：ATEAM_URL 优先；否则从当前目录往上找 .ateam/port（serve 启动时写下的实际端口，
+// 7700 被别的项目占用时会自动换成 7701、7702……）；都没有就用 7700。
+function findPortFile(dir) {
+  for (let d = resolve(dir); ; d = dirname(d)) {
+    const file = join(d, '.ateam', 'port');
+    if (existsSync(file)) return file;
+    if (d === dirname(d)) return null;
+  }
+}
+function defaultBase() {
+  const file = findPortFile(process.cwd());
+  const port = file && Number(readFileSync(file, 'utf8').trim());
+  return `http://127.0.0.1:${Number.isInteger(port) && port > 0 ? port : 7700}`;
+}
+const BASE = (process.env.ATEAM_URL || defaultBase()).replace(/\/+$/, '');
 const RETRY_MS = Number(process.env.ATEAM_RETRY_SEC || 60) * 1000;
 const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
@@ -50,7 +65,7 @@ leader
   ateam show T3
   ateam report --job J1 --file report.md
 
-服务地址取自 ATEAM_URL（默认 http://127.0.0.1:7700）。`;
+服务地址：ATEAM_URL 优先，否则用项目里 .ateam/port 记下的端口（serve 自动选的），都没有就是 http://127.0.0.1:7700。`;
 
 class CliError extends Error {}
 
@@ -168,15 +183,48 @@ function overlapWarning(task, overlaps) {
   return lines.join('\n');
 }
 
+function portFree(port) {
+  return new Promise((ok) => {
+    const probe = createServer();
+    probe.once('error', () => ok(false));
+    probe.listen(port, '127.0.0.1', () => probe.close(() => ok(true)));
+  });
+}
+
+// 端口上跑的是不是 ateam、项目目录是哪个
+async function ateamRootAt(port) {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/state`, { signal: AbortSignal.timeout(1500) });
+    const data = await res.json();
+    return data?.ok ? data.root : null;
+  } catch {
+    return null;
+  }
+}
+
+// 从 wanted 开始找空闲端口。本项目的服务已经在跑就报错，不重复启动。
+// 用 --port 明确指定的端口被占用时也报错，不自动换。
+async function pickPort(wanted, explicit) {
+  const here = resolve(process.cwd());
+  for (let port = wanted; port < wanted + 20 && port <= 65535; port++) {
+    if (await portFree(port)) return port;
+    const root = await ateamRootAt(port);
+    if (root && resolve(root) === here) fail(`这个项目的 ateam 服务已经在运行：http://127.0.0.1:${port}。不用再启动；要重启的话，先在原来的终端里按 Ctrl+C。`);
+    if (explicit) fail(`端口 ${port} 被占用${root ? `（另一个项目 ${root} 的 ateam 服务）` : ''}。换一个端口，或者去掉 --port 让它自动找空闲端口。`);
+  }
+  fail(`${wanted} 到 ${wanted + 19} 的端口都被占用了。请用 --port 指定一个空闲端口。`);
+}
+
 const commands = {
   async serve({ flags }) {
     const { startServer } = await import('../src/server.js');
-    const port = Number(flags.port ?? 7700);
+    const wanted = Number(flags.port ?? 7700);
     const leaseMin = Number(flags.lease ?? process.env.ATEAM_LEASE_MIN ?? 15);
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) fail('--port 必须是 1-65535 的整数。');
+    if (!Number.isInteger(wanted) || wanted <= 0 || wanted > 65535) fail('--port 必须是 1-65535 的整数。');
     const idleMin = Number(flags.idle ?? process.env.ATEAM_IDLE_MIN ?? 3);
     if (!Number.isFinite(leaseMin) || leaseMin <= 0) fail('--lease 必须是正数（分钟）。');
     if (!Number.isFinite(idleMin) || idleMin <= 0) fail('--idle 必须是正数（分钟）。');
+    const port = await pickPort(wanted, flags.port !== undefined);
     let server;
     try {
       server = await startServer({ root: process.cwd(), port, leaseMin, idleMin });
@@ -187,7 +235,8 @@ const commands = {
     const repos = layout?.mode === 'multi'
       ? `\n多仓库模式，包含 git 仓库：${layout.repos.join('、')}（任务路径写成「仓库目录/子路径」，比如 ${layout.repos[0]}/src/）`
       : '';
-    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}`;
+    const moved = port !== wanted ? `\n端口 ${wanted} 已被占用，自动改用 ${port}。这个项目目录里的 ateam 命令会自动找到它，不用设置 ATEAM_URL。` : '';
+    return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）${moved}\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}`;
   },
 
   async join({ flags }) {
@@ -455,7 +504,7 @@ main().then(
   (code) => { if (code) process.exitCode = code; },
   (err) => {
     if (err instanceof Unreachable) {
-      console.log('错误：服务不可达，请通知用户。');
+      console.log(`错误：服务不可达（${BASE}），请通知用户。`);
       process.exitCode = 2;
     } else if (err instanceof ServerError) {
       console.log(formatError(err.code, err.message));

@@ -427,13 +427,16 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   await new Promise((resolve, reject) => {
     server.once('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        reject(new Error(`端口 ${port} 被占用。请用 --port 换一个端口，并设置 ATEAM_URL=http://127.0.0.1:<端口>`));
+        reject(new Error(`端口 ${port} 被占用。请重新运行 ateam serve（会自动找空闲端口），或用 --port 指定一个。`));
       } else {
         reject(err);
       }
     });
     server.listen(port, '127.0.0.1', resolve);
   });
+  // 记下实际端口：端口被占用时会自动换成下一个，项目里的 ateam 命令读这个文件找到服务
+  mkdirSync(dataDir, { recursive: true });
+  writeFileSync(join(dataDir, 'port'), `${port}\n`);
   server.ateamLayout = layout;
   return server;
 }

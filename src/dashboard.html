@@ -1211,8 +1211,7 @@ function installGuide() {
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
     step('③ 在项目根目录启动服务', '项目必须是 git 仓库。这个终端窗口一直开着；看到「项目目录」那一行是你要开发的项目就对了。',
       `cd ${project}\nateam serve`),
-    step('同时开第二个项目？', '换一个端口，并让这个项目里的 leader 和 worker 都带上同样的 ATEAM_URL。',
-      `ateam serve --port ${port + 1}\nexport ATEAM_URL=http://127.0.0.1:${port + 1}`),
+    step('同时开第二个项目？', `在那个项目的目录里同样运行 ateam serve 就行：${port} 被占用时会自动换成下一个空闲端口（启动信息里会写），那个项目里的 leader 和 worker 会自动找到它，不用设置什么。看板要打开新端口的地址。`, null),
     el('p', { class: 'hint' }, '装好之后：切到「leader」页开 leader，切到「worker」页开 worker。'),
   ];
 }

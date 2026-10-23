@@ -814,11 +814,11 @@ const SINCE = {
   asking: [['asked'], 10], submitted: [['submitted'], 10],
   held: [['rejected', 'handoff', 'released', 'created']],
 };
-const LANE_TIME_TIP = { pending: '排队时长（自进入待领取起）', working: '处理时长（自本轮领取起）', rework: '返工时长（自打回起）', asking: '等待答复时长（自提问起）', submitted: '等待 review 时长（自交付起）', held: '挂起时长（自挂起起）' };
+const LANE_TIME_TIP = { pending: '排队时长', working: '处理时长', rework: '返工时长', asking: '等待答复时长', submitted: '等待 review 时长', held: '挂起时长' };
 function laneTime(t, lane) {
   if (lane === 'approved') {
     const ms = spent(t);
-    return ms == null ? null : el('span', { class: 'since', title: '总耗时（首次领取至通过）' }, icon('clock'), dur(ms));
+    return ms == null ? null : el('span', { class: 'since', title: '总耗时' }, icon('clock'), dur(ms));
   }
   if (lane === 'pending' && t.dependsOn.some((id) => data.state.tasks.find((x) => x.id === id)?.status !== 'approved')) {
     return el('span', { class: 'since', title: `等待依赖任务通过：${t.dependsOn.join('、')}` }, icon('clock'), '等依赖');
@@ -1509,7 +1509,7 @@ function renderDrawer(fresh) {
     fact('依赖', t.dependsOn.length ? t.dependsOn.join('、') : '无'),
     fact('打回', `${t.rejectCount} 次`),
     fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—'),
-    t.status === 'approved' && spent(t) != null ? fact('总耗时', `${dur(spent(t))}（首次领取至通过）`) : null,
+    t.status === 'approved' && spent(t) != null ? fact('总耗时', dur(spent(t))) : null,
     fact('路径', t.paths.length ? t.paths.map((p) => el('code', null, p)) : '无'));
   fill(drawer,
     el('div', { class: 'drawer-bar' },

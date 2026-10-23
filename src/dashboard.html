@@ -358,6 +358,7 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-pop); overflow: hidden;
   animation: pop .14s ease-out;
 }
+.modal-back.again .modal { animation: none; }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.985); } }
 .modal-head { display: flex; align-items: center; gap: 8px; padding: 16px 12px 12px 24px; flex: none; }
 .modal .modal-head h3 { margin: 0 auto 0 0; font-size: 17px; font-weight: 650; }
@@ -1620,6 +1621,7 @@ function renderDecideDialog() {
     choice('维持原样', '同意 leader 的看法，卡片不改，到此结束。', () => decide(t, 'leader')),
   ];
   const later = () => { decideLater.add(t.id); decideFocus = null; decideCustom = false; renderDecideDialog(); };
+  box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   fill(box, el('div', { class: 'modal decide-modal', onclick: (e) => e.stopPropagation() },
     modalHead(all.length > 1 ? `审卡有分歧，等你决定（共 ${all.length} 张）` : '审卡有分歧，等你决定', later),
     el('div', { class: 'modal-body' },
@@ -1912,6 +1914,7 @@ function renderStaleDialog() {
       el('p', { class: 'hint' }, '窗口还在但停住了：把下面这句叫醒话发给它，不用换人。'),
       promptBlock(wakePrompt(a), renderStaleDialog));
   });
+  box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   fill(box, el('div', { class: 'modal', onclick: (e) => e.stopPropagation() },
     modalHead(list.length > 1 ? `${list.length} 个 worker 可能停了` : 'worker 可能停了', null),
     el('div', { class: 'modal-body' },
@@ -2295,6 +2298,7 @@ function renderAttentionList() {
       i.key === 'stale' ? el('span', { class: 'hint' }, '见页面顶部提示') : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理'))),
   ] : null;
 
+  box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   fill(box, el('div', { class: 'modal att-modal', onclick: (e) => e.stopPropagation() },
     modalHead(`需要你处理（${items.length}）`, () => { attentionOpen = false; renderAttentionList(); }),
     el('div', { class: 'modal-body' }, acceptSec, otherSec)));

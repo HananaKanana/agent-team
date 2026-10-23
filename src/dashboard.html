@@ -1194,6 +1194,7 @@ function critiqueItem(c) {
     el('div', { class: 'ci-label' }, '审卡意见'), md(c.text),
     c.basis ? [el('div', { class: 'ci-label' }, '依据'), md(c.basis)] : null,
     c.reply ? [el('div', { class: 'ci-label' }, replyLabel), md(c.reply)] : null,
+    c.replyBasis ? [el('div', { class: 'ci-label' }, 'leader 的依据'), md(c.replyBasis)] : null,
     c.ruling ? [el('div', { class: 'ci-label' }, '你的决定'), md(c.ruling)] : null,
     c.doneText ? [el('div', { class: 'ci-label' }, 'leader 已改'), md(c.doneText)] : null);
 }
@@ -1262,7 +1263,7 @@ function renderDecideDialog() {
       el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); decideFocus = null; decideCustom = false; renderDecideDialog(); }) }, '稍后再说')),
     el('p', null, el('b', null, `${t.id} ${t.title}`), el('span', { class: 'hint' }, `　需求 ${t.jobId}，${t.role}，${t.status}　`),
       el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '看卡片全文')),
-    el('div', { class: 'ci-label' }, `你提需求时的原话（需求 ${t.jobId}）`), origin,
+    job?.origin ? [el('div', { class: 'ci-label' }, `你提需求时的原话（需求 ${t.jobId}）`), origin] : null,
     waiting.map(critiqueItem),
     el('div', { class: 'ci-label' }, '你的决定'),
     el('div', { class: 'actions' }, options,

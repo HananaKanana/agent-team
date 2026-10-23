@@ -145,10 +145,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   // ---------- 需求与任务 ----------
 
-  // origin：用户提需求时的原话，原样保存、之后不能改。审卡对照它，防止 leader 和审卡一起理解偏了还互相印证
+  // origin：可选，用户提需求时的原话，存了就不能改，审卡时一起对照
   function createJob({ title, description = '', origin = '' } = {}) {
     title = requireText(title, '需求标题');
-    origin = requireText(origin, '用户原话（--origin-file）');
+    origin = String(origin ?? '').trim();
     state.seq.job += 1;
     const ts = now();
     const job = {
@@ -858,19 +858,21 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   //   resolved  leader 改完了
   //   closed    用户决定不改
   // leader 回复：agree（同意，附改法）/ dispute（不同意，附理由）；用户定了以后 done（改完了）
-  function handleCritique(taskId, action, text) {
+  function handleCritique(taskId, action, text, basis = '') {
     const task = getTask(taskId);
     if (action === 'agree' || action === 'dispute') {
       text = requireText(text, action === 'agree' ? '打算怎么改' : '不同意的理由');
+      basis = requireText(basis, '依据（--basis：需求说明或设计文档的哪一段、代码哪个文件第几行、命令的实际输出）');
       const open = openCritiques(task, ['open']);
       if (!open.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有等你回复的审卡意见。`);
       for (const c of open) {
         c.reply = text;
+        c.replyBasis = basis;
         c.replyKind = action;
         c.status = action === 'agree' ? 'proposed' : 'disputed';
         c.repliedAt = now();
       }
-      addHistory(task, 'critique', 'lead', action === 'agree' ? `同意审卡意见，打算：${text}（等用户确认）` : `不同意审卡意见：${text}（等用户裁决）`);
+      addHistory(task, 'critique', 'lead', `${action === 'agree' ? `同意审卡意见，打算：${text}` : `不同意审卡意见：${text}`}（依据：${basis}；等用户决定）`);
     } else if (action === 'done') {
       text = requireText(text, '处理说明（改了什么）');
       const redo = openCritiques(task, ['redo']);

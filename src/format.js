@@ -72,7 +72,8 @@ export function formatTask(task) {
       const ruling = c.ruling ? `；用户决定：${oneLine(c.ruling)}` : '';
       const done = c.doneText ? `；已改：${oneLine(c.doneText)}` : '';
       const because = c.because ? `（重新审：${c.because}）` : '';
-      lines.push(`- #${c.id} [${CRITIQUE_STATUS[c.status] ?? c.status}] ${c.by}${because}：${oneLine(c.text)}${basis}${reply}${ruling}${done}`);
+      const replyBasis = c.replyBasis ? `（依据：${oneLine(c.replyBasis)}）` : '';
+      lines.push(`- #${c.id} [${CRITIQUE_STATUS[c.status] ?? c.status}] ${c.by}${because}：${oneLine(c.text)}${basis}${reply}${replyBasis}${ruling}${done}`);
     }
     lines.push('');
   }
@@ -212,10 +213,11 @@ function formatCritiqueList(tasks, agentId, jobs = []) {
   lines.push('**你只读不写：不要修改、新建、删除项目里的任何文件，也不要运行会改文件的命令（git、npm install、构建、格式化、代码生成都不行）。** 你的改动没人提交，会混进别的 worker 的提交里。发现代码问题就写进审卡意见，由 leader 派人改。', '');
   lines.push('逐张审：对照所属需求的说明、设计文档、同需求的其他卡，以及现有代码，找卡本身的问题。');
   lines.push('看全部的卡（包括审过的，用来查冲突）：ateam cards，或 ateam cards --job J1。', '');
-  lines.push('**以用户原话为准。** leader 的需求说明和卡都是 leader 的理解，可能一开始就偏了。审每张卡都要对照下面的用户原话：卡里有原话没要求的东西、漏了原话要求的东西、或者对原话的理解有别的可能，都算问题。', '');
   for (const j of jobs) {
-    lines.push(`## 需求 ${j.id} ${j.title}：用户原话`, '', j.origin?.trim() || '（这个需求没有存用户原话，只能对照需求说明，提意见时注明这一点）', '');
-    if (j.description?.trim()) lines.push(`### leader 写的需求说明`, '', j.description.trim(), '');
+    if (!j.origin?.trim() && !j.description?.trim()) continue;
+    lines.push(`## 需求 ${j.id} ${j.title}`, '');
+    if (j.origin?.trim()) lines.push('### 用户原话（以它为准）', '', j.origin.trim(), '');
+    if (j.description?.trim()) lines.push('### 需求说明', '', j.description.trim(), '');
   }
   for (const t of tasks) {
     lines.push(`## ${t.id}：${t.title}（需求 ${t.jobId}${t.edited ? '，leader 改过，再审一次' : ''}）`, '', formatTask(t), '');
@@ -241,7 +243,7 @@ export function formatCards(cards, { todo = false } = {}) {
 }
 
 const EVENT_HINT = {
-  critique: (e) => `先不要改卡。ateam show ${e.taskId} 看意见和依据，对照用户原话想清楚，然后回复：同意就 ateam critique agree ${e.taskId} "<打算怎么改>"，不同意就 ateam critique dispute ${e.taskId} "<理由>"。由用户在看板上决定`,
+  critique: (e) => `先不要改卡。ateam show ${e.taskId} 看意见和依据，想清楚后回复，都要带依据：同意就 ateam critique agree ${e.taskId} "<打算怎么改>" --basis "<依据>"，不同意就 ateam critique dispute ${e.taskId} "<理由>" --basis "<依据>"。由用户在看板上决定`,
   critique_ruling: (e) => `用户已决定，照做：待领取/已挂起的卡 ateam task edit ${e.taskId} ... 改；进行中的 ateam note ${e.taskId} "<补充说明>" 告诉 worker；已完成的加修复任务。做完 ateam critique done ${e.taskId} "<改了什么>"`,
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
@@ -305,7 +307,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
         lines.push(`- ${t.id} [${t.status}] ${t.title}（用户已决定，照做）：${redo.map((c) => oneLine(c.instruction)).join('；')} —— 做完 ateam critique done ${t.id} "<改了什么>"`);
       } else {
         const open = t.critiques.filter((c) => c.status === 'open');
-        lines.push(`- ${t.id} [${t.status}] ${t.title}（等你回复，先别改卡）：${open.map((c) => oneLine(c.text)).join('；')} —— ateam critique agree ${t.id} "<打算怎么改>" 或 dispute ${t.id} "<理由>"`);
+        lines.push(`- ${t.id} [${t.status}] ${t.title}（等你回复，先别改卡）：${open.map((c) => oneLine(c.text)).join('；')} —— ateam critique agree ${t.id} "<打算怎么改>" --basis "<依据>" 或 dispute ${t.id} "<理由>" --basis "<依据>"`);
       }
     }
   }

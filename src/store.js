@@ -415,7 +415,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // 审卡 worker：不领开发任务，拿到的是还没审过的卡的清单
     if (isCritic(agent)) {
       const tasks = critiqueQueue();
-      return tasks.length ? { kind: 'critique_list', tasks: tasks.map((t) => critiqueView(t)) } : null;
+      if (!tasks.length) return null;
+      // 记下这批卡，看板据此显示它正在审哪张、还剩几张
+      agent.critiqueBatch = tasks.map((t) => t.id);
+      changed();
+      return { kind: 'critique_list', tasks: tasks.map((t) => critiqueView(t)) };
     }
 
     if (agent.currentTask) {
@@ -761,6 +765,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         throw new AteamError('INVALID', `${t.id} 已经审过了。要重新审（比如它和新卡冲突），加上 --because "<原因，比如和 T12 冲突>"，会记进历史。`);
       }
     }
+    agent.lastCritiqued = tasks.map((t) => t.id);
     for (const t of tasks) {
       const again = reviewed(t);
       t.critiquedRev = t.rev ?? 0;

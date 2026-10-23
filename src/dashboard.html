@@ -556,6 +556,17 @@ function reviewStats(tasks) {
 
 // ---------- 渲染 ----------
 
+// 审卡 worker 的进度：它这一批卡里还没审的，第一张就是正在审的
+function criticProgress(a) {
+  const reviewed = (t) => (t.critiquedRev ?? -1) === (t.rev ?? 0);
+  const left = (a.critiqueBatch || [])
+    .map((id) => data.state.tasks.find((t) => t.id === id))
+    .filter((t) => t && t.status !== 'cancelled' && !reviewed(t));
+  if (left.length) return `审 ${left[0].id}${left.length > 1 ? `，这批还剩 ${left.length} 张` : ''}`;
+  const last = a.lastCritiqued?.length ? `，刚审完 ${a.lastCritiqued.join('、')}` : '';
+  return `等新卡${last}`;
+}
+
 function renderWorkers() {
   const box = document.getElementById('workers');
   const agents = data.state.agents;
@@ -585,7 +596,7 @@ function renderWorkers() {
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
     a.name ? el('span', { class: 'task' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-    el('span', { class: 'task' }, isCriticAgent(a) ? '审卡' : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
+    el('span', { class: 'task' }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
   );
   })];
   if (offline.length) {
@@ -856,7 +867,7 @@ function renderHelper(force = false) {
         el('span', { class: 'grow' },
           el('b', null, agentLabel(a.id)),
           el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-          el('span', { class: 'hint' }, `${a.currentTask || '空闲'}，心跳 ${ago(a.lastSeenAt)}`),
+          el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask || '空闲')}，心跳 ${ago(a.lastSeenAt)}`),
           isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null,
           a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null,
           a.dismiss ? el('span', { class: 'pill', title: '做完手上的任务后下线，不再领新任务' }, '做完下线') : null,

@@ -97,6 +97,8 @@ button.worker:hover { border-color: var(--muted); }
   box-shadow: 0 12px 32px rgba(15, 25, 20, .22); padding: 14px 16px 16px;
 }
 .helper[hidden] { display: none; }
+.auto-leave { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; font-size: 13px; cursor: pointer; }
+.auto-leave input { margin-top: 3px; }
 .rules-editor {
   display: block; width: 100%; margin-top: 8px; padding: 10px 12px; resize: vertical;
   border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink);
@@ -562,7 +564,7 @@ function criticProgress(a) {
   const left = (a.critiqueBatch || [])
     .map((id) => data.state.tasks.find((t) => t.id === id))
     .filter((t) => t && t.status !== 'cancelled' && !reviewed(t));
-  const leaving = a.dismiss ? '，审完下线' : '';
+  const leaving = a.dismiss || data.state.settings?.criticAutoLeave ? '，审完下线' : '';
   if (left.length) return `审 ${left[0].id}${left.length > 1 ? `，这批还剩 ${left.length} 张` : ''}${leaving}`;
   const last = a.lastCritiqued?.length ? `，刚审完 ${a.lastCritiqued.join('、')}` : '';
   return `等新卡${last}`;
@@ -707,6 +709,26 @@ async function dismissAgents(body) {
   } catch {}
   await poll();
   renderHelper();
+}
+
+// 全局开关：审卡 worker 审完待审的卡就自动下线（新开的审卡 worker 也一样）
+function criticAutoLeaveRow() {
+  const on = !!data.state.settings?.criticAutoLeave;
+  const box = el('input', { type: 'checkbox' });
+  box.checked = on;
+  box.addEventListener('click', (e) => e.stopPropagation());
+  box.addEventListener('change', async () => {
+    try {
+      await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ criticAutoLeave: box.checked }) });
+    } catch {}
+    await poll();
+    renderHelper(true);
+  });
+  return el('label', { class: 'auto-leave' }, box,
+    el('span', null, el('b', null, '审卡：审完自动下线'),
+      el('span', { class: 'hint' }, on
+        ? '　已开启。审卡 worker 审完所有待审的卡就下线；之后有新卡要审，再开一个审卡 worker。'
+        : '　开启后，审卡 worker 审完所有待审的卡就自动下线，省得空等。')));
 }
 
 async function keepAgents(ids) {
@@ -874,6 +896,7 @@ function renderHelper(force = false) {
         promptBlock(workerPrompt(role), renderHelper));
     }),
     el('div', { class: 'helper-sec' }, el('h4', null, `② 干活中：在线的 worker（${online.length}）`), dismissAll),
+    criticAutoLeaveRow(),
     el('p', { class: 'hint' }, dismissAllArm
       ? '确认后所有 worker 立即下线；进行中的任务退回待领取，已有改动保留。'
       : 'worker 停下来不动时，复制它的叫醒话，发到它自己的 agent 窗口。'),

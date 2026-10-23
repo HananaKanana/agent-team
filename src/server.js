@@ -287,6 +287,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return { dismissed };
     },
     'POST /api/agents/still-there': (b) => ({ agent: store.keepWaiting(String(b.id ?? '')) }),
+    'POST /api/settings': (b) => ({ settings: store.setSettings(b) }),
     'POST /api/agents/keep': (b) => ({ kept: store.keepAgents(b.ids) }),
     'POST /api/reclaim': (b) => {
       const { task, agentId } = store.reclaim(requireId(b), b.text ?? '');

@@ -407,7 +407,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
 
     // 已安排下线、手上没有任务 → 正式下线（手上有任务的，等任务通过、作废或收回后再下线）
-    // 审卡 worker 安排了「审完再下线」：还有待审的卡就接着审，审完才下线
+    // 审卡 worker 安排了「审完再下线」，或者用户打开了全局开关「审完自动下线」：还有待审的卡就接着审，审完才下线
+    if (isCritic(agent) && state.settings?.criticAutoLeave && !critiqueQueue().length) agent.dismiss = true;
     if (agent.dismiss && !agent.currentTask && !(isCritic(agent) && critiqueQueue().length)) {
       finishDismiss(agent);
       return { kind: 'dismissed' };
@@ -561,6 +562,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (result.length > 0) changed();
     return result;
+  }
+
+  // 全局设置（用户在看板上改）。criticAutoLeave：审卡 worker 审完待审的卡就自动下线
+  function setSettings(patch = {}) {
+    state.settings ??= {};
+    if (patch.criticAutoLeave !== undefined) state.settings.criticAutoLeave = !!patch.criticAutoLeave;
+    changed();
+    return state.settings;
   }
 
   // 撤销「做完再下线」
@@ -1123,7 +1132,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, keepWaiting, checkIdle, report, sweep, noteActivity,
+    acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
   };
 }

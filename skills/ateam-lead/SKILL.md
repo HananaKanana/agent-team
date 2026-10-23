@@ -30,6 +30,8 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 
 项目确实需要别的分类（比如 `ops`、`mobile`）也可以用，但先考虑这四个。
 
+另外还有一个**审卡**角色 `critic`：它不领任务，专门挑你写的卡的毛病（描述含糊或矛盾、验收标准没法核对、路径不对、依赖错了、和别的卡冲突）。不要给 `critic` 派任务；用户开不开审卡 worker 由用户决定。需求大、一次拆了很多卡时，可以建议用户开一个。
+
 **每个需求都按「产品 → 开发 → 测试」安排，不要只派前后端：**
 - **产品任务**：需求涉及新页面、新流程、多个角色配合，或者用户只说了一句话、细节没定时，先派一个 `product` 任务，把需求写成产品文档（路径如 `docs/product/J5-登录.md`）。开发任务 `--after` 它；它通过后，按文档修正开发任务的描述和验收标准（`ateam task edit`）。只改个文案、修个明确的 bug 这种小需求可以不派。
 - **测试任务**：需求的开发任务都加完后，加一个 `test` 任务，`--after` 所有开发任务，路径如 `docs/test/J5-登录.md`。描述里列出要验证的验收标准（汇总各开发任务的）、怎么起服务、测试账号和数据。除非用户说不用，或者改动小到 review 就能确认，每个需求都要有测试任务。
@@ -91,7 +93,21 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
+| `critique` | 审卡意见，按「审卡意见」一节处理 |
+| `critique_ruling` | 用户裁决按审卡意见改：照做后 `ateam critique done T5 "<改了什么>"` |
 | `worker_joined` `claimed` `job_accepted` | 了解即可 |
+
+## 审卡意见
+
+有审卡 worker 在线时，它会审每一张卡，你改过的卡它会再审一次。有问题会给你一条 `critique` 事件，`ateam status` 里也有「审卡意见待你处理」。**每条意见都必须处理**，按卡的状态：
+
+- 待领取 / 已挂起：`ateam task edit T5 ...` 直接改卡；
+- 进行中：`ateam note T5 "<补充说明>"` 告诉正在做的 worker（它下一次调用 progress、wait 或提交时收到，提交前一定会看到），需要的话卡也要改；
+- 已完成：加修复任务；
+- 意见针对的是多张卡的关系（比如两张卡冲突），每张都按上面处理。
+
+处理完：`ateam critique done T5 "<改了什么>"`。
+不同意：`ateam critique dispute T5 "<为什么不改>"`，交给用户在看板上裁决。用户要求按意见改时，你会收到 `critique_ruling` 事件，照做后再 `ateam critique done`。不要因为嫌麻烦就 dispute。
 
 ## 作废任务
 

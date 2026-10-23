@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import {
-  formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait,
+  formatCards, formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait,
 } from '../src/format.js';
 
 // 服务地址：ATEAM_URL 优先；否则从当前目录往上找 .ateam/port（serve 启动时写下的实际端口，
@@ -28,7 +28,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
@@ -59,6 +59,10 @@ leader
   ateam reject T3 "<修改意见>"
   ateam answer T3 "<答复>"
   ateam status [--job J1 | --all]
+  ateam cards [--job J1] [--todo]
+  ateam critique --as <ID> ok T5 [T6 ...] ／ issue T5 "<问题和建议>" [--because "<重新审的原因>"]
+  ateam critique done T5 "<改了什么>" ／ dispute T5 "<为什么不改>"
+  ateam note T5 "<给正在做的 worker 的补充说明>"
   ateam rules [add "<一条规则>" | set --file rules.md]
   ateam jobs [--all] [--grep <关键词>]
   ateam job show J1
@@ -266,7 +270,8 @@ const commands = {
     const text = requireArg(positional[0], '进度笔记', `ateam progress --as ${as} "改完了 web/login.js"`);
     const { task } = await request('POST', '/api/progress', { as, text, expect: flags.expect });
     const busy = flags.expect ? `接下来 ${Math.min(Number(flags.expect), 180)} 分钟内不调用 ateam 也不会被当成停住。` : '';
-    return `已记录 ${task.id} 的进度。${busy}继续工作；完成后运行：ateam submit --as ${as} "<做了什么、怎么验证的>"`;
+    const note = task.note ? `\n\n# leader 补充说明\n\n${task.note}\n\n按这条说明调整你的做法。` : '';
+    return `已记录 ${task.id} 的进度。${busy}继续工作；完成后运行：ateam submit --as ${as} "<做了什么、怎么验证的>"${note}`;
   },
 
   async ask({ flags, positional }) {
@@ -455,6 +460,42 @@ const commands = {
   async status({ flags }) {
     const { state, pending, root, repos, stale } = await request('GET', '/api/state');
     return formatStatus({ ...state, stale }, pending, flags.job, root, repos, !!flags.all);
+  },
+
+  // 审卡。审卡 worker：ateam critique --as critic-1 ok T5 T6 ／ issue T5 "<问题和建议>" [--because "和 T12 冲突"]
+  // leader：ateam critique done T5 "<改了什么>" ／ dispute T5 "<为什么不改>"（交给用户裁决）
+  async critique({ flags, positional }) {
+    const [verb, ...rest] = positional;
+    if (flags.as) {
+      if (verb !== 'ok' && verb !== 'issue') fail(`用法：ateam critique --as ${flags.as} ok T5 [T6 ...] ／ ateam critique --as ${flags.as} issue T5 "<问题和修改建议>" [--because "<重新审的原因>"]`);
+      const ids = verb === 'ok' ? rest.filter((x) => /^T\d+$/i.test(x)) : rest.slice(0, 1);
+      const text = verb === 'ok' ? rest.filter((x) => !/^T\d+$/i.test(x)).join(' ') : rest[1];
+      const { tasks } = await request('POST', '/api/critique', { as: flags.as, ids: ids.map((x) => x.toUpperCase()), verdict: verb, text: text ?? '', because: flags.because ?? '' });
+      const what = verb === 'ok' ? '审卡通过' : '已提交审卡意见，leader 会处理';
+      return `${what}：${tasks.map((t) => t.id).join('、')}。继续审下一张；都审完了运行 ateam wait --as ${flags.as}`;
+    }
+    if (verb !== 'done' && verb !== 'dispute') fail('用法：ateam critique done T5 "<改了什么>" ／ ateam critique dispute T5 "<为什么不改>"');
+    const id = requireArg(rest[0], '任务编号', `ateam critique ${verb} T5 "..."`);
+    const { task } = await request('POST', '/api/critique/handle', { id, action: verb, text: rest[1] ?? '' });
+    return verb === 'done'
+      ? `已处理 ${task.id} 的审卡意见。`
+      : `已把 ${task.id} 的审卡意见交给用户裁决（看板「需要你处理」里）。用户裁决按意见改的话，你会收到 critique_ruling 事件。`;
+  },
+
+  // 给正在做的 worker 补充说明，它下一次调用 progress / wait / submit 时收到
+  async note({ positional }) {
+    const id = requireArg(positional[0], '任务编号', 'ateam note T5 "<补充说明>"');
+    const { task } = await request('POST', '/api/note', { id, text: positional[1] ?? '' });
+    return `已给 ${task.id} 的 worker（${task.assignee}）留了补充说明，它下一次调用 ateam 命令时收到；提交前一定会看到。`;
+  },
+
+  // 全部能审的卡（审卡用；leader 也能看）
+  async cards({ flags }) {
+    const q = new URLSearchParams();
+    if (flags.job) q.set('job', flags.job);
+    if (flags.todo) q.set('todo', '1');
+    const { cards } = await request('GET', `/api/cards?${q}`);
+    return formatCards(cards, { todo: !!flags.todo });
   },
 
   // 翻看历史需求：默认只列已验收的，--all 列全部；--grep 按关键词查

@@ -260,6 +260,9 @@ main { padding: 20px 24px 40px; min-width: 0; }
 .tag.handoff { background: var(--asking); color: #fff; }
 .tag.urgent { background: var(--rework); color: #fff; }
 .tag.assigned { background: var(--focus); color: #fff; }
+.tag.critique { background: color-mix(in srgb, var(--role-5) 22%, transparent); color: var(--ink); }
+.critique { background: var(--bg); border-radius: 6px; padding: 8px 12px; margin-top: 8px; font-size: 13px; }
+.critique .reply { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 4px; }
 .assign-select {
   width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px;
   background: var(--bg); color: var(--ink); font: inherit; font-size: 13px;
@@ -990,7 +993,8 @@ function card(t, lane) {
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
       t.priority && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag urgent' }, '优先') : null,
-      t.assignTo && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `→ ${agentName(t.assignTo)}`) : null));
+      t.assignTo && (t.status === 'pending' || t.status === 'held') ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `→ ${agentName(t.assignTo)}`) : null,
+      critiqueTag(t)));
 }
 
 function renderDrawer(fresh) {
@@ -1025,6 +1029,7 @@ function renderDrawer(fresh) {
       el('dt', null, '打回'), el('dd', null, `${t.rejectCount} 次`)),
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
     t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t)] : null,
+    critiqueBox(t),
     (() => {
       // 作废了、但拿着它的 worker 还不知道：给出叫停的话
       const a = t.status === 'cancelled' && data.state.agents.find((x) => pendingCancel(x)?.id === t.id);
@@ -1072,6 +1077,54 @@ function closeDrawer() {
 
 // 设为优先 / 取消优先：只影响同角色 worker 领任务的先后
 let priorityError = null;
+// ---------- 审卡意见 ----------
+const CRITIQUE_STATUS = { open: '待 leader 处理', resolved: '已处理', disputed: '等你裁决', redo: '你要求按意见改，待 leader 处理', overruled: '你维持了原样' };
+
+function critiqueTag(t) {
+  const list = t.critiques || [];
+  if (list.some((c) => c.status === 'disputed')) return el('span', { class: 'tag warn' }, '审卡：待你裁决');
+  const open = list.filter((c) => c.status === 'open' || c.status === 'redo').length;
+  return open ? el('span', { class: 'tag critique' }, `审卡意见 ${open}`) : null;
+}
+
+let critiqueError = null;
+function critiqueBox(t) {
+  const list = t.critiques || [];
+  if (!list.length) return null;
+  const disputed = list.some((c) => c.status === 'disputed');
+  const rule = async (side) => {
+    try {
+      const res = await fetch('/api/critique/rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, side }) });
+      const out = await res.json();
+      critiqueError = out.ok ? null : out.message;
+    } catch { critiqueError = '连不上 ateam 服务。'; }
+    await poll();
+    renderDrawer(false);
+  };
+  return [
+    el('h4', null, `审卡意见（${list.length}）`),
+    list.map((c) => {
+      const box = el('div', { class: 'critique' },
+        el('div', { class: 'hint' }, `#${c.id} ${c.by}，${fmtTime(c.ts)}${c.because ? `，重新审：${c.because}` : ''}　`, el('b', null, CRITIQUE_STATUS[c.status] || c.status)),
+        el('div', { class: 'md' }));
+      box.lastChild.innerHTML = renderMarkdown(c.text); // renderMarkdown 先转义了 HTML
+      if (c.reply) {
+        const reply = el('div', { class: 'md reply' });
+        reply.innerHTML = renderMarkdown(`**leader：**${c.reply}`);
+        box.append(reply);
+      }
+      return box;
+    }),
+    disputed ? [
+      el('p', { class: 'hint' }, 'leader 不同意这条审卡意见（理由见上）。你来定听谁的：'),
+      el('div', { class: 'prompt' },
+        el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); rule('critic'); } }, '按审卡意见改'),
+        el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); rule('leader'); } }, '维持 leader 的做法')),
+    ] : null,
+    critiqueError ? el('p', { class: 'hint' }, critiqueError) : null,
+  ];
+}
+
 // 指派：用户在看板上把任务交给某个 worker（比如难的任务交给 Claude 的窗口）。只有它能领，它优先领。
 let assignError = null;
 function assignBox(t) {
@@ -1177,7 +1230,7 @@ function agentLabel(id) {
 }
 
 // 角色 → 颜色。常用名固定，其他按名字哈希，同一角色永远同一颜色
-const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, product: 3, pm: 3, 产品: 3, docs: 4, 文档: 4 };
+const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, product: 3, pm: 3, 产品: 3, critic: 5, 审卡: 5, docs: 4, 文档: 4 };
 function roleStyle(role) {
   const key = String(role).trim().toLowerCase();
   let i = ROLE_FIXED[key];
@@ -1230,6 +1283,7 @@ const STANDARD_ROLES = [
   { key: 'frontend', label: '前端', what: '页面和交互' },
   { key: 'backend', label: '后端', what: '接口和数据' },
   { key: 'test', label: '测试', what: '按验收标准验证，写报告' },
+  { key: 'critic', label: '审卡', what: '挑任务卡的毛病，不写代码' },
 ];
 
 function workerPrompt(role) {
@@ -1424,6 +1478,11 @@ function attentionItems() {
   }
   if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
   for (const t of data.state.tasks) {
+    if ((t.critiques || []).some((c) => c.status === 'disputed')) {
+      items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡意见等你裁决`, body: `${t.id} ${t.title}：leader 不同意审卡意见，等你裁决` });
+    }
+  }
+  for (const t of data.state.tasks) {
     if (!t.assignTo || (t.status !== 'pending' && t.status !== 'held')) continue;
     const a = data.state.agents.find((x) => x.id === t.assignTo);
     if (!a || a.status !== 'online') {
@@ -1583,7 +1642,7 @@ function goAttention(key) {
   } else if (kind === 'quiet') {
     staleLater.delete(id);
     renderStaleDialog();
-  } else if (kind === 'assign') {
+  } else if (kind === 'assign' || kind === 'dispute') {
     const t = data.state.tasks.find((x) => x.id === id);
     if (t) { view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }
   } else if (kind === 'cancel') {

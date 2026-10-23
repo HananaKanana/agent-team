@@ -257,6 +257,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       });
       return { task, overlaps: store.overlapsFor(task) };
     },
+    'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because) }),
+    'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text) }),
+    'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side) }),
+    'POST /api/note': (b) => ({ task: store.noteTask(requireId(b), b.text) }),
+    'GET /api/cards': (_b, url) => ({ cards: store.cards({ jobId: url.searchParams.get('job') ?? '', todo: url.searchParams.get('todo') === '1' }) }),
     'POST /api/tasks/assign': (b) => ({ task: store.assignTask(requireId(b), b.to) }),
     'POST /api/tasks/priority': (b) => ({ task: store.setPriority(requireId(b), !!b.top) }),
     'POST /api/tasks/edit': (b) => {

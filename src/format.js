@@ -63,6 +63,16 @@ export function formatTask(task) {
   if (task.commits.length) task.commits.forEach((c) => lines.push(`- ${c}`));
   else lines.push('（暂无）');
   lines.push('');
+  if (task.critiques?.length) {
+    lines.push('## 审卡意见');
+    lines.push('');
+    for (const c of task.critiques) {
+      const reply = c.reply ? `；leader：${oneLine(c.reply)}` : '';
+      const because = c.because ? `（重新审：${c.because}）` : '';
+      lines.push(`- #${c.id} [${CRITIQUE_STATUS[c.status] ?? c.status}] ${c.by}${because}：${oneLine(c.text)}${reply}`);
+    }
+    lines.push('');
+  }
   lines.push('## 历史');
   lines.push('');
   for (const h of task.history) {
@@ -72,7 +82,11 @@ export function formatTask(task) {
   return lines.join('\n');
 }
 
-const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复' };
+const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复', note: 'leader 补充说明' };
+
+const CRITIQUE_STATUS = {
+  open: '待 leader 处理', resolved: '已处理', disputed: '等用户裁决', redo: '用户要求按意见改', overruled: '用户维持原样',
+};
 
 function footer(agentId) {
   return [
@@ -105,6 +119,7 @@ function waitingLines(waiting) {
     if (waiting.leaving) lines.push('leader 安排你做完这个任务（通过）后下线，到时会收到「# 已下线」。在那之前照常等待和修改。');
     return lines;
   }
+  if (waiting.critic && !waiting.leaveAsked) return ['所有的卡都审过了，等 leader 加新卡或改卡。'];
   if (waiting.leaveAsked) {
     return ['你已经空闲了一段时间，系统已替你向 leader 申请下线。leader 同意的话你会收到「# 已下线」；在那之前照常等待，也可能会派新任务过来。'];
   }
@@ -131,6 +146,9 @@ export function formatWait(result, agentId, waiting, round = 0) {
       '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
     ].join('\n');
   }
+  if (result.kind === 'critique_list') {
+    return formatCritiqueList(result.tasks, agentId);
+  }
   if (result.kind === 'cancelled') {
     return `# 任务 ${result.task?.id ?? ''} 已作废\n\n${result.text}`;
   }
@@ -151,7 +169,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
       out = `# 新任务 ${title}\n\n${formatTask(task)}${deliverySection(delivery)}`;
       break;
     case 'resume':
-      out = `# 继续任务 ${title}\n\n${formatTask(task)}`;
+      out = `# 继续任务 ${title}\n\n${formatTask(task)}${deliverySection(delivery)}`;
       break;
     case 'handoff':
       out = `# ⚠ 接手任务 ${title}\n\n`
@@ -183,7 +201,36 @@ export function formatWait(result, agentId, waiting, round = 0) {
   return out + footer(agentId);
 }
 
+// 给审卡 worker 的待审清单
+function formatCritiqueList(tasks, agentId) {
+  const lines = [`# 待审的卡（${tasks.length} 张）`, ''];
+  lines.push('逐张审：对照所属需求的说明、设计文档、同需求的其他卡，以及现有代码，找卡本身的问题。');
+  lines.push('看全部的卡（包括审过的，用来查冲突）：ateam cards，或 ateam cards --job J1。', '');
+  for (const t of tasks) {
+    lines.push(`## ${t.id}：${t.title}（需求 ${t.jobId}${t.edited ? '，leader 改过，再审一次' : ''}）`, '', formatTask(t), '');
+  }
+  lines.push('---');
+  lines.push(`没问题：ateam critique --as ${agentId} ok T1 T2 ...（可以一次标多张）`);
+  lines.push(`有问题：ateam critique --as ${agentId} issue T1 "<问题在哪、为什么是问题、建议怎么改>"`);
+  lines.push(`发现和已经审过的旧卡冲突：对旧卡也提 issue，加上 --because "和 T12 冲突"（会记进历史）`);
+  lines.push(`全部标完后运行 ateam wait --as ${agentId} 等新卡。不要结束本轮回复。`);
+  return lines.join('\n');
+}
+
+// ateam cards：全部能审的卡
+export function formatCards(cards, { todo = false } = {}) {
+  if (!cards.length) return todo ? '没有待审的卡。' : '没有可审的卡（已作废的卡和已验收需求里的卡不审）。';
+  const lines = [`# ${todo ? '待审的卡' : '全部的卡'}（${cards.length} 张）`, ''];
+  for (const t of cards) {
+    const mark = t.reviewed ? '已审' : (t.edited ? '改过，待再审' : '待审');
+    lines.push(`## ${t.id}：${t.title}（需求 ${t.jobId}，${mark}）`, '', formatTask(t), '');
+  }
+  return lines.join('\n').trimEnd();
+}
+
 const EVENT_HINT = {
+  critique: (e) => `处理审卡意见（ateam show ${e.taskId} 看全文）：待领取/已挂起的卡 ateam task edit ${e.taskId} ... 改；进行中的 ateam note ${e.taskId} "<补充说明>" 告诉 worker；已完成的加修复任务。处理完 ateam critique done ${e.taskId} "<改了什么>"；不同意就 ateam critique dispute ${e.taskId} "<理由>"（交给用户裁决）`,
+  critique_ruling: (e) => `用户要求按审卡意见改 ${e.taskId}：改完（或转告 worker、加修复任务）后 ateam critique done ${e.taskId} "<改了什么>"`,
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,
@@ -236,6 +283,15 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
     for (const t of mine) lines.push(`- ${t.id} [${t.status}] ${t.title} —— ${PENDING_HINT[t.status]?.(t) ?? ''}`);
   } else {
     lines.push('（无）');
+  }
+  const critiqued = state.tasks.filter((t) => (t.critiques ?? []).some((c) => c.status === 'open' || c.status === 'redo'));
+  if (critiqued.length) {
+    lines.push('', `## 审卡意见待你处理（${critiqued.length}）`, '');
+    for (const t of critiqued) {
+      const open = t.critiques.filter((c) => c.status === 'open' || c.status === 'redo');
+      const tag = open.some((c) => c.status === 'redo') ? '用户要求按意见改' : '待处理';
+      lines.push(`- ${t.id} [${t.status}] ${t.title}（${tag}）：${open.map((c) => oneLine(c.text)).join('；')} —— 处理后 ateam critique done ${t.id} "<改了什么>"，不同意 ateam critique dispute ${t.id} "<理由>"`);
+    }
   }
   const undelivered = state.events.filter((e) => !e.delivered).length;
   if (undelivered) lines.push('', `另有 ${undelivered} 条未读事件：ateam watch`);

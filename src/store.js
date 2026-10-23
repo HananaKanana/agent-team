@@ -204,6 +204,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (changes.length === 0) throw new AteamError('INVALID', '没有要修改的内容。请至少提供 --title、--role、--desc-file、--accept、--paths、--after 中的一项。');
     addHistory(task, 'edited', 'lead', `修改了${changes.join('、')}`);
+    task.rev = (task.rev ?? 0) + 1; // 卡改过了，审卡 worker 会再审一次
     changed();
     return task;
   }
@@ -411,6 +412,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       return { kind: 'dismissed' };
     }
 
+    // 审卡 worker：不领开发任务，拿到的是还没审过的卡的清单
+    if (isCritic(agent)) {
+      const tasks = critiqueQueue();
+      return tasks.length ? { kind: 'critique_list', tasks: tasks.map((t) => critiqueView(t)) } : null;
+    }
+
     if (agent.currentTask) {
       const task = getTask(agent.currentTask);
       if (task.status !== 'working') return null; // asking / submitted：等答复或 review 结果
@@ -421,8 +428,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         changed();
         return { kind: delivery.kind, task, delivery };
       }
-      // 规则 2：重复调用 wait，重新返回当前任务
-      return { kind: 'resume', task };
+      // 规则 2：重复调用 wait，重新返回当前任务（有补充说明一起带上）
+      const note = takeNote(task);
+      return note ? { kind: 'resume', task, delivery: { kind: 'note', text: note } } : { kind: 'resume', task };
     }
 
     // 规则 3：领取新任务，派发顺序见 dispatchOrder
@@ -556,8 +564,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     let dirty = false;
     for (const agent of state.agents) {
       if (agent.status !== 'online') continue;
-      const busy = agent.currentTask
-        || state.tasks.some((t) => t.status === 'pending' && sameRole(t.role, agent.role));
+      const busy = isCritic(agent)
+        ? critiqueQueue().length > 0
+        : agent.currentTask || state.tasks.some((t) => t.status === 'pending' && sameRole(t.role, agent.role));
       if (busy) {
         if (agent.idleSince || agent.leaveAsked) {
           delete agent.idleSince;
@@ -601,7 +610,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
           .filter((d) => d && d.status !== 'approved')
           .map((d) => ({ id: d.id, status: d.status })),
       }));
-    return { blocked, leaveAsked: !!agent.leaveAsked };
+    return { blocked, leaveAsked: !!agent.leaveAsked, critic: isCritic(agent) };
   }
 
   // worker 当前持有的任务，且必须处于 working
@@ -640,8 +649,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     } else {
       addHistory(task, 'progress', agent.id, text);
     }
+    const note = takeNote(task);
     changed();
-    return task;
+    return note ? { ...task, note } : task;
   }
 
   function ask(agentId, text) {
@@ -655,7 +665,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   function taskForSubmit(agentId) {
-    return workingTaskOf(agentId).task;
+    const { task } = workingTaskOf(agentId);
+    // leader 的补充说明还没看到：先给它看，按说明检查完再提交
+    const note = takeNote(task);
+    if (note) {
+      throw new AteamError('BAD_STATE', `提交前先看 leader 对 ${task.id} 的补充说明：\n\n${note}\n\n按说明检查、需要的话修改后，再运行 ateam submit。`);
+    }
+    return task;
   }
 
   // commit：一个提交号、多个提交号（多仓库时每个仓库一个，如 api@a1b2c3d），或 null（无代码改动）
@@ -673,6 +689,136 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     });
     changed();
     return task;
+  }
+
+  // ---------- 审卡 ----------
+  // 审卡 worker（角色 critic）专门挑任务卡的毛病：描述含糊或矛盾、验收标准没法核对、路径不对、依赖错了……
+  // 它在线就能看全部的卡（ateam cards），wait 拿到的是还没审过的卡；审过的标记一下就不再出现，
+  // leader 改过（rev 变了）的卡会重新出现。发现新卡和旧卡冲突，可以重新审旧卡，历史里记下因为哪张卡。
+  // 有问题就记一条意见（critique），leader 必须处理：改了就 done；不同意就 dispute，交给用户在看板上裁决。
+  // 审卡不影响派发。
+
+  const CRITIC_ROLE = 'critic';
+  const isCritic = (agent) => sameRole(agent.role, CRITIC_ROLE);
+  // 先审还没开工的（改起来最省事），再审进行中的，最后审已完成的
+  const CRITIQUE_RANK = { pending: 0, held: 0, working: 1, asking: 1, submitted: 2, approved: 3 };
+
+  // 能审的卡：没作废，所属需求还没验收
+  function critiquable(t) {
+    if (!(t.status in CRITIQUE_RANK)) return false;
+    return state.jobs.find((j) => j.id === t.jobId)?.status !== 'accepted';
+  }
+
+  function reviewed(t) {
+    return (t.critiquedRev ?? -1) === (t.rev ?? 0);
+  }
+
+  function critiqueQueue() {
+    return state.tasks
+      .filter((t) => critiquable(t) && !reviewed(t))
+      .sort((a, b) => (CRITIQUE_RANK[a.status] - CRITIQUE_RANK[b.status]) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
+  }
+
+  function critiqueView(t) {
+    return { ...t, reviewed: reviewed(t), edited: (t.rev ?? 0) > 0 && t.critiquedRev != null && !reviewed(t) };
+  }
+
+  // 全部能审的卡（审卡 worker 和 leader 都能看）。jobId 只看一个需求，todo 只看还没审的
+  function cards({ jobId = '', todo = false } = {}) {
+    return state.tasks
+      .filter((t) => critiquable(t) && (!jobId || t.jobId === jobId) && (!todo || !reviewed(t)))
+      .map(critiqueView);
+  }
+
+  // 审卡 worker 给出结论。ids：一张或多张卡；verdict：ok 没问题 / issue 有问题（text 写问题和修改建议）。
+  // because：重新审已经审过的卡时必须写明原因（比如和哪张新卡冲突），历史里留痕。
+  function submitCritique(agentId, ids, verdict, text = '', because = '') {
+    const agent = touch(agentId);
+    if (!isCritic(agent)) throw new AteamError('BAD_STATE', '只有审卡角色（critic）的 worker 能提交审卡结论。');
+    const list = (Array.isArray(ids) ? ids : [ids]).map((id) => String(id).trim()).filter(Boolean);
+    if (!list.length) throw new AteamError('INVALID', '请写上要审的卡的编号，例如 T5（可以多个）。');
+    if (verdict !== 'ok' && verdict !== 'issue') throw new AteamError('INVALID', '审卡结论只能是 ok 或 issue。');
+    if (verdict === 'issue') text = requireText(text, '审卡意见');
+    because = String(because ?? '').trim();
+    const tasks = list.map(getTask);
+    for (const t of tasks) {
+      if (!critiquable(t)) throw new AteamError('BAD_STATE', `任务 ${t.id} 已作废或所属需求已验收，不用再审。`);
+      if (reviewed(t) && !because) {
+        throw new AteamError('INVALID', `${t.id} 已经审过了。要重新审（比如它和新卡冲突），加上 --because "<原因，比如和 T12 冲突>"，会记进历史。`);
+      }
+    }
+    for (const t of tasks) {
+      const again = reviewed(t);
+      t.critiquedRev = t.rev ?? 0;
+      const prefix = again ? `重新审卡（${because}）` : '审卡';
+      if (verdict === 'issue') {
+        t.critiques ??= [];
+        t.critiques.push({ id: t.critiques.length + 1, by: agent.id, ts: now(), status: 'open', text, taskStatus: t.status, ...(again ? { because } : {}) });
+        addHistory(t, 'critique', agent.id, `${prefix}：${text}`);
+        emit('critique', { taskId: t.id, agentId: agent.id, text: `${prefix}意见（${t.id}，${t.status}）：${text}` });
+      } else {
+        addHistory(t, 'critique', agent.id, `${prefix}通过${String(text ?? '').trim() ? `：${String(text).trim()}` : ''}`);
+      }
+    }
+    changed();
+    return tasks;
+  }
+
+  function openCritiques(task, statuses = ['open']) {
+    return (task.critiques ?? []).filter((c) => statuses.includes(c.status));
+  }
+
+  // leader 处理意见：done 已按意见改（或已转告 worker / 已加修复任务）；dispute 不同意，交给用户裁决
+  function handleCritique(taskId, action, text) {
+    text = requireText(text, action === 'done' ? '处理说明（改了什么）' : '不同意的理由');
+    const task = getTask(taskId);
+    const open = openCritiques(task, ['open', 'redo']);
+    if (!open.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有待处理的审卡意见。`);
+    for (const c of open) {
+      c.reply = text;
+      c.status = action === 'done' ? 'resolved' : 'disputed';
+      c.repliedAt = now();
+    }
+    addHistory(task, 'critique', 'lead', action === 'done' ? `处理审卡意见：${text}` : `不同意审卡意见，交给用户裁决：${text}`);
+    changed();
+    return task;
+  }
+
+  // 用户裁决：side 为 critic（按审卡意见改，退回 leader 再处理）或 leader（维持 leader 的做法，结案）
+  function ruleCritique(taskId, side) {
+    const task = getTask(taskId);
+    const disputed = openCritiques(task, ['disputed']);
+    if (!disputed.length) throw new AteamError('BAD_STATE', `任务 ${task.id} 没有等你裁决的审卡意见。`);
+    for (const c of disputed) c.status = side === 'critic' ? 'redo' : 'overruled';
+    if (side === 'critic') {
+      addHistory(task, 'critique', 'user', '用户裁决：按审卡意见改');
+      emit('critique_ruling', { taskId: task.id, text: `用户裁决 ${task.id}：按审卡意见改。意见：${disputed.map((c) => c.text).join('；')}` });
+    } else {
+      addHistory(task, 'critique', 'user', '用户裁决：维持 leader 的做法');
+    }
+    changed();
+    return task;
+  }
+
+  // leader 给正在做的 worker 补充说明（比如审卡发现描述有误）。worker 下一次 progress、wait 或 submit 时收到
+  function noteTask(taskId, text) {
+    text = requireText(text, '补充说明');
+    const task = getTask(taskId);
+    if (task.status !== 'working' && task.status !== 'asking') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中的任务能补充说明；待领取的直接 ateam task edit 改卡。`);
+    }
+    task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${text}` : text;
+    addHistory(task, 'note', 'lead', text);
+    changed();
+    return task;
+  }
+
+  function takeNote(task) {
+    const note = task.pendingNote;
+    if (!note) return null;
+    delete task.pendingNote;
+    changed();
+    return note;
   }
 
   // ---------- review ----------
@@ -948,7 +1094,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, setPriority, assignTask, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, keepWaiting, checkIdle, report, sweep, noteActivity,
+    acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
   };
 }

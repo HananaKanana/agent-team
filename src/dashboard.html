@@ -814,20 +814,20 @@ const SINCE = {
   asking: [['asked'], 10], submitted: [['submitted'], 10],
   held: [['rejected', 'handoff', 'released', 'created']],
 };
-const LANE_TIME_TIP = { pending: '进入待领取后', working: '这一轮领取后', rework: '被打回后', asking: 'worker 提问后', submitted: 'worker 交付后', held: '挂起后' };
+const LANE_TIME_TIP = { pending: '排队时长（自进入待领取起）', working: '处理时长（自本轮领取起）', rework: '返工时长（自打回起）', asking: '等待答复时长（自提问起）', submitted: '等待 review 时长（自交付起）', held: '挂起时长（自挂起起）' };
 function laneTime(t, lane) {
   if (lane === 'approved') {
     const ms = spent(t);
-    return ms == null ? null : el('span', { class: 'since', title: '第一次领取到通过的总用时' }, icon('clock'), dur(ms));
+    return ms == null ? null : el('span', { class: 'since', title: '总耗时（首次领取至通过）' }, icon('clock'), dur(ms));
   }
   if (lane === 'pending' && t.dependsOn.some((id) => data.state.tasks.find((x) => x.id === id)?.status !== 'approved')) {
-    return el('span', { class: 'since', title: `等 ${t.dependsOn.join('、')} 通过后才能领` }, icon('clock'), '等依赖');
+    return el('span', { class: 'since', title: `等待依赖任务通过：${t.dependsOn.join('、')}` }, icon('clock'), '等依赖');
   }
   const rule = SINCE[lane];
   const h = rule && t.history.findLast((x) => rule[0].includes(x.type));
   if (!h) return null;
   const since = new Date(h.ts).getTime();
-  const node = el('span', { class: 'since', title: `${LANE_TIME_TIP[lane]}过了多久`, 'data-since': since, 'data-late': rule[1] ? rule[1] * 60000 : null }, icon('clock'), el('span'));
+  const node = el('span', { class: 'since', title: LANE_TIME_TIP[lane], 'data-since': since, 'data-late': rule[1] ? rule[1] * 60000 : null }, icon('clock'), el('span'));
   tickSince(node);
   return node;
 }
@@ -1509,7 +1509,7 @@ function renderDrawer(fresh) {
     fact('依赖', t.dependsOn.length ? t.dependsOn.join('、') : '无'),
     fact('打回', `${t.rejectCount} 次`),
     fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—'),
-    t.status === 'approved' && spent(t) != null ? fact('用时', `${dur(spent(t))}（第一次领取到通过）`) : null,
+    t.status === 'approved' && spent(t) != null ? fact('总耗时', `${dur(spent(t))}（首次领取至通过）`) : null,
     fact('路径', t.paths.length ? t.paths.map((p) => el('code', null, p)) : '无'));
   fill(drawer,
     el('div', { class: 'drawer-bar' },

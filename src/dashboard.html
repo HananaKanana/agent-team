@@ -1441,7 +1441,7 @@ function card(t, lane) {
       lane === 'working' || lane === 'rework' ? el('span', { class: 'pulse' }) : null,
       el('span', { class: 'key' }, t.id),
       el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role),
-      claimed ? el('span', { class: 'elapsed' }, ago(claimed.ts).replace('前', '')) : null,
+      claimed ? el('span', { class: 'elapsed', 'data-since': claimed.ts }, ago(claimed.ts).replace('前', '')) : null,
       avatar(t.assignee, t.role)));
 }
 
@@ -2321,6 +2321,10 @@ document.getElementById('helper-btn').addEventListener('click', (e) => {
 loadView();
 poll();
 setInterval(poll, 3000);
+// 卡片上「领取后过了多久」每秒走一次，不等数据变化
+setInterval(() => {
+  for (const n of document.querySelectorAll('.elapsed[data-since]')) n.textContent = ago(Number(n.dataset.since)).replace('前', '');
+}, 1000);
 // 服务有变化时推送过来，立即刷新：后台标签页的定时器会被浏览器暂停，推送不会，标题上的提醒才能及时更新
 let pollPending = false;
 function pollSoon() {

@@ -264,7 +264,7 @@ const PENDING_HINT = {
     const q = [...t.history].reverse().find((h) => h.type === 'asked');
     return `问题：${oneLine(q?.text ?? '')} —— 回答：ateam answer ${t.id} "<答复>"`;
   },
-  held: (t) => `已打回 3 次：ateam task edit ${t.id} ... 后 ateam release ${t.id}，或自己修改后 ateam approve ${t.id}`,
+  held: (t) => `已打回 ${t.rejectCount} 次，挂起：ateam task edit ${t.id} ... 后 ateam release ${t.id}，或自己修改后 ateam approve ${t.id}`,
 };
 
 // 默认不列出已验收的需求（只给编号），免得需求越积越多、撑满 leader 的上下文；--job 或 --all 时照常列出

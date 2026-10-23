@@ -92,7 +92,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | （用户确认某个 worker 窗口没了） | `ateam reclaim T3`：收回任务交给同角色的其他 worker 接手；原 worker 会被标记掉线。**只在用户确认后做** |
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
-| `task_held` | 任务被打回 3 次已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
+| `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `critique` | 审卡意见，按「审卡意见」一节处理 |
 | `critique_ruling` | 用户裁决按审卡意见改：照做后 `ateam critique done T5 "<改了什么>"` |
 | `worker_joined` `claimed` `job_accepted` | 了解即可 |

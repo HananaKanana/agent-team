@@ -11,8 +11,27 @@ export function emptyState() {
 // 用户确认窗口没了（看板上点「换人接手」，或 leader 问过用户后 ateam reclaim）才转手；
 // 空闲（手上没有进行中任务）的 worker 到时直接判掉线，没有任务要转手。
 export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, idleMs = 3 * 60 * 1000, onChange = () => {} } = {}) {
+  // 启动参数（--lease / --idle）是默认值；用户在看板「设置」里改过的以设置为准
+  const defaultLeaseMs = leaseMs;
+  const defaultIdleMs = idleMs;
   state = state ?? emptyState();
   const changed = () => onChange();
+
+  // ---------- 设置 ----------
+  // 用户在看板「设置」页改的配置，存在 state.settings 里，重启不丢。没改过的用默认值。
+  const SETTINGS = {
+    criticAutoLeave: { type: 'bool', def: () => false },
+    keepOnePerRole: { type: 'bool', def: () => true },
+    leaseMin: { type: 'num', min: 1, max: 240, def: () => defaultLeaseMs / 60000 },
+    idleMin: { type: 'num', min: 1, max: 240, def: () => defaultIdleMs / 60000 },
+    rejectLimit: { type: 'int', min: 1, max: 10, def: () => 3 },
+  };
+
+  function config() {
+    const out = {};
+    for (const [key, spec] of Object.entries(SETTINGS)) out[key] = state.settings?.[key] ?? spec.def();
+    return out;
+  }
 
   // ---------- 内部辅助 ----------
 
@@ -408,7 +427,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
     // 已安排下线、手上没有任务 → 正式下线（手上有任务的，等任务通过、作废或收回后再下线）
     // 审卡 worker 安排了「审完再下线」，或者用户打开了全局开关「审完自动下线」：还有待审的卡就接着审，审完才下线
-    if (isCritic(agent) && state.settings?.criticAutoLeave && !critiqueQueue().length) agent.dismiss = true;
+    if (isCritic(agent) && config().criticAutoLeave && !critiqueQueue().length) agent.dismiss = true;
     if (agent.dismiss && !agent.currentTask && !(isCritic(agent) && critiqueQueue().length)) {
       finishDismiss(agent);
       return { kind: 'dismissed' };
@@ -518,7 +537,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         throw new AteamError('NEEDS_USER', `${critics.map((a) => a.id).join('、')} 是审卡 worker，只有用户要求才能下线。用户要求了的话，加 --user-approved 重新运行；只是想让其他 worker 下线，就别带上它（不要用 --all，改成指定编号或 --role）。`);
       }
       const emptied = [];
-      for (const a of picked) {
+      for (const a of (config().keepOnePerRole ? picked : [])) {
         if (a.dismiss) continue; // 已经安排过下线（当时已过这道检查）
         if (emptied.some((r) => sameRole(r, a.role))) continue;
         if (onlineOfRole(a.role).every((x) => picked.includes(x))) emptied.push(a.role);
@@ -564,12 +583,22 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return result;
   }
 
-  // 全局设置（用户在看板上改）。criticAutoLeave：审卡 worker 审完待审的卡就自动下线
+  // 改设置。值为 null 表示恢复默认
   function setSettings(patch = {}) {
     state.settings ??= {};
-    if (patch.criticAutoLeave !== undefined) state.settings.criticAutoLeave = !!patch.criticAutoLeave;
+    for (const [key, value] of Object.entries(patch)) {
+      const spec = SETTINGS[key];
+      if (!spec) continue;
+      if (value === null) { delete state.settings[key]; continue; }
+      if (spec.type === 'bool') { state.settings[key] = !!value; continue; }
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < spec.min || n > spec.max || (spec.type === 'int' && !Number.isInteger(n))) {
+        throw new AteamError('INVALID', `${key} 必须是 ${spec.min} 到 ${spec.max} 之间的${spec.type === 'int' ? '整数' : '数'}。`);
+      }
+      state.settings[key] = n;
+    }
     changed();
-    return state.settings;
+    return config();
   }
 
   // 撤销「做完再下线」
@@ -615,7 +644,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!agent.idleSince) {
         agent.idleSince = now();
         dirty = true;
-      } else if (!agent.leaveAsked && now() - agent.idleSince >= idleMs) {
+      } else if (!agent.leaveAsked && now() - agent.idleSince >= config().idleMin * 60000) {
         agent.leaveAsked = true;
         const last = onlineOfRole(agent.role).length === 1;
         const who = agent.name ? `${agent.name}（${agent.id}）` : agent.id;
@@ -889,7 +918,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.rejectCount += 1;
     addHistory(task, 'rejected', 'lead', text);
 
-    if (task.rejectCount >= 3) {
+    if (task.rejectCount >= config().rejectLimit) {
       task.status = 'held';
       releaseAgentOf(task);
       emit('task_held', { taskId: task.id, text: `${task.id} 已被打回 ${task.rejectCount} 次，转为挂起，等你处理（task edit + release，或自己修改后 approve）` });
@@ -1054,7 +1083,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (agent.status !== 'online' || isWaiting(agent.id)) continue;
       const seen = Math.max(agent.lastSeenAt, agent.busyUntil ?? 0);
       const quiet = now() - seen;
-      if (quiet <= leaseMs) continue;
+      if (quiet <= config().leaseMin * 60000) continue;
       const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
       const active = task && (task.status === 'working' || task.status === 'asking');
       if (active) {
@@ -1128,7 +1157,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   return {
     get state() { return state; },
-    leaseMs,
+    get leaseMs() { return config().leaseMin * 60000; },
+    config,
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,

@@ -307,6 +307,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       pending: store.pendingActions(), root, toolDir: TOOL_DIR, port, repos: layout.mode === 'multi' ? layout.repos : null,
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
+      config: store.config(),
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
       leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline() },
     }),
@@ -409,7 +410,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     try {
       for (const agent of store.state.agents) {
         if (agent.status !== 'online' || !agent.currentTask || waiters.has(agent.id)) continue;
-        if (Date.now() - agent.lastSeenAt <= leaseMs) continue;
+        if (Date.now() - agent.lastSeenAt <= store.leaseMs) continue;
         const task = store.state.tasks.find((t) => t.id === agent.currentTask);
         if (!task || (task.status !== 'working' && task.status !== 'asking')) continue;
         const ts = await latestChangeTime(root, task.paths).catch(() => null);
@@ -421,7 +422,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       sweeping = false;
     }
   }
-  const sweepTimer = setInterval(sweepTick, Math.min(30000, leaseMs / 3));
+  // 租约在「设置」里可以改小，扫描间隔按最短 1 分钟的租约算
+  const sweepTimer = setInterval(sweepTick, Math.min(20000, leaseMs / 3));
   sweepTimer.unref();
   server.on('close', () => {
     clearInterval(sweepTimer);

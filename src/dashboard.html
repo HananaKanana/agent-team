@@ -129,8 +129,20 @@ button.worker:hover { background: var(--sunken); }
 .att-head h4 { font-size: 13px; color: var(--faint); margin: 14px 0 4px; font-weight: 600; }
 .att-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13px; }
 .att-head + .att-row { border-top: none; }
-.att-pick { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
-.att-pick input { margin-top: 2px; }
+/* 待你验收：每个需求一张可勾选的卡片；表头的复选框就是全选，和卡片里的复选框对齐 */
+.acc-head { display: flex; align-items: center; gap: 12px; margin: 14px 0 8px; padding: 0 13px; font-size: 13px; font-weight: 600; color: var(--faint); cursor: pointer; }
+.acc-list { display: flex; flex-direction: column; gap: 8px; }
+.acc-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 6px;
+  background: var(--surface); cursor: pointer; transition: background .12s, border-color .12s;
+}
+.acc-row:hover { background: var(--raised-hover); }
+.acc-row.on { border-color: color-mix(in srgb, var(--brand) 45%, transparent); background: color-mix(in srgb, var(--brand) 6%, var(--surface)); }
+.acc-row .txt { flex: 1; min-width: 0; font-size: 13.5px; line-height: 20px; }
+.acc-row .txt b { font-weight: 650; margin-right: 6px; }
+.acc-row .txt .hint { line-height: 18px; margin-top: 2px; }
+.acc-row input { align-self: flex-start; margin-top: 2px; }
+.acc-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 /* 复选框：自绘，跟主题色走（开关样式的 .switch 另有定义） */
 input[type="checkbox"]:not(.switch) {
   appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border-radius: 3px; cursor: pointer;
@@ -139,6 +151,8 @@ input[type="checkbox"]:not(.switch) {
 }
 input[type="checkbox"]:not(.switch):hover { border-color: var(--brand); }
 input[type="checkbox"]:not(.switch):checked { background: var(--brand); border-color: var(--brand); }
+input[type="checkbox"]:not(.switch):indeterminate { background: var(--brand); border-color: var(--brand); }
+input[type="checkbox"]:not(.switch):indeterminate::after { content: ""; width: 8px; height: 2px; background: var(--on-color); border-radius: 1px; }
 input[type="checkbox"]:not(.switch):checked::after {
   content: ""; width: 4px; height: 8px; margin-top: -2px;
   border: solid var(--on-color); border-width: 0 2px 2px 0; transform: rotate(45deg);
@@ -2239,21 +2253,22 @@ function renderAttentionList() {
   const picked = jobs.filter((j) => acceptPick.has(j.id));
   const allOn = picked.length === jobs.length;
 
+  const allBox = el('input', { type: 'checkbox', 'aria-label': '全选' });
+  allBox.checked = allOn;
+  allBox.indeterminate = picked.length > 0 && !allOn;
+  allBox.addEventListener('change', () => { acceptPick = new Set(allOn ? [] : jobs.map((j) => j.id)); acceptConfirm = false; renderAttentionList(); });
   const acceptSec = jobs.length ? [
-    el('div', { class: 'att-head' },
-      el('h4', null, `待你验收（${jobs.length}）`),
-      el('button', { class: 'btn ghost sm', onclick: stop(() => { acceptPick = new Set(allOn ? [] : jobs.map((j) => j.id)); acceptConfirm = false; renderAttentionList(); }) }, allOn ? '全不选' : '全选')),
-    jobs.map((j) => {
+    el('label', { class: 'acc-head', title: allOn ? '全不选' : '全选' }, allBox, `待你验收（${jobs.length}）`),
+    el('div', { class: 'acc-list' }, jobs.map((j) => {
       const tasks = data.state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
       const box2 = el('input', { type: 'checkbox' });
       box2.checked = acceptPick.has(j.id);
       box2.addEventListener('change', () => { if (box2.checked) acceptPick.add(j.id); else acceptPick.delete(j.id); acceptConfirm = false; renderAttentionList(); });
-      return el('div', { class: 'att-row' },
-        el('label', { class: 'att-pick' }, box2,
-          el('span', null, el('b', null, j.id), ` ${j.title}`, el('div', { class: 'hint' }, `${tasks.length} 个任务 · ${fmtTime(j.updatedAt)} 提交汇报`))),
-        el('button', { class: 'btn ghost sm', onclick: stop(() => { attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); }) }, '看汇报'));
-    }),
-    el('div', { class: 'actions', style: 'justify-content: flex-end' },
+      return el('label', { class: `acc-row${box2.checked ? ' on' : ''}` }, box2,
+        el('span', { class: 'txt' }, el('b', null, j.id), j.title, el('div', { class: 'hint' }, `${tasks.length} 个任务 · ${fmtTime(j.updatedAt)} 提交汇报`)),
+        el('button', { class: 'btn sm', onclick: (e) => { e.preventDefault(); e.stopPropagation(); attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); } }, '看汇报'));
+    })),
+    el('div', { class: 'acc-foot' },
       acceptMsg ? el('span', { class: 'hint', style: 'margin-right: auto' }, acceptMsg) : null,
       acceptConfirm ? el('button', { class: 'btn ghost', onclick: stop(() => { acceptConfirm = false; renderAttentionList(); }) }, '取消') : null,
       el('button', {

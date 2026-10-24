@@ -228,6 +228,30 @@ input[type="checkbox"]:not(.switch):checked::after {
 .banner[hidden], .needs[hidden] { display: none; }
 .banner.stale { --c: var(--asking); }
 .needs { --c: var(--asking); }
+.banner.demo { --c: var(--working); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.banner.demo .step { color: var(--muted); }
+
+/* 演示需求：演示卡列表，每行一张卡 */
+.demo-list { display: flex; flex-direction: column; gap: 8px; max-width: 960px; }
+.demo-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px;
+  padding: 14px 16px; border: none; border-radius: 6px; text-align: left; cursor: pointer; width: 100%;
+  background: var(--raised); color: var(--ink); box-shadow: var(--shadow-card); font: inherit;
+}
+.demo-row:hover { background: var(--raised-hover); box-shadow: var(--shadow-lift); }
+.demo-row .t { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.demo-row .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.demo-row .meta code { font-size: 12px; background: var(--sunken); padding: 1px 6px; border-radius: 3px; }
+.demo-row .step { grid-column: 1 / -1; font-size: 13px; color: var(--ink); }
+.demo-row .step b { color: var(--working); font-weight: 650; margin-right: 6px; }
+.demo-row .since svg, .banner.demo .since svg { width: 12px; height: 12px; }
+.demo-row .since, .banner.demo .since { display: inline-flex; align-items: center; gap: 4px; }
+.demo-runs { width: 100%; border-collapse: collapse; font-size: 13px; }
+.demo-runs th { text-align: left; font-weight: 600; color: var(--faint); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.demo-runs td { padding: 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.demo-runs td.r-done { color: var(--approved); font-weight: 600; }
+.demo-runs td.r-stopped { color: var(--asking); font-weight: 600; }
+.demo-runs td.r-interrupted { color: var(--rework); font-weight: 600; }
 .needs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .needs-row + .needs-row { margin-top: 8px; }
 .needs b, .banner b { font-weight: 650; }
@@ -651,6 +675,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <button class="btn ghost icon" id="theme-btn" type="button"></button>
 </header>
 <section class="needs" id="needs" hidden aria-label="需要 worker"></section>
+<div class="banner demo" id="demo-banner" hidden></div>
 <div class="banner" id="banner" hidden><b>连不上 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 仍在运行。</div>
 <div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 的代码已经更新，但服务还在跑旧代码。在运行 ateam serve 的终端里按 Ctrl+C，再重新运行 ateam serve，然后刷新本页。状态不会丢，worker 和 leader 会自动重连。</div>
 <div class="layout">
@@ -707,7 +732,11 @@ const HISTORY = {
   asked: ['提问', 'asking'], answered: ['答复', 'asking'], submitted: ['交付', 'submitted'],
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
+  demo_ended: ['演示结束', 'approved'], demo_saved: ['记录经验', 'approved'],
 };
+// 演示卡的状态：名称、lozenge 颜色
+const DEMO_STATUS = { ready: ['待演示', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演示中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
+const RUN_OUTCOME = { done: '跑完', stopped: '叫停', interrupted: '中断' };
 
 let data = null;
 let lastJson = '';
@@ -1360,6 +1389,15 @@ function renderJobs() {
   const jobItem = (j) => {
     const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const done = jt.filter((t) => t.status === 'approved').length;
+    if (j.demo) {
+      const live = jt.find((t) => t.status === 'queued' || t.status === 'demoing');
+      return el('button', {
+        class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
+        onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
+      },
+      el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
+      el('div', { class: 'sub' }, el('span', { class: 'tag' }, '演示'), el('span', null, live ? DEMO_STATUS[live.status][0] : `${jt.length} 张演示卡`)));
+    }
     return el('button', {
       class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
@@ -1402,14 +1440,15 @@ function renderMain() {
   const all = data.state.tasks.filter((t) => t.jobId === job.id);
   const tasks = all.filter((t) => t.status !== 'cancelled');
   const cancelled = all.filter((t) => t.status === 'cancelled');
-  const st = reviewStats(tasks);
   // 说明较长时默认收起几行，可以展开
   const longDesc = (job.description || '').length > 160 || (job.description || '').split('\n').length > 3;
   const descOpen = descOpenJob === job.id;
   const head = el('div', { class: 'job-head' },
     el('div', { class: 'crumbs' }, `需求 / ${job.id}`),
     el('h2', { class: 'job-title' }, job.title),
-    el('div', { class: 'head-acts' }, el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
+    el('div', { class: 'head-acts' }, job.demo
+      ? el('span', { class: 'lozenge c-held' }, '演示需求')
+      : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
     job.description ? (() => {
       const box = el('div', { class: `desc md${longDesc && !descOpen ? ' clamped' : ''}` });
       box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
@@ -1419,6 +1458,17 @@ function renderMain() {
     job.origin ? el('details', { class: 'origin-box' },
       el('summary', null, '你提需求时的原话'),
       (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null);
+  if (job.demo) {
+    main.removeAttribute('aria-busy');
+    fill(main, head, tasks.length
+      ? el('div', { class: 'demo-list' }, tasks.map(demoRow))
+      : emptyState('split', '还没有演示卡', '跟 leader 说要演示什么，它会和你定好步骤、写好脚本，再建演示卡。'),
+    cancelled.length ? el('section', { class: 'cancelled-box', 'aria-label': '已作废' },
+      el('h3', null, `已作废（${cancelled.length}）`),
+      el('div', { class: 'cancelled-list' }, cancelled.map((t) => card(t, 'cancelled')))) : null);
+    return;
+  }
+  const st = reviewStats(tasks);
   const stats = el('div', { class: 'progress' },
     tasks.length ? strip(tasks, true) : null,
     el('div', { class: 'stats' },
@@ -1493,6 +1543,104 @@ function card(t, lane) {
       avatar(t.assignee, t.role)));
 }
 
+// ---------- 演示卡 ----------
+const isDemoTask = (t) => t.kind === 'demo';
+// 造成「派发暂停」的演示卡：等 worker 领的，或正在演示、没被叫停的（与服务端 demoFrozen 一致）
+const frozenDemo = () => data.state.tasks.find((t) => isDemoTask(t) && (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)));
+let demoError = null; // { id, message }
+
+async function demoAction(kind, t) {
+  try {
+    const res = await fetch(`/api/demo/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id }) });
+    const out = await res.json();
+    demoError = out.ok ? null : { id: t.id, message: out.message };
+  } catch { demoError = { id: t.id, message: '连不上 ateam 服务。' }; }
+  await poll();
+  render();
+}
+
+function demoButton(t) {
+  const stop = (e) => e.stopPropagation();
+  if (t.status === 'ready') {
+    const blockers = data.demoBlockers?.[t.id] ?? [];
+    return el('button', {
+      class: 'btn primary', disabled: blockers.length > 0, title: blockers.length ? blockers.join('；') : '开始后派发暂停，空闲的 worker 领走演示',
+      onclick: (e) => { stop(e); demoAction('start', t); },
+    }, '开始演示');
+  }
+  if (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)) {
+    return el('button', { class: 'btn warn', onclick: (e) => { stop(e); demoAction('stop', t); } }, '停止演示');
+  }
+  return null;
+}
+
+// 当前进行到哪一步 + 已演示多久（演示中）；等 worker 领（等待开始）；收尾中
+function demoProgress(t) {
+  if (t.status === 'queued') return el('span', null, `等 ${t.role} worker 领取…`);
+  if (t.status === 'wrapping') return el('span', null, `${agentName(t.assignee)} 在收尾：清理数据、记录经验`);
+  if (t.status !== 'demoing') return null;
+  const run = t.runs?.[t.runs.length - 1];
+  const since = run ? el('span', { class: 'since', title: '已演示时长', 'data-since': run.startedAt }, icon('clock'), el('span')) : null;
+  if (since) tickSince(since);
+  const step = t.demoStep ? [el('b', null, `第 ${t.demoStep.n}/${t.demoStep.total} 步`), t.demoStep.text] : '准备中';
+  return [el('span', null, step), ' ', since, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null];
+}
+
+function demoRow(t) {
+  const [label, color] = DEMO_STATUS[t.status] || [t.status, 'pending'];
+  const runs = t.runs || [];
+  const last = runs[runs.length - 1];
+  const progress = demoProgress(t);
+  const open = () => { view.task = t.id; saveView(); renderDrawer(true); };
+  // 行里有按钮，行本身不能也是 button：用可聚焦的 div
+  return el('div', {
+    class: 'demo-row', role: 'button', tabindex: '0', title: `${t.id} ${t.title}`,
+    onclick: open, onkeydown: (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } },
+  },
+    el('div', null,
+      el('div', { class: 't' }, el('span', { class: 'key' }, t.id), t.title, el('span', { class: `lozenge c-${color}` }, label)),
+      el('div', { class: 'meta' },
+        el('code', null, t.script),
+        el('span', null, `已演示 ${runs.length} 次`),
+        last ? el('span', null, `上次 ${fmtTime(last.startedAt)} ${RUN_OUTCOME[last.outcome] || '进行中'}`) : null,
+        t.assignTo && t.status === 'ready' ? el('span', null, `指派 ${agentName(t.assignTo)}`) : null)),
+    el('div', null, demoButton(t)),
+    progress ? el('div', { class: 'step' }, progress) : null,
+    demoError?.id === t.id ? el('div', { class: 'step hint' }, demoError.message) : null);
+}
+
+function renderDemoBanner() {
+  const box = document.getElementById('demo-banner');
+  const t = data && frozenDemo();
+  if (!t) { box.hidden = true; box.replaceChildren(); return; }
+  fill(box,
+    el('b', null, t.status === 'queued' ? `等待 worker 开始演示：${t.title}` : `演示中：${t.title}`),
+    el('span', null, '派发已暂停'),
+    t.status === 'demoing' ? el('span', { class: 'step' }, demoProgress(t)) : null,
+    el('button', { class: 'btn warn sm', onclick: (e) => { e.stopPropagation(); demoAction('stop', t); } }, '停止演示'));
+  box.hidden = false;
+}
+
+function demoDrawerBody(t) {
+  const runs = (t.runs || []).slice().reverse();
+  const progress = demoProgress(t);
+  return [
+    el('div', { class: 'prompt' }, demoButton(t), progress ? el('span', { class: 'hint' }, progress) : null),
+    demoError?.id === t.id ? el('p', { class: 'hint' }, demoError.message) : null,
+    t.status === 'ready' ? assignBox(t) : null,
+    (t.status === 'demoing' || t.status === 'wrapping') && t.assignee ? reclaimBox(t) : null,
+    el('h4', null, `演示记录（${runs.length}）`),
+    runs.length ? el('table', { class: 'demo-runs' },
+      el('thead', null, el('tr', null, ['开始', '演示者', '结果', '说明', '经验'].map((h) => el('th', null, h)))),
+      el('tbody', null, runs.map((r) => el('tr', null,
+        el('td', null, fmtTime(r.startedAt)),
+        el('td', null, agentName(r.by)),
+        el('td', { class: r.outcome ? `r-${r.outcome}` : '' }, RUN_OUTCOME[r.outcome] || '进行中'),
+        el('td', null, r.result || '—'),
+        el('td', null, r.saved ? (r.commit ? el('code', null, r.commit) : '无新内容') : '—'))))) : el('p', { class: 'meta' }, '还没演示过'),
+  ];
+}
+
 function renderDrawer(fresh) {
   const drawer = document.getElementById('drawer');
   const t = view.task && data.state.tasks.find((x) => x.id === view.task);
@@ -1502,7 +1650,14 @@ function renderDrawer(fresh) {
   // 子节点里有条件出现的数组和 null：走 fill，与 el() 一样展开并过滤
   const job = data.state.jobs.find((j) => j.id === t.jobId);
   const fact = (label, value) => [el('dt', null, label), el('dd', null, value)];
-  const facts = el('dl', { class: 'facts' },
+  const demo = isDemoTask(t);
+  const facts = demo ? el('dl', { class: 'facts' },
+    fact('状态', el('span', { class: `lozenge c-${(DEMO_STATUS[t.status] || [])[1] || 'pending'}` }, (DEMO_STATUS[t.status] || [t.status])[0])),
+    fact('角色', el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
+    fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '无'),
+    fact('脚本', el('code', null, t.script)),
+    fact('演示次数', `${(t.runs || []).length} 次`),
+    fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—')) : el('dl', { class: 'facts' },
     fact('状态', el('span', { class: `lozenge c-${lane}` }, LANE_LABEL[lane])),
     fact('角色', el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
     fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '还没人领'),
@@ -1529,6 +1684,7 @@ function renderDrawer(fresh) {
     el('div', { class: 'drawer-body' },
     el('h2', null, t.title),
     facts,
+    demo ? demoDrawerBody(t) : [
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
     t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t)] : null,
     critiqueBox(t),
@@ -1557,6 +1713,7 @@ function renderDrawer(fresh) {
     })(),
     el('h4', null, '提交'),
     t.commits.length ? el('ul', { class: 'commits' }, t.commits.map((c) => el('li', null, el('code', null, c)))) : el('p', { class: 'meta' }, '暂无'),
+    ],
     el('h4', null, '时间线'),
     el('ol', { class: 'timeline' }, t.history.map((h) => {
       const [label, color] = HISTORY[h.type] || [h.type, 'pending'];
@@ -1772,7 +1929,9 @@ function reclaimBox(t) {
   const armed = reclaimArm === t.id;
   return [
     el('h4', null, '原窗口没了？'),
-    el('p', { class: 'hint' }, armed
+    el('p', { class: 'hint' }, isDemoTask(t)
+      ? (armed ? `确定收回？${agentLabel(t.assignee)} 会被标记为掉线，这次演示记为中断，演示卡回到待演示。` : `如果 ${agentLabel(t.assignee)} 的窗口已经关了或 token 用完，可以立即收回，演示卡回到待演示，派发恢复。`)
+      : armed
       ? `确定收回？${agentLabel(t.assignee)} 会被标记为掉线，任务退回待领取，由同角色的 worker 接手，已有改动保留。`
       : `如果 ${agentLabel(t.assignee)} 的窗口已经关了或 token 用完，不必等它超时掉线，可以立即收回，交给新 worker 接手。窗口只是停住了的话，用顶部的叫醒话就行。`),
     el('div', { class: 'prompt' },
@@ -1999,6 +2158,7 @@ themeBtn.addEventListener('click', () => {
 function render() {
   if (!data) return;
   renderNeeds();
+  renderDemoBanner();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
   renderWorkers();
   renderJobs();
@@ -2242,7 +2402,7 @@ document.addEventListener('click', (e) => {
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
   if (!view.task) return;
-  if (e.target.closest('#drawer, .card, #stale-dialog, #decide-dialog')) return;
+  if (e.target.closest('#drawer, .card, .demo-row, #demo-banner, #stale-dialog, #decide-dialog')) return;
   closeDrawer();
 });
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });

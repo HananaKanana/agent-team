@@ -173,14 +173,14 @@ git commit -m "cli: demo commands and wait/status output for demo cards"
 **Interfaces:**
 - Consumes: `state.jobs[].demo`、`state.tasks[]` 的 `kind/script/runs/demoStep/stopRequested/queuedAt`、`GET /api/state` 的 `demoBlockers`、`POST /api/demo/start`、`POST /api/demo/stop`。
 
-- [ ] **Step 1: 需求列表**：演示需求在侧栏带「演示」小标签，不画进度条，显示「N 张演示卡」。所有统计（顶部进度、已通过、review 次数、一次通过率、需要你处理、待你验收）排除 `kind === 'demo'` 和演示需求。
-- [ ] **Step 2: 演示需求页**：不画七列看板，改为演示卡列表（沿用 `.card` 和抽屉样式）。每行：标题、脚本路径、状态 lozenge（待演示 / 等待开始 / 演示中 / 收尾中）、已演示次数、上次演示时间和结果；右侧按钮：ready 时「开始演示」（`demoBlockers[id]` 非空时置灰，`title` 写阻碍，多条用「；」连接），queued / demoing 时「停止演示」。演示中显示「第 3/12 步：新建装备」和演示时长（沿用 `.since` 每秒走的计时）。
-- [ ] **Step 3: 全局横幅**：有演示卡处于 queued 或 demoing（未叫停）时，看板顶部显示横幅「演示中：<标题>，派发已暂停」（queued 时为「等待 worker 开始演示：<标题>」），带「停止演示」按钮。沿用现有 banner 样式。
-- [ ] **Step 4: 演示卡抽屉**：详情项显示角色、处理人、脚本路径、演示次数；保留「指派给」选择器（ready 时可用）；主体是演示历史表：开始时间、演示者、结果（跑完 / 叫停 / 中断）、说明、是否已记经验及提交号，最新在上。
-- [ ] **Step 5: 自查**：抽出 `<script>` 用 `new Function` 做语法检查（同之前的做法），代码审阅一遍普通需求页面没有被演示分支影响。
+- [x] **Step 1: 需求列表**：演示需求在侧栏带「演示」小标签，不画进度条，显示「N 张演示卡」。所有统计（顶部进度、已通过、review 次数、一次通过率、需要你处理、待你验收）排除 `kind === 'demo'` 和演示需求。
+- [x] **Step 2: 演示需求页**：不画七列看板，改为演示卡列表（沿用 `.card` 和抽屉样式）。每行：标题、脚本路径、状态 lozenge（待演示 / 等待开始 / 演示中 / 收尾中）、已演示次数、上次演示时间和结果；右侧按钮：ready 时「开始演示」（`demoBlockers[id]` 非空时置灰，`title` 写阻碍，多条用「；」连接），queued / demoing 时「停止演示」。演示中显示「第 3/12 步：新建装备」和演示时长（沿用 `.since` 每秒走的计时）。
+- [x] **Step 3: 全局横幅**：有演示卡处于 queued 或 demoing（未叫停）时，看板顶部显示横幅「演示中：<标题>，派发已暂停」（queued 时为「等待 worker 开始演示：<标题>」），带「停止演示」按钮。沿用现有 banner 样式。
+- [x] **Step 4: 演示卡抽屉**：详情项显示角色、处理人、脚本路径、演示次数；保留「指派给」选择器（ready 时可用）；主体是演示历史表：开始时间、演示者、结果（跑完 / 叫停 / 中断）、说明、是否已记经验及提交号，最新在上。
+- [x] **Step 5: 自查**：抽出 `<script>` 用 `new Function` 做语法检查（同之前的做法），代码审阅一遍普通需求页面没有被演示分支影响。
   Run: `node -e "const s=require('fs').readFileSync('src/dashboard.html','utf8');new Function([...s.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n'));console.log('syntax ok')"`
   Expected: `syntax ok`
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/dashboard.html docs/superpowers/plans/2026-10-24-demo-cards.md

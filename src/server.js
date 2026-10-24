@@ -1,5 +1,4 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
-import { execFile } from 'node:child_process';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
@@ -281,18 +280,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
     'POST /api/demo/release': (b) => ({ task: store.releaseDemo(requireId(b)) }),
-    // 提词窗用 Chrome 应用窗口打开（没有地址栏和标签栏）。网页自己的 window.open 弹窗一定带地址栏，
-    // 服务在本机，替看板执行 open 命令；不是 macOS 或打开失败就返回错误，看板退回普通弹窗
-    'POST /api/demo/prompter': async (b) => {
-      const id = requireId(b);
-      if (process.platform !== 'darwin') throw new AteamError('INVALID', '只支持 macOS');
-      const w = Math.round(Number(b.width) || 1200), h = Math.round(Number(b.height) || 190);
-      const x = Math.round(Number(b.left) || 0), y = Math.round(Number(b.top) || 0);
-      const app = `http://127.0.0.1:${server.address().port}/?prompter=${encodeURIComponent(id)}`;
-      await new Promise((ok, bad) => execFile('open', ['-na', 'Google Chrome', '--args', `--app=${app}`, `--window-size=${w},${h}`, `--window-position=${x},${y}`],
-        (err) => (err ? bad(new AteamError('INVALID', `打开 Chrome 应用窗口失败：${err.message}`)) : ok())));
-      return {};
-    },
     'POST /api/demo/step': (b) => {
       // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演播
       let cue = null;

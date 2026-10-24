@@ -59,3 +59,83 @@ export function parseSteps(markdown) {
 export function stepCount(markdown) {
   return parseSteps(markdown).length;
 }
+
+// ---------- 操作记录里的动作块 ----------
+// 每步一个 ```cua 代码块：一段或多段 JSON 数组，段之间单独一行 ---，每段是一次 cua_execute 的 actions。
+// 字段规则照 WorkBuddy Browser 工具的 cua_execute（不能有多余字段）。
+
+const NUM = (v) => typeof v === 'number' && Number.isFinite(v);
+const ACTIONS = {
+  click: { need: ['x', 'y'], opt: ['button', 'keypress'] },
+  double_click: { need: ['x', 'y'], opt: ['button', 'keypress'] },
+  move: { need: ['x', 'y'], opt: ['keys'] },
+  drag: { need: ['path'], opt: ['keys'] },
+  scroll: { need: ['x', 'y', 'scroll_x', 'scroll_y'], opt: ['keypress'] },
+  keypress: { need: ['keys'], opt: [] },
+  type: { need: ['text'], opt: [] },
+  screenshot: { need: [], opt: ['format', 'quality', 'full_page', 'clip'] },
+};
+const MAX_BATCH = 100;
+
+function actionProblem(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return '动作必须是对象';
+  const spec = ACTIONS[a.type];
+  if (!spec) return `不支持的动作类型 ${JSON.stringify(a.type)}（只能是 ${Object.keys(ACTIONS).join('、')}）`;
+  const extra = Object.keys(a).filter((k) => k !== 'type' && !spec.need.includes(k) && !spec.opt.includes(k));
+  if (extra.length) return `${a.type} 不能有字段 ${extra.join('、')}（没有 wait，等待靠分段）`;
+  const miss = spec.need.filter((k) => a[k] === undefined);
+  if (miss.length) return `${a.type} 缺少 ${miss.join('、')}`;
+  for (const k of ['x', 'y', 'scroll_x', 'scroll_y']) if (spec.need.includes(k) && !NUM(a[k])) return `${a.type} 的 ${k} 必须是数字`;
+  if (a.type === 'drag' && !(Array.isArray(a.path) && a.path.length >= 2 && a.path.length <= 256 && a.path.every((p) => NUM(p?.x) && NUM(p?.y)))) return 'drag 的 path 必须是 2–256 个 {x,y}';
+  if (a.type === 'type' && typeof a.text !== 'string') return 'type 的 text 必须是字符串';
+  if (a.type === 'keypress' && !(typeof a.keys === 'string' || (Array.isArray(a.keys) && a.keys.length >= 1 && a.keys.length <= 8))) return 'keypress 的 keys 必须是字符串或 1–8 个键的数组';
+  return null;
+}
+
+// 解析一个 cua 代码块，返回 { segments, problem }
+function parseCuaBlock(text) {
+  const segments = [];
+  const parts = text.split(/^\s*---\s*$/m).map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return { segments, problem: '动作块是空的' };
+  for (let i = 0; i < parts.length; i++) {
+    let arr;
+    try { arr = JSON.parse(parts[i]); } catch { return { segments, problem: `第 ${i + 1} 段不是合法 JSON` }; }
+    if (!Array.isArray(arr) || !arr.length) return { segments, problem: `第 ${i + 1} 段必须是非空 JSON 数组` };
+    if (arr.length > MAX_BATCH) return { segments, problem: `第 ${i + 1} 段有 ${arr.length} 个动作，一段最多 ${MAX_BATCH} 个` };
+    for (const a of arr) {
+      const p = actionProblem(a);
+      if (p) return { segments, problem: `第 ${i + 1} 段：${p}` };
+    }
+    segments.push(arr);
+  }
+  return { segments, problem: null };
+}
+
+// 操作记录的结构：{ viewport: '1694x808' | null, steps: Map<n, { segments, problem, hasBlock }> }
+export function parseOps(markdown) {
+  const ops = opsSection(markdown);
+  const vp = ops.match(/视口[:：]\s*(\d{3,5})\s*[x×*]\s*(\d{3,5})/);
+  const steps = new Map();
+  for (const part of ops.split(/^(?=###\s)/m)) {
+    const m = part.match(/^###\s*(\d+)[.、\s]/);
+    if (!m) continue;
+    const block = part.match(/```cua\s*\n([\s\S]*?)```/);
+    steps.set(Number(m[1]), block ? { hasBlock: true, ...parseCuaBlock(block[1]) } : { hasBlock: false, segments: [], problem: '没有动作块（```cua）' });
+  }
+  return { viewport: vp ? `${vp[1]}x${vp[2]}` : null, steps };
+}
+
+// 检查操作记录。all：每个演示步骤都必须有合法动作块（预演跑完时）；否则只检查已写的动作块格式。
+// 返回问题列表，空数组表示通过
+export function checkOps(markdown, { all = false } = {}) {
+  const { viewport, steps } = parseOps(markdown);
+  const problems = [];
+  if (all && !viewport) problems.push('操作记录开头缺「视口：宽x高」（从截图结果读，比如 视口：1694x808）');
+  const want = all ? parseSteps(markdown).map((s) => s.n) : [...steps.keys()];
+  for (const n of want) {
+    const st = steps.get(n);
+    if (!st) problems.push(`第 ${n} 步：操作记录里没有「### ${n}.」`);
+    else if (st.problem && (all || st.hasBlock)) problems.push(`第 ${n} 步：${st.problem}`);
+  }
+  return problems;
+}

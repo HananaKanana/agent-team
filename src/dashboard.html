@@ -270,6 +270,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 .outline li .say { margin-top: 3px; font-size: 12.5px; color: var(--muted); }
 .outline li.now .say { color: var(--ink); }
 .outline .empty { padding: 16px 14px; font-size: 13px; color: var(--faint); }
+.outline li .rec { margin-left: 6px; font-size: 11px; padding: 0 5px; border-radius: 3px; vertical-align: 1px; }
+.outline li .rec.no { color: var(--rework); background: color-mix(in srgb, var(--rework) 12%, transparent); }
 .demo-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px;
   padding: 14px 16px; border: none; border-radius: 6px; text-align: left; cursor: pointer; width: 100%;
@@ -1824,6 +1826,7 @@ function demoRow(t) {
         el('span', null, `已运行 ${runs.length} 次`),
         last ? el('span', null, `上次 ${fmtTime(last.startedAt)} ${RUN_MODE[last.mode] || '演播'}${RUN_OUTCOME[last.outcome] || '进行中'}`) : null,
         t.status === 'ready' && t.mayChange ? el('span', null, '页面可能有变动，建议先重新预演') : null,
+        t.rehearsedAt && opsCache.get(t.id)?.viewport ? el('span', { title: '坐标按这个视口录的，演播前把浏览器窗口调成一样大' }, `浏览器视口 ${opsCache.get(t.id).viewport}`) : null,
         t.assignTo && t.status === 'ready' ? el('span', null, `指派 ${agentName(t.assignTo)}`) : null)),
     el('div', { class: 'demo-acts' }, demoButton(t)),
     t.status === 'demoing' ? prompter(t) : progress ? el('div', { class: 'step' }, progress) : null,
@@ -1881,9 +1884,9 @@ function stagePanels(t) {
       el('section', { class: 'panel' }, el('h5', null, '这一步怎么操作', el('span', { class: 'hint' }, '来自操作记录')),
         op ? opsHtml(op) : el('div', { class: 'empty' }, modeWord(t) === '预演' ? 'worker 预演走通这一步后会写在这里' : '操作记录里没有这一步，worker 在自己摸索')));
   } else {
-    const written = (sc?.raw?.match(/^###\s*\d+/gm) || []).length;
+    const written = steps.filter((st) => sc?.recorded?.has(st.n)).length;
     top = el('section', { class: 'panel' },
-      el('h5', null, '操作记录', el('span', { class: 'hint' }, steps.length ? `已写 ${written} / ${steps.length} 步` : '')),
+      el('h5', null, '操作记录', el('span', { class: 'hint' }, steps.length ? `已录 ${written} / ${steps.length} 步${sc?.viewport ? ` · 视口 ${sc.viewport}` : ''}` : '')),
       !sc ? el('div', { class: 'empty' }, '读取中…') : written ? opsHtml(sc.raw) : el('div', { class: 'empty' }, '还没有操作记录。点「开始预演」，worker 会一步步走通并写在这里。'));
   }
   const runs = (t.runs || []).slice().reverse().slice(0, 5);
@@ -1915,7 +1918,8 @@ function stepOutline(t) {
   const run = t.runs?.[t.runs.length - 1];
   const slow = new Set(run?.slowSteps || []);
   const cur = s?.n ?? 0;
-  const head = el('h4', null, '脚本步骤', el('span', { class: 'hint' }, sc ? `共 ${sc.steps.length} 步` : ''));
+  const recCount = sc ? sc.steps.filter((st) => sc.recorded?.has(st.n)).length : 0;
+  const head = el('h4', null, '脚本步骤', el('span', { class: 'hint', title: '已录：操作记录里有合法的动作块，演播时能直接回放' }, sc ? `共 ${sc.steps.length} 步 · 已录 ${recCount}` : ''));
   if (!sc) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '读取中…'));
   if (sc.error && !sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, sc.error));
   if (!sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '脚本里没有找到「## 演示步骤」'));
@@ -1923,7 +1927,8 @@ function stepOutline(t) {
     const cls = [st.n < cur ? 'done' : '', st.n === cur ? 'now' : '', slow.has(st.n) && (cur ? st.n <= cur : true) ? 'slow' : ''].filter(Boolean).join(' ');
     return el('li', { class: cls, 'data-n': st.n },
       el('span', { class: 'no' }, st.n < cur && !slow.has(st.n) ? '✓' : st.n),
-      el('div', null, el('div', { class: 'what' }, st.text), st.narration && (st.n === cur || !cur) ? el('div', { class: 'say' }, st.narration) : null));
+      el('div', null, el('div', { class: 'what' }, st.text, sc.recorded?.has(st.n) ? null : el('span', { class: 'rec no', title: '操作记录里还没有这一步的动作块，演播到这一步会变慢' }, '未录')),
+        st.narration && (st.n === cur || !cur) ? el('div', { class: 'say' }, st.narration) : null));
   })));
 }
 
@@ -1942,7 +1947,7 @@ function opsBox(t) {
     opsCache.set(t.id, { key, loading: true });
     fetch(`/api/demo/ops?id=${encodeURIComponent(t.id)}`).then((r) => r.json()).then((out) => {
       const ops = (out.ops || '').replace(/<!--[\s\S]*?-->/g, '').trim();
-      opsCache.set(t.id, { key, raw: ops, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], error: out.ok ? out.error : out.message });
+      opsCache.set(t.id, { key, raw: ops, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], recorded: new Set(out.recorded || []), viewport: out.viewport || null, error: out.ok ? out.error : out.message });
     }).catch(() => opsCache.set(t.id, { key, steps: [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); });
   }
   return box;

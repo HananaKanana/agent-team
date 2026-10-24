@@ -9,7 +9,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
-import { opsSection, parseSteps, stepCount, withoutOps } from './demo.js';
+import { checkOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -271,7 +271,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // ops：worker 写的操作记录；steps：脚本的步骤列表（编号、做什么、讲解），看板右栏的步骤大纲用
       try {
         const text = readFileSync(join(root, task.script), 'utf8');
-        return { ops: opsSection(text), steps: parseSteps(text) };
+        const parsed = parseOps(text);
+        // recorded：录好了合法动作块的步骤号，看板标「已录」
+        return { ops: opsSection(text), steps: parseSteps(text), viewport: parsed.viewport, recorded: [...parsed.steps].filter(([, v]) => !v.problem).map(([n]) => n) };
       } catch (err) {
         return { ops: '', steps: [], error: `读不到脚本文件 ${task.script}：${err.message}` };
       }
@@ -292,17 +294,37 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return store.demoStep(b.as, b.n, b.total, b.text, cue, !!b.slow);
     },
-    'POST /api/demo/end': (b) => ({ task: store.demoEnd(b.as, b.result, !!b.stuck) }),
+    'POST /api/demo/end': (b) => {
+      // 预演跑完：每一步都要录好动作块，才算预演完成
+      const held = store.state.agents.find((a) => a.id === b.as)?.currentTask;
+      const task = held && store.state.tasks.find((t) => t.id === held && t.kind === 'demo');
+      const run = task?.runs?.[task.runs.length - 1];
+      if (task && run?.mode === 'rehearsal' && !b.stuck && task.status === 'demoing' && !task.stopRequested) {
+        let text = '';
+        try { text = readFileSync(join(root, task.script), 'utf8'); } catch {}
+        const problems = checkOps(text, { all: true });
+        if (problems.length) throw new AteamError('INVALID', `预演还不能算跑完，「## 操作记录」没录全：\n${problems.map((p) => `- ${p}`).join('\n')}\n\n把这些步补上（每步「### N.」条目 + \`\`\`cua 动作块），再运行 ateam demo end。实在走不通的步骤用 --stuck 结束。`);
+      }
+      return { task: store.demoEnd(b.as, b.result, !!b.stuck) };
+    },
     'POST /api/demo/save': (b) => serial(async () => {
       const task = store.demoTaskForSave(b.as);
       if (typeof b.summary !== 'string' || !b.summary.trim()) throw new AteamError('INVALID', '总结不能为空。写明这次记了或改了哪些操作；操作记录没有改动就加 --no-changes。');
-      if (b.noChanges) return { task: store.recordDemoSave(b.as, b.summary, null), commit: null };
       let current;
       try { current = readFileSync(join(root, task.script), 'utf8'); } catch {
         throw new AteamError('INVALID', `读不到脚本文件 ${task.script}。不要删除或移动它；恢复后再 demo save。`);
       }
       const head = await headContent(root, task.script);
       if (head === null) throw new AteamError('INVALID', `脚本文件 ${task.script} 还没有提交过，请通知用户让 leader 先提交脚本。`);
+      if (b.noChanges) {
+        // 写了操作记录却加 --no-changes，记录会丢：拒绝
+        if (current !== head) throw new AteamError('INVALID', `脚本 ${task.script} 有没提交的改动，不能加 --no-changes。去掉 --no-changes 重新运行，服务会提交它。`);
+        return { task: store.recordDemoSave(b.as, b.summary, null), commit: null };
+      }
+      // 预演跑完的收尾：每步都要有合法动作块；其他情况只检查已写的动作块格式
+      const run = task.runs?.[task.runs.length - 1];
+      const problems = checkOps(current, { all: run?.mode === 'rehearsal' && run?.outcome === 'done' });
+      if (problems.length) throw new AteamError('INVALID', `「## 操作记录」有问题，先改好再 demo save：\n${problems.map((p) => `- ${p}`).join('\n')}`);
       if (withoutOps(current) !== withoutOps(head)) {
         throw new AteamError('INVALID', `只能改脚本的「## 操作记录」段，其他段有改动。请把其他段恢复原样（git diff ${task.script} 查看）后再 demo save。`);
       }

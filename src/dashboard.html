@@ -1805,8 +1805,14 @@ function openPrompter(t) {
   const h = 190;
   const left = (screen.availLeft ?? 0) + Math.round((screen.availWidth - w) / 2);
   const top = (screen.availTop ?? 0) + screen.availHeight - h - 8;
-  const win = window.open(`/?prompter=${encodeURIComponent(t.id)}`, 'ateam-prompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
-  win?.focus();
+  // 先让本机服务用 Chrome 应用窗口打开（没有地址栏）；不行再退回普通弹窗
+  fetch('/api/demo/prompter', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, width: w, height: h, left, top }) })
+    .then((r) => r.json()).catch(() => ({ ok: false }))
+    .then((r) => {
+      if (r.ok) return;
+      const win = window.open(`/?prompter=${encodeURIComponent(t.id)}`, 'ateam-prompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
+      win?.focus();
+    });
 }
 function stepsBar(t) {
   const s = t.demoStep;

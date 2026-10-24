@@ -496,12 +496,13 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-head .origin-box { grid-column: 1 / -1; }
 /* 普通需求：左边标题和说明，右边概览 + 最近动态。不画卡片框，用一条竖线和左栏分开，和页面融在一起。
    右栏不撑高头部：高度跟左栏走（说明收起时矮、展开时高），动态列表在里面滚动；最低 210px 保证至少看到几条动态 */
-.job-head.has-side { grid-template-columns: minmax(0, 1fr) minmax(380px, 520px); gap: 0 32px; align-items: stretch; }
+/* 左栏按说明的阅读宽度封顶，右栏吃掉剩下的宽度，中间不留大缝；右栏内容自己再封顶，超宽屏时空在最右边 */
+.job-head.has-side { grid-template-columns: minmax(420px, 760px) minmax(380px, 1fr); gap: 0 32px; align-items: stretch; }
 .job-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; min-width: 0; }
 .job-side { position: relative; min-height: 210px; }
 .job-side.bare { min-height: 0; }
 .job-side.bare .inner { position: static; height: 100%; }
-.job-side .inner { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; padding-left: 24px; border-left: 1px solid var(--line); }
+.job-side .inner { position: absolute; inset: 0; max-width: 720px; display: flex; flex-direction: column; overflow: hidden; padding-left: 24px; border-left: 1px solid var(--line); }
 .side-sec + .side-sec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .side-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
 .side-h .sub { font-weight: 400; color: var(--faint); }

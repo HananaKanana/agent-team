@@ -339,8 +339,8 @@ html.prompter-native .prompter-strip .head .tools .grp button:last-child { borde
 html.prompter-native .prompter-strip .head .tools button.on { color: #a9cbff; border-color: #4c8dff; background: rgba(76, 141, 255, .16); }
 html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: calc(var(--p-scale, 1) * max(11px, 6vh)); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 4px; left: 50%; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
-/* 顶部约 28px 是系统标题栏（按住拖窗口，点不到按钮），所以工具条浮在它下面 */
-html.prompter-native .prompter-strip .head .tools { position: absolute; right: 10px; top: 32px; z-index: 1; padding: 3px; gap: 4px; border-radius: 8px; background: rgba(14, 17, 20, .88); }
+/* 工具条放右上角：prompter.jxa 的拖动条在顶部只盖到离右边 230px 处，这里的按钮点得到 */
+html.prompter-native .prompter-strip .head .tools { position: absolute; right: 6px; top: 3px; z-index: 1; padding: 3px; gap: 4px; border-radius: 8px; background: rgba(14, 17, 20, .88); }
 html.prompter-native .prompter-strip .head .tools button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; }
 html.prompter-native .prompter-strip .head .tools button svg { width: 15px; height: 15px; }
 html.prompter-native .prompter-strip .bar { top: 0; }

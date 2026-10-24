@@ -323,23 +323,37 @@ input[type="checkbox"]:not(.switch):checked::after {
 /* 弹出的提词小窗（?prompter=T12）：整个窗口就是一条字幕，放在屏幕最下方 */
 .prompter-strip { display: none; }
 html.prompter-only body > :not(.prompter-strip) { display: none !important; }
-html.prompter-only body { background: #14171a; height: 100vh; overflow: hidden; }
+html.prompter-only body { background: radial-gradient(120% 140% at 0% 0%, #1d2228 0%, #111417 60%); height: 100vh; overflow: hidden; }
 html.prompter-only .prompter-strip {
-  display: flex; flex-direction: column; justify-content: center; gap: 1.2vh; height: 100vh; padding: 2vh 3vw;
-  color: #eef1f4; font-family: inherit;
+  position: relative; display: flex; flex-direction: column; justify-content: center; gap: 1.6vh; height: 100vh; padding: 3vh 3.2vw 3.4vh;
+  color: #f1f3f5; font-family: inherit;
 }
-.prompter-strip .head { display: flex; align-items: center; gap: 14px; font-size: max(12px, 7vh); color: #9fadbc; white-space: nowrap; overflow: hidden; }
-.prompter-strip .head b { color: #85b8ff; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
-.prompter-strip .head .since { display: inline-flex; align-items: center; gap: 4px; flex: none; }
-.prompter-strip .head .since svg { width: 1em; height: 1em; }
+/* 顶部细进度条：走到第几步一眼可见 */
+.prompter-strip .bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #262c33; }
+.prompter-strip .bar i { display: block; height: 100%; background: linear-gradient(90deg, #4c8dff, #85b8ff); transition: width .5s ease; }
+.prompter-strip .head { display: flex; align-items: center; gap: 12px; font-size: max(12px, 6.5vh); color: #8c9bab; white-space: nowrap; overflow: hidden; }
+.prompter-strip .head .count { flex: none; display: inline-flex; align-items: baseline; gap: 1px; padding: .1em .55em; border-radius: 999px;
+  background: rgba(133, 184, 255, .14); color: #a9cbff; font-weight: 700; font-variant-numeric: tabular-nums; }
+.prompter-strip .head .count small { font-size: .78em; font-weight: 500; opacity: .7; }
+.prompter-strip .head b { color: #c7d1db; font-weight: 600; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.prompter-strip .head .since { display: inline-flex; align-items: center; gap: 4px; flex: none; color: #6f7e8c; font-variant-numeric: tabular-nums; }
+.prompter-strip .head .since svg { width: .95em; height: .95em; }
 .prompter-strip .head .tag { flex: none; }
-.prompter-strip .head .tools { margin-left: auto; display: flex; gap: 6px; flex: none; }
-.prompter-strip .head .tools button { font: inherit; font-size: 12px; padding: 2px 8px; border: 1px solid #3a434c; border-radius: 4px; background: transparent; color: #9fadbc; cursor: pointer; }
-.prompter-strip .head .tools button:hover { color: #fff; border-color: #6b7783; }
-.prompter-strip .say { font-size: max(16px, min(4.2vw, 17vh)); line-height: 1.35; font-weight: 650; overflow-wrap: anywhere;
+/* 全屏 / 关闭：平时淡出，鼠标移到小窗上才显出来，不抢讲解的注意力 */
+.prompter-strip .head .tools { margin-left: auto; display: flex; gap: 6px; flex: none; opacity: 0; transition: opacity .2s; }
+.prompter-strip:hover .head .tools, .prompter-strip .head .tools:focus-within { opacity: 1; }
+.prompter-strip .head .tools button { font: inherit; font-size: 12px; padding: 3px 10px; border: 1px solid #3a434c; border-radius: 6px; background: rgba(255,255,255,.04); color: #b6c2cf; cursor: pointer; }
+.prompter-strip .head .tools button:hover { color: #fff; border-color: #6b7783; background: rgba(255,255,255,.08); }
+.prompter-strip .say { font-size: max(16px, min(4vw, 18vh)); line-height: 1.38; font-weight: 650; letter-spacing: .01em; overflow-wrap: anywhere;
+  padding-left: .55em; border-left: 4px solid #4c8dff; text-wrap: pretty;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.prompter-strip .next { font-size: max(12px, 7vh); color: #8c9bab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prompter-strip .say.enter { animation: cue-in .35s ease-out; }
+@keyframes cue-in { from { opacity: 0; transform: translateY(6px); } }
+.prompter-strip .next { display: flex; align-items: center; gap: 10px; font-size: max(12px, 6.5vh); color: #7d8b99; white-space: nowrap; overflow: hidden; }
+.prompter-strip .next .lbl { flex: none; padding: .05em .5em; border: 1px solid #3a434c; border-radius: 4px; font-size: .85em; color: #9fadbc; }
+.prompter-strip .next span:last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .prompter-strip .idle { font-size: max(14px, 9vh); color: #8c9bab; }
+@media (prefers-reduced-motion: reduce) { .prompter-strip .say.enter { animation: none; } .prompter-strip .bar i { transition: none; } }
 .demo-acts { display: flex; gap: 8px; }
 .ops-box { max-height: 420px; overflow-y: auto; padding: 10px 14px; border: 1px solid var(--line-soft); border-radius: 6px; }
 .demo-runs { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1825,12 +1839,21 @@ function renderPrompterStrip() {
     return;
   }
   const c = cueOf(t);
+  const s = t.demoStep;
+  // 只在换步时播一次淡入，轮询重绘不重播
+  const stepKey = s ? `${s.n}|${s.ts}` : '';
+  const changed = stepKey !== lastStripStep;
+  lastStripStep = stepKey;
   fill(box,
-    el('div', { class: 'head' }, el('b', null, c.head), runSince(t),
-      t.demoStep?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
-    el('div', { class: 'say' }, c.say),
-    c.next ? el('div', { class: 'next' }, `下一步：${c.next}`) : null);
+    s?.total ? el('div', { class: 'bar' }, el('i', { style: `width:${Math.round((s.n / s.total) * 100)}%` })) : null,
+    el('div', { class: 'head' },
+      s ? el('span', { class: 'count' }, String(s.n), el('small', null, `/${s.total}`)) : null,
+      el('b', null, s ? s.text : c.head), runSince(t),
+      s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
+    el('div', { class: `say${changed ? ' enter' : ''}` }, c.say),
+    c.next ? el('div', { class: 'next' }, el('span', { class: 'lbl' }, '下一步'), el('span', null, c.next)) : null);
 }
+let lastStripStep = null;
 
 function demoRow(t) {
   const [label, color] = DEMO_STATUS[t.status] || [t.status, 'pending'];

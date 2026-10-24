@@ -1864,7 +1864,7 @@ function demoDrawerBody(t) {
   ];
 }
 
-// 操作记录：脚本里 worker 写的那一段，打开详情时读一次（脚本有新提交时重读）
+// 脚本缓存：演播需求页的步骤大纲、操作记录面板用
 const opsCache = new Map(); // taskId -> { key, html | error }
 let lastOutlineStep = null;
 // 操作记录里某一步的那一条（「### 3. ...」到下一个「### 」之前）
@@ -1908,14 +1908,15 @@ function stagePanels(t) {
         el('td', { class: 'note' }, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null))))) : el('div', { class: 'empty' }, '还没运行过'));
   return [top, history];
 }
-const opsKey = (t) => `${t.commits.length}:${(t.runs || []).length}`;
+// 缓存键：提交、运行次数，以及当前步（预演中 worker 边走边写操作记录，每走一步重读一次脚本）
+const opsKey = (t) => `${t.commits.length}:${(t.runs || []).length}:${t.status}:${t.demoStep?.ts ?? ''}`;
 // 读脚本（操作记录 + 步骤列表），读完重画；返回缓存，还没读到时返回 null
 function loadScript(t) {
   const key = opsKey(t);
   const hit = opsCache.get(t.id);
-  if (hit?.key === key && !hit.loading) return hit;
-  if (!hit?.loading || hit.key !== key) opsBox(t);
-  return null;
+  if (!hit) { refetchOps(t, null); return null; }
+  if (hit.key !== key && !hit.loading) refetchOps(t, hit);
+  return hit.steps ? hit : null; // 重读期间返回旧数据
 }
 // 右栏：脚本步骤大纲。走过的灰、慢档的红、当前步高亮并展开讲解
 function stepOutline(t) {
@@ -1940,25 +1941,16 @@ function stepOutline(t) {
   })));
 }
 
-function opsBox(t) {
+// 读脚本：操作记录 + 步骤列表。prev 是旧数据，读的时候先留着，读完再换
+function refetchOps(t, prev) {
   const key = opsKey(t);
-  const box = el('div', { class: 'descbox md ops-box' });
-  const hit = opsCache.get(t.id);
-  if (hit?.key === key) {
-    if (hit.error) box.textContent = hit.error;
-    else if (hit.html) box.innerHTML = hit.html; // renderMarkdown 先转义了 HTML
-    else box.textContent = '（还没有操作记录，预演时 worker 会写）';
-    return box;
-  }
-  box.textContent = '读取中…';
-  if (!hit?.loading) {
-    opsCache.set(t.id, { key, loading: true });
+  {
+    opsCache.set(t.id, { ...(prev || {}), key, loading: true });
     fetch(`/api/demo/ops?id=${encodeURIComponent(t.id)}`).then((r) => r.json()).then((out) => {
       const ops = (out.ops || '').replace(/<!--[\s\S]*?-->/g, '').trim();
       opsCache.set(t.id, { key, raw: ops, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], recorded: new Set(out.recorded || []), viewport: out.viewport || null, error: out.ok ? out.error : out.message });
-    }).catch(() => opsCache.set(t.id, { key, steps: [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); });
+    }).catch(() => opsCache.set(t.id, { ...(prev || {}), key, steps: prev?.steps || [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); });
   }
-  return box;
 }
 
 function renderDrawer(fresh) {

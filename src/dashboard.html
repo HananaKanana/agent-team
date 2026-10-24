@@ -1877,7 +1877,9 @@ function viewportTip(t) {
       showVpManual ? '收起' : '调完还对不上？'),
     showVpManual ? el('ol', { class: 'hint vp-manual' },
       el('li', null, `上面的命令按 Chrome 顶部（标签栏、地址栏）共 ${CHROME_FRAME_H} 高算的；显示了书签栏、出现了「WorkBuddy 已开始调试此浏览器」提示条、或网页缩放不是 100%（按 Cmd+0 恢复）都会偏。`),
-      el('li', null, `核对：在页面上按 Cmd+Option+J，手打 innerWidth+'x'+innerHeight 回车，应该是 '${vp}'。不是的话关掉控制台，把看到的数字填进下面命令再运行，它会按差值精确调整：`,
+      el('li', null, `核对：在页面上按 Cmd+Option+J 打开控制台，运行下面这句，应该显示 '${vp}'（第一次往控制台粘贴会被拦，先手打 allow pasting 回车再粘贴）：`,
+        promptBlock(`innerWidth+'x'+innerHeight`, render)),
+      el('li', null, '不对的话关掉控制台，把看到的数字填进下面命令再运行，它会按差值精确调整：',
         promptBlock(recorded ? `ateam demo viewport ${t.id} --now 看到的数字` : `ateam demo viewport ${vp} --now 看到的数字`, render))) : null);
 }
 

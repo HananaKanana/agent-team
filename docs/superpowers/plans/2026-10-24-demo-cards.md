@@ -109,19 +109,19 @@ git commit -m "store: demo cards — ready/queued/demoing/wrapping, dispatch fre
   - `GET /api/state` 增加 `demoBlockers: { [taskId]: string[] }`（只含 `ready` 的演示卡）。
   - wait 结果 `kind` 为 `demo` / `demo_wrap` 时附 `script: { path, text, steps }`（读文件；读不到时 `text` 为空并带 `error`）。
 
-- [ ] **Step 1: 写 `src/demo.js` 两个纯函数**。
+- [x] **Step 1: 写 `src/demo.js` 两个纯函数**。
 
-- [ ] **Step 2: `headContent`**（`src/git.js`）。
+- [x] **Step 2: `headContent`**（`src/git.js`）。
 
-- [ ] **Step 3: 路由**：按上面的接口加到 `routes`。`demo/save`：`noChanges` 时直接 `recordDemoSave(as, summary, null)`；否则读工作区文件和 `headContent`，`withoutExperience` 结果不同就抛 `INVALID`（「只能改脚本的『## 经验』段，其他段有改动。请把其他段恢复原样（git diff <路径> 查看）后再 demo save」）；相同就 `commitPaths(root, [script], \`[${task.id}] 演示经验：${summary}\`)`，`nothing` 时报错提示加 `--no-changes`。
+- [x] **Step 3: 路由**：按上面的接口加到 `routes`。`demo/save`：`noChanges` 时直接 `recordDemoSave(as, summary, null)`；否则读工作区文件和 `headContent`，`withoutExperience` 结果不同就抛 `INVALID`（「只能改脚本的『## 经验』段，其他段有改动。请把其他段恢复原样（git diff <路径> 查看）后再 demo save」）；相同就 `commitPaths(root, [script], \`[${task.id}] 演示经验：${summary}\`)`，`nothing` 时报错提示加 `--no-changes`。
 
-- [ ] **Step 4: 接入定时和推送**：租约扫描定时器里同时调用 `store.expireDemoRequests()`；`demo/stop` 后如果演示 worker 正挂在 wait 上，立即 `finishWaiter` 返回 `demo_stopped`（调用 `store.nextFor`）。`RULES_KINDS` 加上 `demo`、`demo_wrap`，让演示时也带项目规则；在 `withRules` 里附 `script`。
+- [x] **Step 4: 接入定时和推送**：租约扫描定时器里同时调用 `store.expireDemoRequests()`；`demo/stop` 后如果演示 worker 正挂在 wait 上，立即 `finishWaiter` 返回 `demo_stopped`（调用 `store.nextFor`）。`RULES_KINDS` 加上 `demo`、`demo_wrap`，让演示时也带项目规则；在 `withRules` 里附 `script`。
 
-- [ ] **Step 5: 探测验证**：scratchpad 里建一个临时 git 仓库，起 `ateam serve`（临时端口），用 `fetch` 走一遍：建演示需求 → 写脚本文件并提交 → `demo/add` → join test worker → `demo/start` → wait 拿到含 `script.text` 的结果 → `demo/step` → `demo/end` → 改「演示步骤」段后 `demo/save` 被拒、恢复后只改「经验」段 `demo/save` 成功并出现 `[T1] 演示经验：` 提交。
+- [x] **Step 5: 探测验证**：scratchpad 里建一个临时 git 仓库，起 `ateam serve`（临时端口），用 `fetch` 走一遍：建演示需求 → 写脚本文件并提交 → `demo/add` → join test worker → `demo/start` → wait 拿到含 `script.text` 的结果 → `demo/step` → `demo/end` → 改「演示步骤」段后 `demo/save` 被拒、恢复后只改「经验」段 `demo/save` 成功并出现 `[T1] 演示经验：` 提交。
   Run: `node --check src/demo.js src/git.js src/server.js && node <scratchpad>/probe-demo-server.mjs`
   Expected: 全部断言通过；关服务、删临时目录和脚本。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/demo.js src/git.js src/server.js docs/superpowers/plans/2026-10-24-demo-cards.md

@@ -1,14 +1,15 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
 import http from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
-import { commitPaths, detectRepos, ensureGitignore, latestChangeTime } from './git.js';
+import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
+import { stepCount, withoutExperience } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -19,7 +20,7 @@ const MAX_HOLD_SEC = 110;
 const LEADER_FRESH_MS = 3 * 60 * 1000;
 const MAX_RULES = 20 * 1024;
 // 新领到、接手、继续的任务附上项目规则；打回意见和答复只是补充消息，不重复附
-const RULES_KINDS = new Set(['task', 'handoff', 'resume', 'own']);
+const RULES_KINDS = new Set(['task', 'handoff', 'resume', 'own', 'demo', 'demo_stopped', 'demo_wrap']);
 
 // 服务端代码指纹：src/*.js 和 bin/ateam.js 的内容哈希。启动时记一份，之后比对，
 // 代码被更新（git pull、改了代码）而服务没重启时，看板和 status 提示重启。
@@ -143,6 +144,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (rules) out.rules = rules;
     const job = store.state.jobs.find((j) => j.id === result.task.jobId);
     if (job?.description?.trim()) out.job = { id: job.id, title: job.title, description: job.description.trim() };
+    // 演示卡：附上脚本全文，worker 不用自己去找文件
+    if (result.task.kind === 'demo') {
+      try {
+        const text = readFileSync(join(root, result.task.script), 'utf8');
+        out.script = { path: result.task.script, text, steps: stepCount(text) };
+      } catch (err) {
+        out.script = { path: result.task.script, text: '', steps: 0, error: `读不到脚本文件：${err.message}` };
+      }
+    }
     return out;
   }
 
@@ -244,7 +254,35 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null };
     }),
-    'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description, origin: b.origin }) }),
+    'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description, origin: b.origin, demo: !!b.demo }) }),
+    'POST /api/demo/add': (b) => {
+      if (typeof b.script !== 'string' || !b.script.trim()) throw new AteamError('INVALID', '缺少脚本路径（--script），比如 docs/demo/protocol-adapter.md。');
+      const script = relative(root, resolve(root, b.script.trim())).split(sep).join('/');
+      if (!script || script.startsWith('..')) throw new AteamError('INVALID', `脚本路径 ${b.script} 不在项目目录（${root}）里。`);
+      if (!existsSync(join(root, script))) throw new AteamError('INVALID', `脚本文件 ${script} 不存在，请先按演示脚本格式写好并提交，再建演示卡。`);
+      return { task: store.addDemo({ jobId: b.jobId, title: b.title, script, role: b.role }) };
+    },
+    'POST /api/demo/start': (b) => ({ task: store.startDemo(requireId(b)) }),
+    'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
+    'POST /api/demo/step': (b) => store.demoStep(b.as, b.n, b.total, b.text),
+    'POST /api/demo/end': (b) => ({ task: store.demoEnd(b.as, b.result) }),
+    'POST /api/demo/save': (b) => serial(async () => {
+      const task = store.demoTaskForSave(b.as);
+      if (typeof b.summary !== 'string' || !b.summary.trim()) throw new AteamError('INVALID', '经验总结不能为空。写明这次记了哪些经验；没有新经验就加 --no-changes。');
+      if (b.noChanges) return { task: store.recordDemoSave(b.as, b.summary, null), commit: null };
+      let current;
+      try { current = readFileSync(join(root, task.script), 'utf8'); } catch {
+        throw new AteamError('INVALID', `读不到脚本文件 ${task.script}。不要删除或移动它；恢复后再 demo save。`);
+      }
+      const head = await headContent(root, task.script);
+      if (head === null) throw new AteamError('INVALID', `脚本文件 ${task.script} 还没有提交过，请通知用户让 leader 先提交脚本。`);
+      if (withoutExperience(current) !== withoutExperience(head)) {
+        throw new AteamError('INVALID', `只能改脚本的「## 经验」段，其他段有改动。请把其他段恢复原样（git diff ${task.script} 查看）后再 demo save。`);
+      }
+      const result = await commitPaths(root, [task.script], `[${task.id}] 演示经验：${b.summary.trim()}`);
+      if (result.nothing) throw new AteamError('INVALID', `脚本 ${task.script} 没有改动。没有新经验就加 --no-changes。`);
+      return { task: store.recordDemoSave(b.as, b.summary, result.commits), commit: result.commits.join('、') };
+    }),
     'POST /api/jobs/edit': (b) => {
       const { jobId, ...patch } = b;
       return { job: store.editJob(jobId, patch) };
@@ -308,6 +346,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       config: store.config(),
+      // 待演示的演示卡现在能不能开始、缺什么
+      demoBlockers: Object.fromEntries(store.state.tasks.filter((t) => t.kind === 'demo' && t.status === 'ready').map((t) => [t.id, store.demoBlockers(t.id)])),
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
       leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline() },
     }),
@@ -417,6 +457,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         if (ts) store.noteActivity(agent.id, ts);
       }
       store.sweep((id) => waiters.has(id));
+      store.expireDemoRequests();
       store.checkIdle();
     } finally {
       sweeping = false;

@@ -187,6 +187,18 @@ export async function latestChangeTime(root, paths) {
   return latest === null ? null : Math.floor(latest);
 }
 
+// 文件在所属仓库 HEAD 里的内容（path 相对项目目录），没有提交过返回 null
+export async function headContent(root, path) {
+  const [[top, { paths }] = []] = await groupByRepo(root, [path]);
+  if (!top) return null;
+  try {
+    const { stdout } = await run(top, ['show', `HEAD:${paths[0].split(sep).join('/')}`]);
+    return stdout;
+  } catch {
+    return null;
+  }
+}
+
 function gitError(step, err) {
   const detail = (err.stderr || err.stdout || err.message || '').trim();
   return new Error(`${step} 失败：${detail}`);

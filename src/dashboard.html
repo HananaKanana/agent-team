@@ -1836,26 +1836,13 @@ function renderDemoBanner() {
 }
 
 function demoDrawerBody(t) {
-  const runs = (t.runs || []).slice().reverse();
   const progress = demoProgress(t);
   return [
-    el('div', { class: 'prompt' }, demoButton(t), progress && t.status !== 'demoing' ? el('span', { class: 'hint' }, progress) : null),
-    t.status === 'demoing' ? prompter(t) : null,
+    el('div', { class: 'prompt' }, demoButton(t), progress ? el('span', { class: 'hint' }, progress) : null),
     demoError?.id === t.id ? el('p', { class: 'hint' }, demoError.message) : null,
     t.status === 'ready' ? assignBox(t) : null,
     (t.status === 'demoing' || t.status === 'wrapping') && t.assignee ? reclaimBox(t) : null,
-    el('h4', null, `运行记录（${runs.length}）`),
-    runs.length ? el('table', { class: 'demo-runs' },
-      el('thead', null, el('tr', null, ['开始', '类型', '执行者', '结果', '说明', '操作记录'].map((h) => el('th', null, h)))),
-      el('tbody', null, runs.map((r) => el('tr', null,
-        el('td', null, fmtTime(r.startedAt)),
-        el('td', null, RUN_MODE[r.mode] || '演播'),
-        el('td', null, agentName(r.by)),
-        el('td', { class: r.outcome ? `r-${r.outcome}` : '' }, RUN_OUTCOME[r.outcome] || '进行中'),
-        el('td', { class: 'note' }, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null),
-        el('td', null, r.saved ? (r.commit ? el('code', null, r.commit) : '没有改动') : '—'))))) : el('p', { class: 'meta' }, '还没运行过'),
-    el('h4', null, '操作记录'),
-    opsBox(t),
+    el('p', { class: 'hint' }, '操作记录、运行记录和脚本步骤在演播需求页上看；这里管指派、收回和时间线。'),
   ];
 }
 

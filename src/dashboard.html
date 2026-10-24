@@ -364,9 +364,15 @@ nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); m
   position: relative; display: block; width: 100%; text-align: left; cursor: pointer;
   padding: 10px 12px 11px 14px; border: none; border-radius: 6px; background: none;
 }
+.job { transition: background-color .12s, box-shadow .12s; }
 .job:hover { background: var(--sunken); }
-.job[aria-current="true"] { background: var(--brand-soft); }
-.job[aria-current="true"]::before { content: ""; position: absolute; left: 3px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--brand); }
+/* 选中的需求：浮起的白卡 + 左侧整条主题色竖条 + 外圈主题色描边，在灰色侧栏上一眼能认出 */
+.job[aria-current="true"] {
+  background: var(--raised);
+  box-shadow: inset 4px 0 0 var(--brand), 0 0 0 1px color-mix(in srgb, var(--brand) 45%, transparent), 0 4px 10px -4px rgba(9, 30, 66, .22);
+}
+.job[aria-current="true"]:hover { background: var(--raised); }
+.job[aria-current="true"] .sub { color: var(--muted); }
 .job .title { font-weight: 600; font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .job[aria-current="true"] .title { color: var(--brand-ink); }
 .job .title .jid, .job-head .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }

@@ -1871,7 +1871,7 @@ function viewportTip(t) {
       showVpManual ? '收起手动调整方法' : '命令读不到当前视口？手动调整方法'),
     showVpManual ? el('ol', { class: 'hint vp-manual' },
       el('li', null, '先按 Cmd+0 把网页缩放恢复到 100%，演播用的 Chrome 窗口放在最前面。'),
-      el('li', null, `在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到现在的视口（比如 1600x760），关掉控制台后运行（把 1600x760 换成你看到的）：`,
+      el('li', null, `在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到现在的视口（比如 1600x760），关掉控制台后运行（把 1600x760 换成你看到的）。量过一次本机就记住了工具栏高度，以后直接运行上面那条命令即可：`,
         promptBlock(`ateam demo viewport ${t.id} --now 1600x760`, render)),
       el('li', null, `或者完全手动：先读出窗口位置（左, 上, 右, 下），再把「右」加上 ${w} 减现在的宽、「下」加上 ${h} 减现在的高，填进第二条命令的花括号里：`,
         promptBlock(`osascript -e 'tell application "Google Chrome" to get bounds of front window'`, render),

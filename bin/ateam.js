@@ -2,7 +2,8 @@
 // ateam 命令行：leader 和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -583,13 +584,26 @@ const commands = {
     if (flags.now && !now) fail(`--now 的格式是 宽x高，比如 --now 1600x760`);
     const fromJs = now ? null : readViewport();
     if (!now && fromJs) now = fromJs.slice(0, 2);
+    // 窗口外框比视口多出的宽高（标签栏、地址栏、提示条）：量到过一次就记在本机，
+    // 以后读不到视口时按「窗口大小 − 这个差」推算，不用每次都量
+    const frameFile = join(homedir(), '.ateam', 'chrome-frame.json');
+    let guessed = false;
+    if (now) {
+      try { mkdirSync(dirname(frameFile), { recursive: true }); writeFileSync(frameFile, JSON.stringify({ w: bounds[2] - bounds[0] - now[0], h: bounds[3] - bounds[1] - now[1] })); } catch {}
+    } else {
+      try {
+        const f = JSON.parse(readFileSync(frameFile, 'utf8'));
+        if (Number.isInteger(f.w) && Number.isInteger(f.h)) { now = [bounds[2] - bounds[0] - f.w, bounds[3] - bounds[1] - f.h]; guessed = true; }
+      } catch {}
+    }
     const want = `${target[0]}x${target[1]}`;
     if (!now) {
       return [
         `目标视口 ${want}，但不知道现在的视口多大。任选一种：`,
         '',
         '1. 在 Chrome 菜单「查看 > 开发者 > 允许 Apple 事件中的 JavaScript」打勾（只要一次），再运行本命令，会自动读取并调整。',
-        `2. 在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到比如 1600x760，再运行：ateam demo viewport ${arg} --now 1600x760`,
+        `2. 在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到比如 1600x760，关掉控制台再运行：ateam demo viewport ${arg} --now 1600x760`,
+        '   量过一次之后本机会记住 Chrome 工具栏的高度，以后直接运行 ateam demo viewport 就能推算。',
       ].join('\n');
     }
     const lines = [];
@@ -597,6 +611,7 @@ const commands = {
       lines.push(`⚠ 网页好像被缩放了（不是 100%），先在 Chrome 里按 Cmd+0 恢复，再运行一次本命令。`);
     }
     const [dw, dh] = [target[0] - now[0], target[1] - now[1]];
+    if (guessed) lines.push('（当前视口是按上次量的 Chrome 工具栏高度推算的；书签栏、调试提示条的显示和上次不同会有偏差，worker 截图会再核对。）');
     if (!dw && !dh) return [`视口已经是 ${want}，不用调。`, ...lines].join('\n');
     const [x1, y1, x2, y2] = bounds;
     const next = [x1, y1, x2 + dw, y2 + dh];

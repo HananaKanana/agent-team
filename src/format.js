@@ -9,21 +9,28 @@ const STATUS = {
   approved: '已通过',
   held: '已挂起',
   cancelled: '已作废',
-  // 演示卡
-  ready: '待演示',
+  // 演播卡
+  ready: '待演播',
   queued: '等待开始',
-  demoing: '演示中',
+  demoing: '进行中',
   wrapping: '收尾中',
 };
 
 const RUN_OUTCOME = { done: '跑完', stopped: '叫停', interrupted: '中断' };
+const RUN_MODE = { rehearsal: '预演', show: '演播' };
+// 演播卡的预演状态
+const rehearsalFlag = (t) => (!t.rehearsedAt ? '未预演' : t.mayChange ? '已预演，页面可能有变动' : '已预演');
+function runText(r) {
+  const slow = r.slowSteps?.length ? `；慢档：第 ${r.slowSteps.join('、')} 步` : '';
+  return `${formatTime(r.startedAt)} ${RUN_MODE[r.mode] ?? '演播'} ${RUN_OUTCOME[r.outcome] ?? '进行中'}${slow}`;
+}
 
-// 演示卡一行摘要：脚本、演示次数、上一次的结果
+// 演播卡一行摘要：脚本、预演状态、次数、上一次的结果
 function demoLine(t) {
   const runs = t.runs ?? [];
   const last = runs[runs.length - 1];
-  const lastText = last ? `，上次 ${formatTime(last.startedAt)} ${RUN_OUTCOME[last.outcome] ?? '进行中'}` : '';
-  return `- ${t.id} [${STATUS[t.status] ?? t.status}] ${t.title}（${t.role}，脚本 ${t.script}，已演示 ${runs.length} 次${lastText}）`;
+  const lastText = last ? `，上次 ${runText(last)}` : '';
+  return `- ${t.id} [${STATUS[t.status] ?? t.status}，${rehearsalFlag(t)}] ${t.title}（${t.role}，脚本 ${t.script}，已运行 ${runs.length} 次${lastText}）`;
 }
 
 const JOB_STATUS = {
@@ -104,20 +111,20 @@ export function formatTask(task) {
 
 function formatDemoTask(task) {
   const lines = [
-    `- 类型：演示卡`,
-    `- 状态：${statusLabel(task.status)}`,
+    `- 类型：演播卡`,
+    `- 状态：${statusLabel(task.status)}，${rehearsalFlag(task)}`,
     `- 角色：${task.role}`,
     `- 处理人：${task.assignee ?? '无'}`,
     `- 脚本：\`${task.script}\``,
     '',
-    '## 最近的演示',
+    '## 最近的运行',
     '',
   ];
   const runs = (task.runs ?? []).slice(-3).reverse();
-  if (!runs.length) lines.push('（还没演示过）');
+  if (!runs.length) lines.push('（还没运行过）');
   for (const r of runs) {
-    const saved = r.saved ? `；经验${r.commit ? `已提交 ${r.commit}` : '：无新内容'}` : '';
-    lines.push(`- ${formatTime(r.startedAt)} ${r.by} ${RUN_OUTCOME[r.outcome] ?? '进行中'}${r.result ? `：${oneLine(r.result)}` : ''}${saved}`);
+    const saved = r.saved ? `；操作记录${r.commit ? `已提交 ${r.commit}` : '没有改动'}` : '';
+    lines.push(`- ${runText(r)} ${r.by}${r.result ? `：${oneLine(r.result)}` : ''}${saved}`);
   }
   lines.push('', '## 历史', '');
   for (const h of task.history) {
@@ -160,7 +167,7 @@ const HOLDING_REASON = {
 
 function waitingLines(waiting) {
   if (!waiting) return [];
-  if (waiting.frozen) return [`正在演示 ${waiting.frozen.taskId} ${waiting.frozen.title}，派发已暂停，演示结束后继续派发。`];
+  if (waiting.frozen) return [`正在演播 ${waiting.frozen.taskId} ${waiting.frozen.title}，派发已暂停，结束后继续派发。`];
   if (waiting.holding) {
     const why = HOLDING_REASON[waiting.holding.status] ?? waiting.holding.status;
     const lines = [`你手上的任务 ${waiting.holding.id} ${why}。`];
@@ -252,56 +259,99 @@ export function formatWait(result, agentId, waiting, round = 0) {
   return out + footer(agentId);
 }
 
-// 演示卡的三种指令：开始演示、被叫停、收尾。标题文本 skill 里有引用
+// 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用
+const OPS_FORMAT = [
+  '操作记录写在脚本的「## 操作记录」段，按「## 演示步骤」的编号每步一条，标题写「### <编号>. <简述>」，内容写到**别人照着就能做、不用再摸索**的程度：',
+  '- 怎么找到元素：按钮或链接上的文字、在页面哪个位置、页面上能认出它的标志；',
+  '- 做什么：点、填什么（{时间} 照原样写）、选哪一项；',
+  '- 等到：什么出现才算这一步完成（比如「提示『保存成功』」「表格出现第一行」），大概要等几秒；',
+  '- 关键节点：造数据、跳转页面、提交表单这类「做错了后面全错」的步骤，标题末尾加【核对】，并写一行「核对：<要看到什么>」。',
+];
 function formatDemoWait(result, agentId) {
   const { kind, task, script } = result;
+  const mode = script?.mode ?? task.runs?.[task.runs.length - 1]?.mode ?? 'show';
+  const rehearsal = mode === 'rehearsal';
+  const word = rehearsal ? '预演' : '演播';
   const title = `${task.id}：${task.title}`;
   const scriptBlock = script
     ? (script.error ? `\n\n**${script.error}**。请通知用户。` : `\n\n## 脚本 \`${script.path}\`（共 ${script.steps} 步）\n\n${script.text.trim()}`)
     : '';
-  const save = `ateam demo save --as ${agentId} "<记了哪些经验>"`;
-  const experience = [
-    `把这次的经验追加到脚本 \`${task.script}\` 的「## 经验」段：只记怎么操作更稳（等多久、先点哪里、哪个弹窗要先关）；已有的同类经验就更新那一条，不要重复记。`,
-    '**不要改「## 准备」「## 演示步骤」「## 清理」三段**，改了会被拒绝提交。',
-    `然后运行 ${save}，服务只提交这个脚本文件。没有新经验就加 --no-changes。`,
-    '提交后回到 ateam wait。',
+  const save = `ateam demo save --as ${agentId} "<记了或改了哪些操作>"`;
+  const commitLines = [
+    '**只改「## 操作记录」段，不要改「## 准备」「## 演示步骤」「## 清理」三段**，改了会被拒绝提交。',
+    `然后运行 ${save}，服务只提交这个脚本文件。操作记录没有改动就加 --no-changes。提交后回到 ateam wait。`,
+  ];
+  const report = `每开始一步，先报告：ateam demo step --as ${agentId} <第几步>/<总步数> "<这一步做什么>"。步数用脚本里的编号（用户的提词按这个编号取讲解），不要自己重新编号。`;
+  const common = [
+    '浏览器必须在前台、用户看得见。遵守项目规则和用户的浏览器规则，不用 headless / 后台浏览器。',
+    '名称里的 {时间} 换成当前时间；演播造的数据都用「演示-」开头。',
+    '**不要提问，不要停下来等人。**',
+    `如果 demo step 的输出是「# ${word}已叫停」：立刻停手，停在当前页面，按那条输出做。`,
   ];
   let out;
-  if (kind === 'demo') {
+  if (kind === 'demo' && rehearsal) {
     out = [
-      `# 演示 ${title}`,
+      `# 预演 ${title}`,
       '',
-      '用户正在给客户现场演示，你在用户前台的浏览器里按下面的脚本**从头到尾顺序操作**，用户在旁边讲解。',
+      '这是**预演**，不对客户。目的是把每一步走通，并把**具体怎么操作**写进脚本的「## 操作记录」段，之后的演播照着它快速执行。慢没关系，要准。',
       '',
-      '## 演示规则',
+      '## 预演规则',
       '',
-      '1. 先读「## 经验」段，照着经验操作；再按「## 准备」段检查状态（有上次残留的「演示-」数据，按准备段处理）。',
-      '2. 浏览器必须在前台、用户看得见。遵守项目规则和用户的浏览器规则，不用 headless / 后台浏览器。',
-      `3. 每开始一步，先报告：ateam demo step --as ${agentId} <第几步>/<总步数> "<这一步做什么>"。步数用脚本里的编号（用户的提词按这个编号取讲解），不要自己重新编号。看板会实时显示。`,
-      '4. 每步之间按脚本写的秒数停留，让客户看清楚。',
-      '5. 名称里的 {时间} 换成当前时间；演示造的数据都用「演示-」开头。',
-      '6. **不要提问，不要停下来等人。** 页面慢、弹窗挡住这类小问题自己处理后继续；真走不下去就跳过这一步，记下来，继续下一步。',
-      `7. 如果 demo step 的输出是「# 演示已叫停」：立刻停手，停在当前页面，按那条输出做。`,
-      `8. 全部跑完：ateam demo end --as ${agentId} "<结果：哪些步顺利，哪些跳过、为什么>"，然后按收到的「# 演示收尾」做。`,
+      ...[
+        '先按「## 准备」段检查状态（有上次残留的「演示-」数据，按准备段处理）。「## 操作记录」里已有内容（以前预演过），可以参考，但这次要重新走一遍、核实并改正。',
+        report,
+        '每一步都截图确认走通了，再做下一步。每步之间按脚本写的秒数停留。',
+        '**每走通一步，就马上把这一步写进「## 操作记录」**（不要等到最后，中途停下也要留下已走通的）：',
+        ...OPS_FORMAT.map((l) => `   ${l}`),
+        ...common,
+        `某一步怎么也走不通（功能没了、页面报错、数据不对）：把已走通的写好，停在当前页面，ateam demo end --as ${agentId} --stuck "<卡在第几步、为什么>"。`,
+        `全部走通：ateam demo end --as ${agentId} "<结果>"，然后按收到的「# 预演收尾」做。`,
+      ].map(((n) => (l) => (l.startsWith('   ') ? l : `${++n}. ${l}`))(0)),
+    ].join('\n') + scriptBlock;
+  } else if (kind === 'demo') {
+    out = [
+      `# 演播 ${title}`,
+      '',
+      '用户正在给客户现场演播，你在用户前台的浏览器里按脚本**从头到尾顺序操作**，用户在旁边讲解。**要快**：照「## 操作记录」直接做，不要每步都截图、琢磨。',
+      '',
+      '## 演播规则',
+      '',
+      ...[
+        script && !script.hasOps
+          ? '⚠ 这张卡的「## 操作记录」是空的（还没预演写过）。这次只能按预演的方式慢慢走，并把每步写进操作记录；提醒用户以后先预演。'
+          : '先通读「## 操作记录」，按「## 准备」段检查状态。',
+        report,
+        '**快档（默认）**：照操作记录逐条直接操作，**不截图**、不做额外判断；只在标了【核对】的步骤截图，对照「核对：」那一行。每步之间按脚本写的秒数停留，让客户看清楚。',
+        `**慢档**：某一步照记录找不到元素、或【核对】对不上，只这一步切回预演的做法（截图、找元素、想办法）走通，这一步的 demo step 加 --slow（比如 ateam demo step --as ${agentId} 3/12 "新建装备" --slow），记下新的做法，走通后回到快档继续。`,
+        `**停住**：慢档也走不通（功能没了、页面报错、数据不对），停在当前页面，ateam demo end --as ${agentId} --stuck "<卡在第几步、为什么>"。`,
+        ...common,
+        `全部跑完：ateam demo end --as ${agentId} "<结果：哪些步走了慢档、为什么>"，然后按收到的「# 演播收尾」做。`,
+      ].map((l, i) => `${i + 1}. ${l}`),
     ].join('\n') + scriptBlock;
   } else if (kind === 'demo_stopped') {
     out = [
-      `# 演示已叫停 ${title}`,
+      `# ${word}已叫停 ${title}`,
       '',
-      '用户叫停了演示。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。',
+      `用户叫停了${word}。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。`,
       '',
-      ...experience,
+      rehearsal ? '把这次已经走通的步骤写进「## 操作记录」（格式见下）。' : '这次走了慢档的步骤，把新做法更新进「## 操作记录」；没有就不用改。',
+      ...(rehearsal ? OPS_FORMAT : []),
+      ...commitLines,
     ].join('\n') + scriptBlock;
   } else {
     const done = result.outcome === 'done';
     out = [
-      `# 演示收尾 ${title}`,
+      `# ${word}收尾 ${title}`,
       '',
       done
-        ? '演示已经跑完，客户看完了。先执行脚本的「## 清理」段：只删名称以「演示-」开头、且标了【数据：清理】的数据，别的一概不动。'
-        : '这次演示被叫停了，**不要清理数据**，残留留给下次演示的「## 准备」段处理。',
+        ? `${word}已经跑完。先执行脚本的「## 清理」段：只删名称以「演示-」开头、且标了【数据：清理】的数据，别的一概不动。`
+        : `这次${word}${result.outcome === 'interrupted' ? '没走通，停住了' : '被叫停了'}，**不要清理数据**，残留留给下次的「## 准备」段处理。`,
       '',
-      ...experience,
+      rehearsal
+        ? (done ? '确认「## 操作记录」每一步都写全了（格式见下），有遗漏补上。' : '确认已走通的步骤都写进了「## 操作记录」（格式见下）。')
+        : '把走了慢档的步骤的新做法更新进「## 操作记录」（覆盖原来那条）；没有走慢档就不用改，直接 --no-changes。',
+      ...(rehearsal ? OPS_FORMAT : []),
+      ...commitLines,
     ].join('\n') + scriptBlock;
   }
   if (result.rules) out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
@@ -437,7 +487,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
     const tasks = state.tasks.filter((t) => t.jobId === j.id);
     const live = tasks.filter((t) => t.status !== 'cancelled');
     if (j.demo) {
-      lines.push(`### ${j.id} ${j.title} [演示] 演示卡 ${live.length} 张`, '', ...live.map(demoLine), '');
+      lines.push(`### ${j.id} ${j.title} [演播] 演播卡 ${live.length} 张`, '', ...live.map(demoLine), '');
       continue;
     }
     const done = live.filter((t) => t.status === 'approved').length;
@@ -474,7 +524,7 @@ export function formatJobs(state, { filter = 'accepted', keyword = '' } = {}) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const when = j.status === 'accepted' && j.acceptedAt ? `，${formatTime(j.acceptedAt)} 验收` : '';
     lines.push(j.demo
-      ? `- ${j.id} ${j.title} [演示] 演示卡 ${tasks.length} 张`
+      ? `- ${j.id} ${j.title} [演播] 演播卡 ${tasks.length} 张`
       : `- ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}${when}] 任务 ${tasks.length} 个`);
   }
   lines.push('', '看某个需求的说明、任务、提交和汇报：ateam job show J1');
@@ -485,7 +535,7 @@ export function formatJobs(state, { filter = 'accepted', keyword = '' } = {}) {
 export function formatJob(state, job) {
   const tasks = state.tasks.filter((t) => t.jobId === job.id);
   const lines = [`# ${job.id} ${job.title}`, ''];
-  lines.push(`- 状态：${job.demo ? '演示需求' : JOB_STATUS[job.status] ?? job.status}`);
+  lines.push(`- 状态：${job.demo ? '演播需求' : JOB_STATUS[job.status] ?? job.status}`);
   if (job.createdAt) lines.push(`- 创建：${formatTime(job.createdAt)}`);
   if (job.acceptedAt) lines.push(`- 验收：${formatTime(job.acceptedAt)}`);
   lines.push('', '## 用户原话', '', job.origin?.trim() || '（没有存）');

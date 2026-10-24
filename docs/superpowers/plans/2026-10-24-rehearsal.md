@@ -71,10 +71,10 @@
   - 叫停标题 `# 演播已叫停` / `# 预演已叫停`。
 - `demoLine` / `formatDemoTask`：显示「未预演 / 已预演 / 页面可能有变动」，runs 显示类型和慢档步骤。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测：rehearsal / show 两种 wait 输出标题和关键句（「不截图」「--slow」「--stuck」「## 操作记录」）；`formatStatus` 里演播需求显示「[演播]」；未预演卡显示「未预演」。
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测：rehearsal / show 两种 wait 输出标题和关键句（「不截图」「--slow」「--stuck」「## 操作记录」）；`formatStatus` 里演播需求显示「[演播]」；未预演卡显示「未预演」。
   Run: `node --check bin/ateam.js src/format.js && node <scratchpad>/probe-rehearsal-format.mjs` → `ALL PASS`，删除。
-- [ ] **Step 3: Commit** `cli: rehearsal and fast show instructions, --slow/--stuck, renamed to 演播`
+- [x] **Step 3: Commit** `cli: rehearsal and fast show instructions, --slow/--stuck, renamed to 演播`
 
 ### Task 4: 看板
 

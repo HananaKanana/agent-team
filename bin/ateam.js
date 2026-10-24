@@ -28,7 +28,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
@@ -42,9 +42,9 @@ worker
   ateam progress --as <ID> "<笔记>" [--expect <分钟>]
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
-  ateam demo step --as <ID> 3/12 "<这一步做什么>"
-  ateam demo end --as <ID> "<结果>"
-  ateam demo save --as <ID> "<经验总结>" [--no-changes]
+  ateam demo step --as <ID> 3/12 "<这一步做什么>" [--slow]
+  ateam demo end --as <ID> "<结果>" [--stuck]
+  ateam demo save --as <ID> "<改了哪些操作记录>" [--no-changes]
 
 leader
   ateam job new "<标题>" [--desc-file f.md] [--origin-file 用户原话.md] [--demo]
@@ -298,7 +298,7 @@ const commands = {
     const description = flags['desc-file'] ? readTextFile(flags['desc-file'], '--desc-file') : '';
     const origin = flags['origin-file'] ? readTextFile(flags['origin-file'], '--origin-file') : (flags.origin ?? '');
     const { job } = await request('POST', '/api/jobs', { title, description, origin, demo: !!flags.demo });
-    if (job.demo) return `已创建演示需求 ${job.id}：${job.title}\n\n下一步：ateam demo add --job ${job.id} --title "..." --script docs/demo/<名字>.md（脚本先写好并提交）`;
+    if (job.demo) return `已创建演播需求 ${job.id}：${job.title}\n\n下一步：ateam demo add --job ${job.id} --title "..." --script docs/demo/<名字>.md（脚本先写好并提交）`;
     return `已创建需求 ${job.id}：${job.title}\n\n下一步：ateam task add --job ${job.id} --role <角色> --paths <路径> --title "..." --desc-file <文件> --accept "..."`;
   },
 
@@ -529,7 +529,7 @@ const commands = {
     const title = requireArg(flags.title, '--title', 'ateam demo add --job J5 --title "协议适配全流程" --script docs/demo/protocol.md');
     const script = requireArg(flags.script, '--script', 'ateam demo add --job J5 --title "协议适配全流程" --script docs/demo/protocol.md');
     const { task } = await request('POST', '/api/demo/add', { jobId, title, script, role: flags.role ?? 'test' });
-    return `已创建演示卡 ${task.id}：${task.title}（脚本 ${task.script}，角色 ${task.role}）。用户在看板上点「开始演示」后，空闲的 ${task.role} worker 会领走演示。`;
+    return `已创建演播卡 ${task.id}：${task.title}（脚本 ${task.script}，角色 ${task.role}）。告诉用户：先在看板上点「开始预演」，空闲的 ${task.role} worker 会预演一遍并写出操作记录；预演跑完后才能「开始演播」。`;
   },
 
   async 'demo step'({ flags, positional }) {
@@ -537,23 +537,23 @@ const commands = {
     const m = String(positional[0] ?? '').match(/^(\d+)\/(\d+)$/);
     if (!m) fail(`步数格式是「第几步/总步数」，比如：ateam demo step --as ${as} 3/12 "新建装备"`);
     const text = requireArg(positional[1], '这一步的说明', `ateam demo step --as ${as} 3/12 "新建装备"`);
-    const data = await request('POST', '/api/demo/step', { as, n: Number(m[1]), total: Number(m[2]), text });
+    const data = await request('POST', '/api/demo/step', { as, n: Number(m[1]), total: Number(m[2]), text, slow: !!flags.slow });
     if (data.stopped) return formatWait({ kind: 'demo_stopped', task: data.task }, as);
-    return `已记录第 ${m[1]}/${m[2]} 步。继续演示；全部跑完后运行 ateam demo end --as ${as} "<结果>"。`;
+    return `已记录第 ${m[1]}/${m[2]} 步${flags.slow ? '（慢档）' : ''}。继续；全部跑完后运行 ateam demo end --as ${as} "<结果>"。`;
   },
 
   async 'demo end'({ flags, positional }) {
     const as = requireAs(flags);
-    const result = requireArg(positional[0], '演示结果', `ateam demo end --as ${as} "12 步全部顺利"`);
-    const { task } = await request('POST', '/api/demo/end', { as, result });
-    return `已记录演示 ${task.id} 跑完，派发已恢复。现在运行 ateam wait --as ${as}，按「# 演示收尾」清理并写经验。`;
+    const result = requireArg(positional[0], '结果', `ateam demo end --as ${as} "12 步全部顺利"`);
+    const { task } = await request('POST', '/api/demo/end', { as, result, stuck: !!flags.stuck });
+    return `已记录 ${task.id} ${flags.stuck ? '停住' : '跑完'}，派发已恢复。现在运行 ateam wait --as ${as}，按收到的收尾说明做。`;
   },
 
   async 'demo save'({ flags, positional }) {
     const as = requireAs(flags);
-    const summary = requireArg(positional[0], '经验总结', `ateam demo save --as ${as} "记了首页加载要等 3 秒"`);
+    const summary = requireArg(positional[0], '总结', `ateam demo save --as ${as} "写了 12 步的操作记录"`);
     const { task, commit } = await request('POST', '/api/demo/save', { as, summary, noChanges: !!flags['no-changes'] });
-    return `演示卡 ${task.id} 收尾完成（${commit ? `经验已提交 ${commit}` : '没有新经验'}），已回到待演示。请运行：ateam wait --as ${as}`;
+    return `演播卡 ${task.id} 收尾完成（${commit ? `操作记录已提交 ${commit}` : '操作记录没有改动'}），已回到待演播。请运行：ateam wait --as ${as}`;
   },
 
   async report({ flags }) {

@@ -494,6 +494,52 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-head .more { grid-column: 1 / -1; justify-self: start; border: none; background: none; color: var(--brand); font-size: 13px; padding: 0; cursor: pointer; }
 .job-head .more:hover { text-decoration: underline; }
 .job-head .origin-box { grid-column: 1 / -1; }
+/* 普通需求：左边标题和说明，右边概览 + 最近动态。
+   右栏不撑高头部：高度跟左栏走（说明收起时矮、展开时高），动态列表在里面滚动；最低 236px 保证概览完整 */
+.job-head.has-side { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 0 32px; align-items: stretch; }
+.job-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; min-width: 0; }
+.job-side { position: relative; min-height: 236px; }
+.job-side .inner { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }
+.side-sec { padding: 10px 14px; }
+.side-sec + .side-sec { border-top: 1px solid var(--line-soft); }
+.side-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.side-h .sub { font-weight: 400; color: var(--faint); }
+.overview { flex: none; }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.kpis > div { display: grid; gap: 1px; padding: 6px 8px; border-radius: 6px; background: var(--sunken); min-width: 0; }
+.kpis b { font-size: 17px; line-height: 1.2; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.kpis b small { font-size: 12px; font-weight: 500; color: var(--faint); }
+.kpis span { font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpis .warn b { color: var(--rework); }
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 12px; margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; }
+.facts dt { color: var(--faint); }
+.facts dd { margin: 0; color: var(--ink); min-width: 0; }
+.facts .sub { color: var(--faint); }
+.facts .roles { display: flex; flex-wrap: wrap; gap: 4px; }
+.facts .role { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 10px; font-size: 12px; background: var(--sunken); color: var(--muted); }
+.facts .role b { font-weight: 650; color: var(--ink); }
+.facts .role.full { background: color-mix(in srgb, var(--approved) 14%, var(--surface)); color: var(--approved); }
+.facts .role.full b { color: var(--approved); }
+.activity { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 4px; }
+.activity .side-h { flex: none; }
+.acts { list-style: none; margin: 0 -14px; padding: 0; overflow-y: auto; min-height: 0; flex: 1; }
+.acts li { display: grid; grid-template-columns: 8px auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 14px; font-size: 12.5px; line-height: 1.5; }
+.acts li.link { cursor: pointer; }
+.acts li.link:hover, .acts li.link:focus-visible { background: var(--sunken); }
+.acts li i { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--pending)); }
+.acts .when { color: var(--faint); font-size: 12px; white-space: nowrap; }
+.acts .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.acts .what .key { color: var(--muted); margin-right: 6px; }
+.acts .who { color: var(--faint); font-size: 12px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.activity .empty { margin: 0; }
+/* 窄屏：右栏挪到说明下面，自己撑高，动态最多显示约 6 条 */
+@media (max-width: 1180px) {
+  .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .job-side { min-height: 0; }
+  .job-side .inner { position: static; }
+  .acts { max-height: 180px; }
+}
 .lozenge {
   display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 3px; white-space: nowrap;
   font-size: 11.5px; font-weight: 700; color: var(--c, var(--faint)); background: color-mix(in srgb, var(--c, var(--faint)) 15%, transparent);
@@ -1618,12 +1664,10 @@ function renderMain() {
   // 说明较长时默认收起几行，可以展开
   const longDesc = (job.description || '').length > 160 || (job.description || '').split('\n').length > 3;
   const descOpen = descOpenJob === job.id;
-  const head = el('div', { class: 'job-head' },
+  const headMain = [
     el('div', { class: 'crumbs' }, `需求 / ${job.id}`),
     el('h2', { class: 'job-title' }, job.title),
-    el('div', { class: 'head-acts' }, job.demo
-      ? el('span', { class: 'lozenge c-held' }, '演播需求')
-      : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
+    job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
     job.description ? (() => {
       const box = el('div', { class: `desc md${longDesc && !descOpen ? ' clamped' : ''}` });
       box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
@@ -1632,7 +1676,10 @@ function renderMain() {
     longDesc ? el('button', { class: 'more', onclick: () => { descOpenJob = descOpen ? null : job.id; renderMain(); } }, descOpen ? '收起说明' : '展开全部说明') : null,
     job.origin ? el('details', { class: 'origin-box' },
       el('summary', null, '你提需求时的原话'),
-      (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null);
+      (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null];
+  const head = job.demo
+    ? el('div', { class: 'job-head' }, headMain)
+    : el('div', { class: 'job-head has-side' }, el('div', { class: 'job-main' }, headMain), jobSide(job, tasks));
   if (job.demo) {
     main.removeAttribute('aria-busy');
     // 一张卡时右边放它的步骤大纲；多张时放正在运行的那张（没有就第一张）
@@ -1653,14 +1700,8 @@ function renderMain() {
     }
     return;
   }
-  const st = reviewStats(tasks);
-  const stats = el('div', { class: 'progress' },
-    tasks.length ? strip(tasks, true) : null,
-    el('div', { class: 'stats' },
-      el('span', null, '已通过', el('b', null, `${st.approved} / ${tasks.length}`)),
-      el('span', null, 'review', el('b', null, `${st.reviews} 次`)),
-      el('span', null, '一次通过率', el('b', null, st.rate)),
-      el('span', null, '打回', el('b', null, `${st.rejects} 次`))));
+  // 统计数字挪到了头部右侧的概览里，这里只留进度条
+  const stats = el('div', { class: 'progress' }, tasks.length ? strip(tasks, true) : null);
 
   let report = null;
   if (job.status === 'awaiting_acceptance' && job.report) {
@@ -1694,6 +1735,52 @@ function renderMain() {
   main.removeAttribute('aria-busy');
   fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : emptyState('split', 'leader 正在拆任务', '拆好后任务会出现在这里。需要哪些角色的 worker，leader 会在对话里告诉你。'), cancelledBox);
   for (const c of main.querySelectorAll('.lane[data-lane] .cards')) c.scrollTop = scrolls[c.parentNode.dataset.lane] || 0;
+}
+
+// 需求头部右侧：概览（统计、耗时、角色进度、参与者）+ 最近动态（各任务时间线合在一起，新的在上）
+const ACTIVITY_TYPES = new Set(['claimed', 'asked', 'answered', 'submitted', 'approved', 'rejected', 'handoff', 'cancelled', 'critique']);
+function jobSide(job, tasks) {
+  const st = reviewStats(tasks);
+  const end = job.acceptedAt ? new Date(job.acceptedAt) : Date.now();
+  const took = dur(end - new Date(job.createdAt));
+  const roles = new Map();
+  for (const t of tasks) {
+    const r = roles.get(t.role) || { done: 0, all: 0 };
+    r.all++; if (t.status === 'approved') r.done++;
+    roles.set(t.role, r);
+  }
+  const workers = [...new Set(tasks.flatMap((t) => t.history.filter((h) => h.type === 'claimed').map((h) => h.actor)))];
+  const acts = tasks.flatMap((t) => t.history.filter((h) => ACTIVITY_TYPES.has(h.type)).map((h) => ({ ...h, task: t })));
+  if (job.acceptedAt) acts.push({ ts: job.acceptedAt, type: 'job_accepted' });
+  acts.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  const shown = acts.slice(0, 30);
+  const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
+  return el('aside', { class: 'job-side', 'aria-label': '概览和最近动态' },
+    el('div', { class: 'inner' },
+      el('div', { class: 'side-sec overview' },
+        el('div', { class: 'side-h' }, el('span', null, '概览'),
+          el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
+        el('div', { class: 'kpis' },
+          el('div', null, el('b', null, `${st.approved}`, el('small', null, `/${tasks.length}`)), el('span', null, '已通过')),
+          el('div', null, el('b', null, `${st.reviews}`), el('span', null, 'review 次')),
+          el('div', null, el('b', null, st.rate), el('span', null, '一次通过率')),
+          el('div', { class: st.rejects ? 'warn' : '' }, el('b', null, `${st.rejects}`), el('span', null, '打回次'))),
+        el('dl', { class: 'facts' },
+          el('dt', null, '耗时'), el('dd', null, took, el('span', { class: 'sub' }, job.acceptedAt ? '（到验收）' : '（至今）')),
+          roles.size ? [el('dt', null, '角色'), el('dd', { class: 'roles' }, [...roles].map(([role, r]) =>
+            el('span', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` }, role, el('b', null, `${r.done}/${r.all}`))))] : null,
+          workers.length ? [el('dt', null, '参与'), el('dd', null, workers.map(agentName).join('、'))] : null)),
+      el('div', { class: 'side-sec activity' },
+        el('div', { class: 'side-h' }, el('span', null, '最近动态'), acts.length > shown.length ? el('span', { class: 'sub' }, `最近 ${shown.length} 条`) : null),
+        shown.length ? el('ol', { class: 'acts' }, shown.map((a) => {
+          if (a.type === 'job_accepted') return el('li', { class: 'c-approved' }, el('i'), el('span', { class: 'when' }, fmtTime(a.ts)), el('span', { class: 'what' }, '需求验收通过'));
+          const [label, color] = HISTORY[a.type] || [a.type, 'pending'];
+          return el('li', { class: `c-${color} link`, title: `${a.task.id} ${a.task.title}${a.text ? `\n${a.text}` : ''}`, tabindex: '0', role: 'button',
+            onclick: () => open(a.task.id), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(a.task.id); } } },
+          el('i'), el('span', { class: 'when' }, fmtTime(a.ts)),
+          el('span', { class: 'what' }, el('span', { class: 'key' }, a.task.id), label),
+          el('span', { class: 'who' }, agentName(a.actor)));
+        })) : el('p', { class: 'hint empty' }, '还没有动态'))));
 }
 
 // 已作废：默认收起，展开后一行一张，点开看详情

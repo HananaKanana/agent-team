@@ -255,6 +255,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 .prompter .say { margin: 4px 0 2px; font-size: 14.5px; line-height: 1.55; color: var(--ink);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .prompter .pop { position: absolute; top: 8px; right: 10px; }
+.prompter .since { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.prompter .since svg { flex: none; width: 12px; height: 12px; }
 /* 弹出的提词小窗（?prompter=T12）：整个窗口就是一条字幕，放在屏幕最下方 */
 .prompter-strip { display: none; }
 html.prompter-only body > :not(.prompter-strip) { display: none !important; }
@@ -1821,7 +1823,7 @@ function renderDrawer(fresh) {
   const fact = (label, value) => [el('dt', null, label), el('dd', null, value)];
   const demo = isDemoTask(t);
   const facts = demo ? el('dl', { class: 'facts' },
-    fact('状态', el('span', { class: `lozenge c-${(DEMO_STATUS[t.status] || [])[1] || 'pending'}` }, (DEMO_STATUS[t.status] || [t.status])[0])),
+    fact('状态', el('span', { class: `lozenge c-${(DEMO_STATUS[t.status] || [])[1] || 'pending'}` }, t.status === 'demoing' ? `${modeWord(t)}中` : (DEMO_STATUS[t.status] || [t.status])[0])),
     fact('角色', el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
     fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '无'),
     fact('脚本', el('code', null, t.script)),

@@ -494,55 +494,50 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-head .more { grid-column: 1 / -1; justify-self: start; border: none; background: none; color: var(--brand); font-size: 13px; padding: 0; cursor: pointer; }
 .job-head .more:hover { text-decoration: underline; }
 .job-head .origin-box { grid-column: 1 / -1; }
-/* 普通需求：左边标题和说明，右边概览 + 最近动态。不画卡片框，用一条竖线和左栏分开，和页面融在一起。
-   右栏不撑高头部：高度跟左栏走（说明收起时矮、展开时高），动态列表在里面滚动；最低 210px 保证至少看到几条动态 */
-/* 左栏按说明的阅读宽度封顶，右栏吃掉剩下的宽度，中间不留大缝；右栏内容自己再封顶，超宽屏时空在最右边 */
-.job-head.has-side { grid-template-columns: minmax(420px, 760px) minmax(380px, 1fr); gap: 0 32px; align-items: stretch; }
+/* 普通需求：左边标题和说明（说明铺满左栏，不留缝），右边一张概览卡：数字、各角色进度、最近动态。
+   卡片不撑高头部：高度跟左栏走（说明收起时矮、展开时高），放不下的动态在卡里滚动 */
+.job-head .crumbs { display: flex; align-items: center; gap: 10px; }
+.job-head .crumbs .lozenge { height: 20px; font-size: 11.5px; }
+.job-head.has-side { grid-template-columns: minmax(0, 1fr) minmax(340px, 480px); gap: 0 28px; align-items: stretch; }
+.job-head.has-side .desc { max-width: none; }
 .job-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; min-width: 0; }
-.job-side { position: relative; min-height: 210px; }
+.job-side { position: relative; min-height: 228px; }
 .job-side.bare { min-height: 0; }
+.job-side .inner { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
+  padding: 14px 16px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }
 .job-side.bare .inner { position: static; height: 100%; }
-.job-side .inner { position: absolute; inset: 0; max-width: 720px; display: flex; flex-direction: column; overflow: hidden; padding-left: 24px; border-left: 1px solid var(--line); }
-.side-sec + .side-sec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
-.side-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
-.side-h .sub { font-weight: 400; color: var(--faint); }
-.overview { flex: none; padding-top: 4px; }
-.kpis { display: flex; align-items: flex-start; gap: 0; }
-.kpis > div { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--line-soft); min-width: 0; }
-.kpis > div:first-child { padding-left: 0; border-left: none; }
-.kpis b { font-size: 19px; line-height: 1.15; font-weight: 700; color: var(--ink); white-space: nowrap; letter-spacing: -.01em; }
-.kpis b.dur { font-size: 14px; line-height: 1.6; font-weight: 650; }
-.kpis b small { font-size: 12px; font-weight: 500; color: var(--faint); margin-left: 1px; }
-.kpis span { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
-.kpis .warn b { color: var(--rework); }
-.kpis .lozenge { margin-left: auto; flex: none; }
-.roles { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 12px; font-size: 12px; color: var(--muted); }
-.roles .role { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.roles .role > i { position: relative; width: 36px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.roles .role > i > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--working); }
-.roles .role.full > i > i { background: var(--approved); }
-.roles .role b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-.roles .who { color: var(--faint); cursor: default; }
-.activity { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.activity .side-h { flex: none; }
-.acts { list-style: none; margin: 0 0 0 -8px; padding: 0; overflow-y: auto; min-height: 0; flex: 1; }
-.acts li { display: grid; grid-template-columns: 7px auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 3px 8px; border-radius: 4px; font-size: 12.5px; line-height: 1.55; }
+.kpis { flex: none; display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); }
+.kpi { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--line-soft); min-width: 0; }
+.kpi:first-child { padding-left: 0; border-left: none; }
+.kpi b { font-size: 18px; line-height: 24px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.kpi b small { font-size: 12px; font-weight: 500; color: var(--faint); margin-left: 1px; }
+.kpi.dur b { font-size: 13.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.kpi span { font-size: 11.5px; line-height: 16px; color: var(--faint); white-space: nowrap; }
+.kpi.warn b { color: var(--rework); }
+.roles { flex: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px 18px; }
+.role .rl { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.role .rl b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.role > i { display: block; position: relative; height: 4px; margin-top: 3px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
+.role > i > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--working); }
+.role.full > i > i { background: var(--approved); }
+.activity { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.side-h { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.side-h .sub { font-weight: 400; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.acts { list-style: none; margin: 0 -8px; padding: 0; overflow-y: auto; min-height: 0; flex: 1; }
+.acts li { display: grid; grid-template-columns: 7px auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 2px 8px; border-radius: 4px; font-size: 12.5px; line-height: 22px; }
 .acts li.link { cursor: pointer; }
-.acts li.link:hover, .acts li.link:focus-visible { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.acts li.link:hover, .acts li.link:focus-visible { background: var(--sunken); }
 .acts li i { width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--pending)); }
 .acts .when { color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .acts .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .acts .what .key { color: var(--muted); margin-right: 6px; }
-.acts .who { color: var(--faint); font-size: 12px; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
-/* 窄屏：右栏挪到说明下面，自己撑高，动态最多显示约 6 条 */
+.acts .what .who { color: var(--faint); font-size: 12px; margin-left: 8px; }
+/* 窄屏：概览卡挪到说明下面，自己撑高；数字和角色进度并排 */
 @media (max-width: 1180px) {
-  .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .job-side { min-height: 0; }
-  .job-side .inner { position: static; padding: 12px 0 0; border-left: none; border-top: 1px solid var(--line); }
-  /* 数字和角色进度排在同一行，放不下再折行，少占高度 */
-  .overview { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; padding-top: 0; }
-  .overview .roles { margin-top: 0; }
-  .kpis .lozenge { margin-left: 14px; align-self: center; }
+  .job-side .inner { position: static; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px 28px; }
+  .job-side .activity { grid-column: 1 / -1; }
 }
 .lozenge {
   display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 3px; white-space: nowrap;
@@ -1669,7 +1664,8 @@ function renderMain() {
   const longDesc = (job.description || '').length > 160 || (job.description || '').split('\n').length > 3;
   const descOpen = descOpenJob === job.id;
   const headMain = [
-    el('div', { class: 'crumbs' }, `需求 / ${job.id}`),
+    el('div', { class: 'crumbs' }, `需求 / ${job.id}`,
+      job.demo ? null : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
     el('h2', { class: 'job-title' }, job.title),
     job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
     job.description ? (() => {
@@ -1759,31 +1755,30 @@ function jobSide(job, tasks) {
   acts.sort((a, b) => new Date(b.ts) - new Date(a.ts));
   const shown = acts.slice(0, 5);
   const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
+  const kpi = (value, label, cls = '', title) => el('div', { class: `kpi ${cls}`, title }, el('b', null, value), el('span', null, label));
   return el('aside', { class: `job-side${shown.length ? '' : ' bare'}`, 'aria-label': '概览和最近动态' },
     el('div', { class: 'inner' },
-      el('div', { class: 'side-sec overview' },
-        el('div', { class: 'kpis' },
-          el('div', null, el('b', null, `${st.approved}`, el('small', null, `/${tasks.length}`)), el('span', null, '已通过')),
-          el('div', null, el('b', null, `${st.reviews}`), el('span', null, 'review')),
-          el('div', null, el('b', null, st.rate), el('span', null, '一次通过')),
-          el('div', { class: st.rejects ? 'warn' : '' }, el('b', null, `${st.rejects}`), el('span', null, '打回')),
-          el('div', { title: job.acceptedAt ? '从建需求到验收' : '从建需求到现在' }, el('b', { class: 'dur' }, took), el('span', null, job.acceptedAt ? '耗时' : '已用时')),
-          el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
-        roles.size || workers.length ? el('div', { class: 'roles' },
-          [...roles].map(([role, r]) => el('span', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` },
-            role, el('i', null, el('i', { style: `width:${Math.round((r.done / r.all) * 100)}%` })), el('b', null, `${r.done}/${r.all}`))),
-          workers.length ? el('span', { class: 'who', title: workers.map(agentName).join('\n') }, `${workers.length} 个 worker 参与`) : null) : null),
+      el('div', { class: 'kpis' },
+        kpi([`${st.approved}`, el('small', null, `/${tasks.length}`)], '已通过'),
+        kpi(`${st.reviews}`, 'review'),
+        kpi(st.rate, '一次通过'),
+        kpi(`${st.rejects}`, '打回', st.rejects ? 'warn' : ''),
+        kpi(took, job.acceptedAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : '从建需求到现在')),
+      roles.size ? el('div', { class: 'roles' },
+        [...roles].map(([role, r]) => el('div', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` },
+          el('div', { class: 'rl' }, el('span', null, role), el('b', null, `${r.done}/${r.all}`)),
+          el('i', null, el('i', { style: `width:${Math.round((r.done / r.all) * 100)}%` }))))) : null,
       // 没有动态就不占地方（刚建的需求、还没人领）
-      shown.length ? el('div', { class: 'side-sec activity' },
-        el('div', { class: 'side-h' }, el('span', null, '最近动态'), acts.length > shown.length ? el('span', { class: 'sub' }, `共 ${acts.length} 条，显示最近 5 条`) : null),
+      shown.length ? el('div', { class: 'activity' },
+        el('div', { class: 'side-h' }, el('span', null, '最近动态'),
+          el('span', { class: 'sub', title: workers.map(agentName).join('\n') }, `${workers.length} 个 worker 参与 · 共 ${acts.length} 条`)),
         el('ol', { class: 'acts' }, shown.map((a) => {
           if (a.type === 'job_accepted') return el('li', { class: 'c-approved' }, el('i'), el('span', { class: 'when' }, fmtTime(a.ts)), el('span', { class: 'what' }, '需求验收通过'));
           const [label, color] = HISTORY[a.type] || [a.type, 'pending'];
           return el('li', { class: `c-${color} link`, title: `${a.task.id} ${a.task.title}${a.text ? `\n${a.text}` : ''}`, tabindex: '0', role: 'button',
             onclick: () => open(a.task.id), onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(a.task.id); } } },
           el('i'), el('span', { class: 'when' }, fmtTime(a.ts)),
-          el('span', { class: 'what' }, el('span', { class: 'key' }, a.task.id), label),
-          el('span', { class: 'who' }, agentName(a.actor)));
+          el('span', { class: 'what' }, el('span', { class: 'key' }, a.task.id), label, el('span', { class: 'who' }, agentName(a.actor))));
         }))) : null));
 }
 

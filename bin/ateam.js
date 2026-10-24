@@ -599,11 +599,12 @@ const commands = {
     const want = `${target[0]}x${target[1]}`;
     if (!now) {
       return [
-        `目标视口 ${want}，但不知道现在的视口多大。任选一种：`,
+        `目标视口 ${want}，但还不知道现在的视口多大（本机第一次用，需要量一次）：`,
         '',
-        '1. 在 Chrome 菜单「查看 > 开发者 > 允许 Apple 事件中的 JavaScript」打勾（只要一次），再运行本命令，会自动读取并调整。',
-        `2. 在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到比如 1600x760，关掉控制台再运行：ateam demo viewport ${arg} --now 1600x760`,
-        '   量过一次之后本机会记住 Chrome 工具栏的高度，以后直接运行 ateam demo viewport 就能推算。',
+        `在演播页面按 Cmd+Option+J 打开控制台，手打 innerWidth+'x'+innerHeight 回车，得到比如 1600x760；关掉控制台再运行：`,
+        `  ateam demo viewport ${arg} --now 1600x760`,
+        '量过一次之后本机会记住 Chrome 工具栏的高度，以后直接运行本命令就能推算。',
+        '（也可以在 Chrome 菜单「显示 > 开发者 > 允许 Apple 事件中的 JavaScript」打勾，命令会自动读取；有的 Chrome 上这个开关点不动，那就用上面的办法。）',
       ].join('\n');
     }
     const lines = [];

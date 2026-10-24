@@ -339,6 +339,9 @@ html.prompter-native .prompter-strip .head .tools .grp button:last-child { borde
 html.prompter-native .prompter-strip .head .tools button.on { color: #a9cbff; border-color: #4c8dff; background: rgba(76, 141, 255, .16); }
 html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: calc(var(--p-scale, 1) * max(11px, 6vh)); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 4px; left: 50%; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
+/* 悬浮窗里 :hover 不可靠（鼠标从顶部原生拖动条离开时网页收不到离开事件，按钮会一直显示），改由脚本控制：动了鼠标才显示，停 2.5 秒自动收起 */
+html.prompter-native .prompter-strip:hover .head .tools { opacity: 0; }
+html.prompter-native .prompter-strip.show-tools .head .tools { opacity: 1; }
 /* 工具条放右上角：prompter.jxa 的拖动条在顶部只盖到离右边 230px 处，这里的按钮点得到 */
 html.prompter-native .prompter-strip .head .tools { position: absolute; right: 6px; top: 3px; z-index: 1; padding: 3px; gap: 4px; border-radius: 8px; background: rgba(14, 17, 20, .88); }
 html.prompter-native .prompter-strip .head .tools button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; }
@@ -1934,6 +1937,15 @@ function fitSay() {
   while (size > 11 && say.scrollHeight > say.clientHeight + 1) { size -= 1; say.style.fontSize = `${size}px`; }
 }
 if (PROMPTER_ONLY) addEventListener('resize', fitSay);
+if (PROMPTER_NATIVE) {
+  const strip = document.getElementById('prompter-strip');
+  let hideTimer = null;
+  const hide = () => strip.classList.remove('show-tools');
+  const show = () => { strip.classList.add('show-tools'); clearTimeout(hideTimer); hideTimer = setTimeout(hide, 2500); };
+  strip.addEventListener('mousemove', show);
+  strip.addEventListener('mousedown', show);
+  strip.addEventListener('mouseleave', () => { clearTimeout(hideTimer); hide(); });
+}
 let lastStripStep = null;
 
 function demoRow(t) {

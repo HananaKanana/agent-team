@@ -22,8 +22,31 @@ export function withoutExperience(markdown) {
     .join('\n');
 }
 
-// 「## 演示步骤」段里以「数字.」开头的行数
+const STEP_LINE = /^\s*(\d+)[.、]\s*(.*)$/;
+const NARRATION_LINE = /^\s*[-*]?\s*讲解[:：]\s*(.*)$/;
+const INLINE_NARRATION = /[（(]讲[:：]\s*([^）)]*)[）)]/;
+
+// 「## 演示步骤」段解析成 [{ n, text, narration }]。
+// 讲解写在步骤下面一行「讲解：……」，也兼容步骤里的「（讲：……）」
+export function parseSteps(markdown) {
+  const sec = sections(markdown).find((s) => s.title === '演示步骤');
+  if (!sec) return [];
+  const steps = [];
+  for (const line of sec.lines.slice(1)) {
+    const m = line.match(STEP_LINE);
+    if (m) {
+      const inline = m[2].match(INLINE_NARRATION);
+      steps.push({ n: Number(m[1]), text: m[2].replace(INLINE_NARRATION, '').trim(), narration: inline ? inline[1].trim() : '' });
+      continue;
+    }
+    const cur = steps[steps.length - 1];
+    const nm = cur && line.match(NARRATION_LINE);
+    if (nm) cur.narration = [cur.narration, nm[1].trim()].filter(Boolean).join(' ');
+  }
+  return steps;
+}
+
+// 「## 演示步骤」段里的步骤数
 export function stepCount(markdown) {
-  const steps = sections(markdown).find((s) => s.title === '演示步骤');
-  return steps ? steps.lines.filter((l) => /^\s*\d+[.、]/.test(l)).length : 0;
+  return parseSteps(markdown).length;
 }

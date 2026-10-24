@@ -9,7 +9,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
-import { stepCount, withoutExperience } from './demo.js';
+import { parseSteps, stepCount, withoutExperience } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -264,7 +264,21 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     'POST /api/demo/start': (b) => ({ task: store.startDemo(requireId(b)) }),
     'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
-    'POST /api/demo/step': (b) => store.demoStep(b.as, b.n, b.total, b.text),
+    'POST /api/demo/step': (b) => {
+      // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演示
+      let cue = null;
+      const held = store.state.agents.find((a) => a.id === b.as)?.currentTask;
+      const task = held && store.state.tasks.find((t) => t.id === held && t.kind === 'demo');
+      if (task) {
+        try {
+          const steps = parseSteps(readFileSync(join(root, task.script), 'utf8'));
+          const i = steps.findIndex((s) => s.n === Number(b.n));
+          const step = i >= 0 ? steps[i] : null;
+          cue = { narration: step?.narration ?? '', next: steps[i + 1]?.text ?? '' };
+        } catch {}
+      }
+      return store.demoStep(b.as, b.n, b.total, b.text, cue);
+    },
     'POST /api/demo/end': (b) => ({ task: store.demoEnd(b.as, b.result) }),
     'POST /api/demo/save': (b) => serial(async () => {
       const task = store.demoTaskForSave(b.as);

@@ -1392,7 +1392,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 报告当前步，顺带检查是否被叫停。返回 { task, stopped }
-  function demoStep(agentId, n, total, text) {
+  // cue：server 从脚本里取的提词 { narration, next }，看板显示给讲解的用户
+  function demoStep(agentId, n, total, text, cue = null) {
     const { agent, task } = demoHeld(agentId);
     if (task.status === 'demoing' && task.stopRequested) {
       toWrapping(task);
@@ -1409,6 +1410,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       throw new AteamError('INVALID', '步数格式是「第几步/总步数」，比如 3/12。');
     }
     task.demoStep = { n, total, text: requireText(text, '这一步的说明'), ts: now() };
+    if (cue) task.demoStep.cue = { narration: String(cue.narration ?? ''), next: String(cue.next ?? '') };
     changed();
     return { task, stopped: false };
   }

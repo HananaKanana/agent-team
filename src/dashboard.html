@@ -230,7 +230,7 @@ input[type="checkbox"]:not(.switch):checked::after {
 .needs { --c: var(--asking); }
 .banner.demo:not([hidden]) { display: flex; }
 .banner.demo { --c: var(--working); flex-wrap: wrap; align-items: center; gap: 6px 12px; }
-.banner.demo .step { color: var(--muted); }
+.banner.demo .step { color: var(--muted); flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 演示需求：演示卡列表，每行一张卡 */
 .demo-list { display: flex; flex-direction: column; gap: 8px; max-width: 960px; }
@@ -247,6 +247,25 @@ input[type="checkbox"]:not(.switch):checked::after {
 .demo-row .step b { color: var(--working); font-weight: 650; margin-right: 6px; }
 .demo-row .since svg, .banner.demo .since svg { width: 12px; height: 12px; }
 .demo-row .since, .banner.demo .since { display: inline-flex; align-items: center; gap: 4px; }
+/* 提词区：演示中的卡下方，大字是这一步的讲解（只给讲解的用户看，不碰演示页面） */
+.prompter { grid-column: 1 / -1; position: relative; margin-top: 4px; padding: 14px 16px 12px; border-radius: 6px;
+  background: color-mix(in srgb, var(--working) 8%, var(--surface)); box-shadow: inset 3px 0 0 var(--working); cursor: default; }
+.prompter .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-right: 96px; font-size: 12.5px; color: var(--muted); }
+.prompter .head b { color: var(--working); font-weight: 650; }
+.prompter .say { margin: 8px 0 6px; font-size: 22px; line-height: 1.5; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.prompter .next { font-size: 13px; color: var(--faint); }
+.prompter .full { position: absolute; top: 10px; right: 10px; }
+/* 全屏提词：整页只有提词，放第二块屏幕或平板 */
+.prompter-full { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: center; gap: 28px;
+  padding: 48px 8vw; background: var(--bg); }
+.prompter-full[hidden] { display: none; }
+.prompter-full .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 20px; color: var(--muted); }
+.prompter-full .head b { color: var(--working); }
+.prompter-full .say { font-size: clamp(32px, 5vw, 60px); line-height: 1.4; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.prompter-full .next { font-size: clamp(18px, 2.2vw, 26px); color: var(--faint); }
+.prompter-full .close { position: absolute; top: 16px; right: 16px; }
+.prompter-full .since svg { width: 18px; height: 18px; }
+.prompter-full .since { display: inline-flex; align-items: center; gap: 6px; }
 .demo-runs { width: 100%; border-collapse: collapse; font-size: 13px; }
 .demo-runs th { text-align: left; font-weight: 600; color: var(--faint); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .demo-runs td { padding: 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
@@ -704,6 +723,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <main id="main" aria-busy="true"><div class="sk sk-line" style="width: 90px"></div><div class="sk sk-title"></div><div class="sk sk-line" style="width: 70%"></div><div class="sk sk-line" style="width: 48%"></div><div class="sk-board"><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div><div class="sk-lane"></div><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div></div></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
+<div class="prompter-full" id="prompter-full" hidden role="dialog" aria-label="全屏提词"></div>
 <div class="modal-back" id="attention-list" hidden role="dialog" aria-modal="true" aria-label="需要你处理"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
@@ -1628,6 +1648,41 @@ function demoProgress(t) {
   return [el('span', null, step), ' ', since, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null];
 }
 
+// 提词：这一步的讲解（没写就用这一步做什么）、下一步预告
+function cueOf(t) {
+  const s = t.demoStep;
+  if (!s) return { head: '准备中', say: '马上开始第 1 步', next: '' };
+  return { head: `第 ${s.n}/${s.total} 步 · ${s.text}`, say: s.cue?.narration || s.text, next: s.cue?.next || '' };
+}
+function runSince(t) {
+  const run = t.runs?.[t.runs.length - 1];
+  if (!run) return null;
+  const n = el('span', { class: 'since', title: '已演示时长', 'data-since': run.startedAt }, icon('clock'), el('span'));
+  tickSince(n);
+  return n;
+}
+let prompterFull = null; // 全屏提词的演示卡编号
+function prompter(t) {
+  const c = cueOf(t);
+  return el('div', { class: 'prompter', onclick: (e) => e.stopPropagation() },
+    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
+    el('div', { class: 'say' }, c.say),
+    c.next ? el('div', { class: 'next' }, `下一步：${c.next}`) : null,
+    el('button', { class: 'btn sm full', onclick: (e) => { e.stopPropagation(); prompterFull = t.id; renderPrompterFull(); } }, '全屏提词'));
+}
+function renderPrompterFull() {
+  const box = document.getElementById('prompter-full');
+  const t = prompterFull && data?.state.tasks.find((x) => x.id === prompterFull);
+  if (!t || t.status !== 'demoing') { prompterFull = null; box.hidden = true; box.replaceChildren(); return; }
+  const c = cueOf(t);
+  fill(box,
+    el('button', { class: 'btn close', onclick: () => { prompterFull = null; renderPrompterFull(); } }, '退出全屏（Esc）'),
+    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
+    el('div', { class: 'say' }, c.say),
+    c.next ? el('div', { class: 'next' }, `下一步：${c.next}`) : null);
+  box.hidden = false;
+}
+
 function demoRow(t) {
   const [label, color] = DEMO_STATUS[t.status] || [t.status, 'pending'];
   const runs = t.runs || [];
@@ -1647,7 +1702,7 @@ function demoRow(t) {
         last ? el('span', null, `上次 ${fmtTime(last.startedAt)} ${RUN_OUTCOME[last.outcome] || '进行中'}`) : null,
         t.assignTo && t.status === 'ready' ? el('span', null, `指派 ${agentName(t.assignTo)}`) : null)),
     el('div', null, demoButton(t)),
-    progress ? el('div', { class: 'step' }, progress) : null,
+    t.status === 'demoing' ? prompter(t) : progress ? el('div', { class: 'step' }, progress) : null,
     demoError?.id === t.id ? el('div', { class: 'step hint' }, demoError.message) : null);
 }
 
@@ -1658,7 +1713,7 @@ function renderDemoBanner() {
   fill(box,
     el('b', null, t.status === 'queued' ? `等待 worker 开始演示：${t.title}` : `演示中：${t.title}`),
     el('span', null, '派发已暂停'),
-    t.status === 'demoing' ? el('span', { class: 'step' }, demoProgress(t)) : null,
+    t.status === 'demoing' ? el('span', { class: 'step' }, t.demoStep ? `第 ${t.demoStep.n}/${t.demoStep.total} 步：${cueOf(t).say}` : '准备中') : null,
     el('button', { class: 'btn warn sm', onclick: (e) => { e.stopPropagation(); demoAction('stop', t); } }, '停止演示'));
   box.hidden = false;
 }
@@ -1667,7 +1722,8 @@ function demoDrawerBody(t) {
   const runs = (t.runs || []).slice().reverse();
   const progress = demoProgress(t);
   return [
-    el('div', { class: 'prompt' }, demoButton(t), progress ? el('span', { class: 'hint' }, progress) : null),
+    el('div', { class: 'prompt' }, demoButton(t), progress && t.status !== 'demoing' ? el('span', { class: 'hint' }, progress) : null),
+    t.status === 'demoing' ? prompter(t) : null,
     demoError?.id === t.id ? el('p', { class: 'hint' }, demoError.message) : null,
     t.status === 'ready' ? assignBox(t) : null,
     (t.status === 'demoing' || t.status === 'wrapping') && t.assignee ? reclaimBox(t) : null,
@@ -2201,6 +2257,7 @@ function render() {
   if (!data) return;
   renderNeeds();
   renderDemoBanner();
+  renderPrompterFull();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
   renderWorkers();
   renderJobs();
@@ -2433,6 +2490,7 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (prompterFull) { prompterFull = null; renderPrompterFull(); return; }
   if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }

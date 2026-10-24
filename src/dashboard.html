@@ -229,6 +229,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 .banner.stale { --c: var(--asking); }
 .needs { --c: var(--asking); }
 .banner.demo:not([hidden]) { display: flex; }
+.banner.demo::before { content: ""; width: 10px; height: 10px; left: 20px; top: 50%; margin-top: -5px; animation: pulse 2s ease-out infinite;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--working) 55%, transparent); }
 .banner.demo { --c: var(--working); flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .banner.demo .step { color: var(--muted); flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -255,6 +257,12 @@ input[type="checkbox"]:not(.switch):checked::after {
 .prompter .say { margin: 4px 0 2px; font-size: 14.5px; line-height: 1.55; color: var(--ink);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .prompter .pop { position: absolute; top: 8px; right: 10px; }
+/* 步骤进度：每步一格，走过的实色，当前步闪 */
+.steps-bar { display: flex; gap: 3px; margin-top: 10px; }
+.steps-bar span { flex: 1; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--faint) 22%, transparent); }
+.steps-bar span.done { background: var(--working); }
+.steps-bar span.now { background: color-mix(in srgb, var(--working) 55%, transparent); animation: sheen 1.6s linear infinite; background-image: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); background-size: 200% 100%; }
+.steps-bar span.slow { background: var(--rework); }
 .prompter .since { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
 .prompter .since svg { flex: none; width: 12px; height: 12px; }
 /* 弹出的提词小窗（?prompter=T12）：整个窗口就是一条字幕，放在屏幕最下方 */
@@ -1704,11 +1712,21 @@ function openPrompter(t) {
   const win = window.open(`/?prompter=${encodeURIComponent(t.id)}`, 'ateam-prompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
   win?.focus();
 }
+function stepsBar(t) {
+  const s = t.demoStep;
+  if (!s?.total) return null;
+  const slow = new Set(t.runs?.[t.runs.length - 1]?.slowSteps || []);
+  return el('div', { class: 'steps-bar', title: `第 ${s.n}/${s.total} 步` }, Array.from({ length: s.total }, (_, i) => {
+    const n = i + 1;
+    return el('span', { class: slow.has(n) && n <= s.n ? 'slow' : n < s.n ? 'done' : n === s.n ? 'now' : '' });
+  }));
+}
 function prompter(t) {
   const c = cueOf(t);
   return el('div', { class: 'prompter', onclick: (e) => e.stopPropagation() },
     el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '这一步照操作记录没走通，worker 在自己摸索，会停顿几秒' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
     el('div', { class: 'say' }, c.say),
+    stepsBar(t),
     el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, '弹出提词窗'));
 }
 // 小窗里的内容：演播没在进行时也留着窗口，显示等待；下次开始自动接上
@@ -1745,7 +1763,7 @@ function demoRow(t) {
   },
     el('div', null,
       el('div', { class: 't' }, el('span', { class: 'key' }, t.id), t.title,
-        el('span', { class: `lozenge c-${color}` }, t.status === 'demoing' ? `${modeWord(t)}中` : label), rehearsalTag(t)),
+        el('span', { class: `lozenge c-${color}` }, t.status === 'demoing' ? `${modeWord(t)}中` : label), t.status === 'ready' ? rehearsalTag(t) : null),
       el('div', { class: 'meta' },
         el('code', null, t.script),
         el('span', null, `已运行 ${runs.length} 次`),
@@ -1760,11 +1778,13 @@ function demoRow(t) {
 function renderDemoBanner() {
   const box = document.getElementById('demo-banner');
   const t = data && frozenDemo();
-  if (!t) { box.hidden = true; box.replaceChildren(); return; }
+  // 正在看这个演播需求时，卡上已经有完整的进度和停止按钮，不再重复横幅
+  if (!t || (view.job === t.jobId && !view.report)) { box.hidden = true; box.replaceChildren(); return; }
   fill(box,
     el('b', null, t.status === 'queued' ? `等待 worker 开始${modeWord(t)}：${t.title}` : `${modeWord(t)}中：${t.title}`),
     el('span', null, '派发已暂停'),
     t.status === 'demoing' ? el('span', { class: 'step' }, t.demoStep ? `第 ${t.demoStep.n}/${t.demoStep.total} 步：${cueOf(t).say}` : '准备中') : null,
+    el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); view = { job: t.jobId, task: null, report: false }; saveView(); render(); } }, '查看'),
     el('button', { class: 'btn warn sm', onclick: (e) => { e.stopPropagation(); demoAction('stop', t); } }, `停止${modeWord(t)}`));
   box.hidden = false;
 }

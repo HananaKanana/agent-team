@@ -194,10 +194,10 @@ git commit -m "dashboard: demo jobs — demo card list, start/stop, live step, f
 **Files:**
 - Modify: `skills/ateam-lead/SKILL.md`、`skills/ateam-worker/SKILL.md`、`docs/manual-checklist.md`
 
-- [ ] **Step 1: ateam-lead**：新增「演示卡」一节，按 spec 5.10：先和用户定步骤、每步停留、每份数据保留还是清理；按 spec 5.2 的格式写 `docs/demo/<名字>.md` 并自己提交；`ateam job new --demo`、`ateam demo add`；用户要改演示内容时改前三段并提交，演示中、收尾中不要改；事件表加 `demo_queued` `demo_started` `demo_ended` `demo_stopped` `demo_saved` `demo_unclaimed` `demo_interrupted`，均为了解即可。命令列表加 `job new --demo`、`demo add`。
-- [ ] **Step 2: ateam-worker**：主循环表加 `# 演示`、`# 演示已叫停`、`# 演示收尾` 三行；第 3 节「按角色的做法」test 条目后补一句：领到演示卡时按 `# 演示` 里的规则做，演示中不提问、不提交，只用 `demo step` / `demo end` / `demo save`。
-- [ ] **Step 3: 手工核对清单**：在 `docs/manual-checklist.md` 末尾加「演示卡」一节，给用户或测试任务逐条核对：开始按钮置灰及提示、开始后普通 worker 领不到卡、看板当前步实时更新、叫停后 worker 停在当前页且横幅消失、跑完后清理和经验提交、经验段以外的改动被拒、再次演示读到了上次的经验、2 分钟无人领自动撤回。
-- [ ] **Step 4: Commit**
+- [x] **Step 1: ateam-lead**：新增「演示卡」一节，按 spec 5.10：先和用户定步骤、每步停留、每份数据保留还是清理；按 spec 5.2 的格式写 `docs/demo/<名字>.md` 并自己提交；`ateam job new --demo`、`ateam demo add`；用户要改演示内容时改前三段并提交，演示中、收尾中不要改；事件表加 `demo_queued` `demo_started` `demo_ended` `demo_stopped` `demo_saved` `demo_unclaimed` `demo_interrupted`，均为了解即可。命令列表加 `job new --demo`、`demo add`。
+- [x] **Step 2: ateam-worker**：主循环表加 `# 演示`、`# 演示已叫停`、`# 演示收尾` 三行；第 3 节「按角色的做法」test 条目后补一句：领到演示卡时按 `# 演示` 里的规则做，演示中不提问、不提交，只用 `demo step` / `demo end` / `demo save`。
+- [x] **Step 3: 手工核对清单**：在 `docs/manual-checklist.md` 末尾加「演示卡」一节，给用户或测试任务逐条核对：开始按钮置灰及提示、开始后普通 worker 领不到卡、看板当前步实时更新、叫停后 worker 停在当前页且横幅消失、跑完后清理和经验提交、经验段以外的改动被拒、再次演示读到了上次的经验、2 分钟无人领自动撤回。
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills docs/manual-checklist.md docs/superpowers/plans/2026-10-24-demo-cards.md

@@ -1859,9 +1859,9 @@ function demoRow(t) {
     demoError?.id === t.id ? el('div', { class: 'step hint' }, demoError.message) : null);
 }
 
-// 演播前把 Chrome 窗口调到预演时的视口。Chrome 窗口左右没有边框，顶上标签栏 + 地址栏 + WorkBuddy 调试提示条
-// 在用户这台 Mac 上量得共 143 高，所以窗口设成 宽 × (高 + 143) 视口就对上了
-const CHROME_FRAME_H = 143;
+// 演播前把 Chrome 窗口调到预演时的视口。Chrome 窗口左右没有边框，顶上标签栏 + 地址栏
+// 在用户这台 Mac 上量得共 87 高（不算 WorkBuddy 调试提示条），所以窗口设成 宽 × (高 + 87) 视口就对上了
+const CHROME_FRAME_H = 87;
 const DEFAULT_VIEWPORT = '1600x800';
 let showVpManual = false;
 function viewportTip(t) {
@@ -1871,12 +1871,12 @@ function viewportTip(t) {
   return el('div', { class: 'vp-tip' },
     el('div', { class: 'hint' }, (recorded
       ? `演播前浏览器视口要和预演时一样（${vp}），否则点击位置会偏。`
-      : `预演前把浏览器视口调成 ${vp}（固定用这个尺寸，以后演播照样调回来）。`) + `先让 worker 连上浏览器（页面顶上出现「WorkBuddy 已开始调试此浏览器」），把演播用的 Chrome 窗口放在最前面，在终端运行：`),
+      : `预演前把浏览器视口调成 ${vp}（固定用这个尺寸，以后演播照样调回来）。`) + `把演播用的 Chrome 窗口放在最前面，在终端运行：`),
     promptBlock(`osascript -e 'tell application "Google Chrome" to set bounds of front window to {0, 30, ${w}, ${30 + h + CHROME_FRAME_H}}'`, render),
     el('button', { class: 'linkish', onclick: (e) => { e.stopPropagation(); showVpManual = !showVpManual; render(); } },
       showVpManual ? '收起' : '调完还对不上？'),
     showVpManual ? el('ol', { class: 'hint vp-manual' },
-      el('li', null, `上面的命令按 Chrome 顶部（标签栏、地址栏、调试提示条）共 ${CHROME_FRAME_H} 高算的；显示了书签栏、没出现调试提示条、或网页缩放不是 100%（按 Cmd+0 恢复）都会偏。`),
+      el('li', null, `上面的命令按 Chrome 顶部（标签栏、地址栏）共 ${CHROME_FRAME_H} 高算的；显示了书签栏、出现了「WorkBuddy 已开始调试此浏览器」提示条、或网页缩放不是 100%（按 Cmd+0 恢复）都会偏。`),
       el('li', null, `核对：在页面上按 Cmd+Option+J，手打 innerWidth+'x'+innerHeight 回车，应该是 '${vp}'。不是的话关掉控制台，把看到的数字填进下面命令再运行，它会按差值精确调整：`,
         promptBlock(recorded ? `ateam demo viewport ${t.id} --now 看到的数字` : `ateam demo viewport ${vp} --now 看到的数字`, render))) : null);
 }

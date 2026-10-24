@@ -40,10 +40,10 @@
 - `approve`：普通卡通过后，所有 `kind === 'demo'` 且有 `rehearsedAt` 的卡设 `mayChange = true`（已为 true 不重复写）。
 - 所有面向人的文案按 Global Constraints 改名。
 
-- [ ] **Step 1:** 实现上述改动；`closeRun` 的 label 改为「预演/演播 跑完 / 被叫停 / 中断」按 run.mode 区分。
-- [ ] **Step 2:** scratchpad 探测（`createStore` 驱动）：未预演 `startDemo(id,'show')` 抛错；预演跑完后 `rehearsedAt` 有值、`mayChange` false；approve 普通卡后 `mayChange` true；演播 `demoStep(..., true)` 后 run.slowSteps 含该步；`demoEnd(..., true)` → outcome interrupted、mayChange true；预演叫停后 `rehearsedAt` 不变；老卡（删掉 rehearsedAt）只能预演。
+- [x] **Step 1:** 实现上述改动；`closeRun` 的 label 改为「预演/演播 跑完 / 被叫停 / 中断」按 run.mode 区分。
+- [x] **Step 2:** scratchpad 探测（`createStore` 驱动）：未预演 `startDemo(id,'show')` 抛错；预演跑完后 `rehearsedAt` 有值、`mayChange` false；approve 普通卡后 `mayChange` true；演播 `demoStep(..., true)` 后 run.slowSteps 含该步；`demoEnd(..., true)` → outcome interrupted、mayChange true；预演叫停后 `rehearsedAt` 不变；老卡（删掉 rehearsedAt）只能预演。
   Run: `node --check src/store.js && node <scratchpad>/probe-rehearsal-store.mjs` → `ALL PASS`，删除脚本。
-- [ ] **Step 3: Commit** `store: rehearsal vs show runs, rehearsedAt/mayChange, slow steps, stuck end`
+- [x] **Step 3: Commit** `store: rehearsal vs show runs, rehearsedAt/mayChange, slow steps, stuck end`
 
 ### Task 2: 脚本解析与 server
 

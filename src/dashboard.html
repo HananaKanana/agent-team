@@ -638,6 +638,11 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 
 /* 看板：七列等宽，铺满剩余高度，列内各自滚动（参考 Jira） */
 .board { flex: 1 0 0; min-height: 420px; display: grid; grid-template-columns: repeat(7, minmax(188px, 1fr)); gap: 8px; overflow-x: auto; }
+/* 窄屏时七列放不下要横向滚动；Mac 默认滚动条不显示，用户不知道右边还有列。给看板一条常显的滚动条 */
+.board::-webkit-scrollbar { height: 10px; }
+.board::-webkit-scrollbar-track { background: transparent; }
+.board::-webkit-scrollbar-thumb { border-radius: 5px; border: 2px solid var(--bg); background: color-mix(in srgb, var(--faint) 55%, transparent); }
+.board::-webkit-scrollbar-thumb:hover { background: var(--faint); }
 .lane { background: var(--sunken); border-radius: 6px; display: flex; flex-direction: column; min-height: 0; }
 .lane h3 { display: flex; align-items: center; gap: 7px; margin: 0; padding: 10px 12px 8px; flex: none; font-size: 12px; font-weight: 600; color: var(--muted); }
 .lane h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }

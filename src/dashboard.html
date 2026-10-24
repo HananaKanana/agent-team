@@ -294,7 +294,12 @@ input[type="checkbox"]:not(.switch):checked::after {
 .prompter .head b { color: var(--working); font-weight: 650; }
 .prompter .say { margin: 4px 0 2px; font-size: 14.5px; line-height: 1.55; color: var(--ink);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.prompter .pop { position: absolute; top: 8px; right: 10px; }
+.prompter .pop {
+  position: absolute; top: 8px; right: 8px; gap: 5px; height: 26px; padding: 0 9px;
+  background: transparent; box-shadow: none; color: var(--working); font-size: 12.5px; font-weight: 600;
+}
+.prompter .pop svg { width: 14px; height: 14px; }
+.prompter .pop:hover { background: color-mix(in srgb, var(--working) 12%, transparent); }
 /* 步骤进度：每步一格，走过的实色，当前步闪 */
 .steps-bar { display: flex; gap: 3px; margin-top: 10px; }
 .steps-bar span { flex: 1; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--faint) 22%, transparent); }
@@ -770,6 +775,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <symbol id="i-expand" viewBox="0 0 16 16"><path d="M13.5 2.5v11M10.5 8h-8M5.5 5L2.5 8l3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-chev-down" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-tick" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-popout" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L8 8M12 9.5v3a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l2.5-7.5A2 2 0 017.4 4h9.2a2 2 0 011.9 1.5L21 13v5a2 2 0 01-2 2H5a2 2 0 01-2-2z M3 13h5l1.5 2.5h5L16 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 12.3l2.7 2.7L16.2 9.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -1790,7 +1796,7 @@ function prompter(t) {
     el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '这一步照操作记录没走通，worker 在自己摸索，会停顿几秒' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
     el('div', { class: 'say' }, c.say),
     stepsBar(t),
-    el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, '弹出提词窗'));
+    el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方，可以拖到第二块屏幕', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, icon('popout'), '弹出提词'));
 }
 // 小窗里的内容：演播没在进行时也留着窗口，显示等待；下次开始自动接上
 function renderPrompterStrip() {

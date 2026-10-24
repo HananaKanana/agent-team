@@ -128,11 +128,11 @@ async function groupByRepo(root, paths) {
 }
 
 // 在一个仓库里只提交 paths 内的改动，返回短提交号或 null（没有改动）
-async function commitInRepo(top, paths, message) {
+async function commitInRepo(top, paths, message, exclude = []) {
   const valid = [];
   for (const p of paths) {
     try {
-      await git(top, ['add', '-A', '--', p]);
+      await git(top, ['add', '-A', '--', p, ...exclude]);
       valid.push(p);
     } catch (err) {
       // 找不到文件不一定是没改动：worker 用 git rm 删掉的路径，磁盘和暂存区里都没有了，git add 会报
@@ -149,7 +149,7 @@ async function commitInRepo(top, paths, message) {
   const changed = [];
   for (const p of valid) {
     try {
-      await git(top, ['diff', '--cached', '--quiet', '--', p]);
+      await git(top, ['diff', '--cached', '--quiet', '--', p, ...exclude]);
     } catch (err) {
       if (err.code !== 1) throw gitError('git diff', err);
       changed.push(p);
@@ -158,7 +158,7 @@ async function commitInRepo(top, paths, message) {
   if (changed.length === 0) return null;
 
   try {
-    await git(top, ['commit', '-m', message, '--', ...changed]);
+    await git(top, ['commit', '-m', message, '--', ...changed, ...exclude]);
     const { stdout } = await git(top, ['rev-parse', '--short', 'HEAD']);
     return stdout.trim();
   } catch (err) {
@@ -168,11 +168,16 @@ async function commitInRepo(top, paths, message) {
 
 // 只提交 paths 内的改动，每个涉及的仓库各提交一次。
 // 返回 { commits: ['a1b2c3d'] }（单仓库）或 { commits: ['api@a1b2c3d', ...] }（多仓库）；都没有改动时返回 { nothing: true }。
+// worker 的提交永远不带上 .ateam/：用户可能把 .ateam/ 提交进仓库，任务路径写得宽（比如 .）时
+// 会把看板状态一起带进 worker 的提交
 export async function commitPaths(root, paths, message) {
   const groups = await groupByRepo(root, paths);
+  const realRoot = realpathSync(root);
   const commits = [];
   for (const [top, { label, paths: repoPaths }] of groups) {
-    const sha = await commitInRepo(top, repoPaths, message);
+    const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
+    const exclude = rel && !rel.startsWith('..') ? [`:(exclude)${rel}`] : [];
+    const sha = await commitInRepo(top, repoPaths, message, exclude);
     if (sha) commits.push(label ? `${label}@${sha}` : sha);
   }
   return commits.length ? { commits } : { nothing: true };
@@ -182,9 +187,13 @@ export async function commitPaths(root, paths, message) {
 // 用作 worker 的「活动心跳」：worker 在写代码，文件就在变；token 用完窗口停了，文件也就不变了。
 export async function latestChangeTime(root, paths) {
   const groups = await groupByRepo(root, paths);
+  const realRoot = realpathSync(root);
   let latest = null;
   for (const [top, { paths: repoPaths }] of groups) {
-    const { stdout } = await run(top, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...repoPaths]);
+    // 看板状态文件一直在变，不算 worker 的活动
+    const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
+    const exclude = rel && !rel.startsWith('..') ? [`:(exclude)${rel}`] : [];
+    const { stdout } = await run(top, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...repoPaths, ...exclude]);
     const entries = stdout.split('\0');
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];

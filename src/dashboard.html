@@ -227,6 +227,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 }
 .banner[hidden], .needs[hidden] { display: none; }
 .banner.stale { --c: var(--asking); }
+/* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
+.needs::before { top: 17px; }
 .needs { --c: var(--asking); }
 .banner.demo:not([hidden]) { display: flex; }
 .banner.demo::before { content: ""; width: 10px; height: 10px; left: 20px; top: 50%; margin-top: -5px; animation: pulse 2s ease-out infinite;
@@ -398,7 +400,7 @@ html.prompter-only .prompter-strip > .say { flex: 0 1 auto; min-height: 0; displ
   display: block; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 4px;
   padding: 10px 64px 10px 12px; user-select: all; white-space: pre-wrap; line-height: 1.6; font-size: 12.5px;
 }
-.pblock .btn { position: absolute; top: 6px; right: 6px; }
+.pblock .btn { position: absolute; top: 7px; right: 7px; }
 /* 按钮：统一高度；primary 实色，ghost 无边框 */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -728,10 +730,10 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline { list-style: none; margin: 0; padding: 0; }
 .timeline li { position: relative; padding: 0 0 14px 26px; }
 .timeline li::before {
-  content: ""; position: absolute; left: 4px; top: 6px; width: 10px; height: 10px;
+  content: ""; position: absolute; left: 6px; top: 4px; width: 10px; height: 10px;
   border-radius: 50%; background: var(--surface); border: 2px solid var(--c, var(--pending));
 }
-.timeline li::after { content: ""; position: absolute; left: 10px; top: 20px; bottom: 0; width: 2px; background: var(--line-soft); }
+.timeline li::after { content: ""; position: absolute; left: 10px; top: 16px; bottom: 0; width: 2px; background: var(--line-soft); }
 .timeline li:last-child::after { display: none; }
 .timeline .when { color: var(--faint); font-size: 12px; }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }

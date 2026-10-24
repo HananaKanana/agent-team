@@ -536,8 +536,11 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 @media (max-width: 1180px) {
   .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .job-side { min-height: 0; }
-  .job-side .inner { position: static; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px 28px; padding: 12px 16px; }
-  .job-side .activity { grid-column: 1 / -1; }
+  /* 高度由内容撑开（不能跟宽屏一样 height:100%，Safari 会按旧高度算，把下面裁掉）；
+     数字和角色进度能并排就并排，放不下角色进度折到下一行 */
+  .job-side .inner, .job-side.bare .inner { position: static; height: auto; overflow: visible; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 12px 16px; }
+  .job-side .roles { flex: 1 1 260px; }
+  .job-side .activity { flex: 1 1 100%; }
 }
 .lozenge {
   display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 3px; white-space: nowrap;

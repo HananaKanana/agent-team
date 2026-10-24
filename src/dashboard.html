@@ -240,7 +240,21 @@ input[type="checkbox"]:not(.switch):checked::after {
 .demo-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 20px; align-items: start; }
 .demo-layout .demo-list { max-width: none; }
 @media (max-width: 1100px) { .demo-layout { grid-template-columns: minmax(0, 1fr); } }
-.demo-layout .prompter .say { font-size: 19px; font-weight: 600; -webkit-line-clamp: 3; }
+.demo-layout .prompter .say { font-size: 26px; line-height: 1.45; font-weight: 650; margin: 10px 0 4px; -webkit-line-clamp: 4; }
+.demo-layout .prompter { padding: 16px 18px 14px; }
+/* 左栏卡片下面的面板：下一步、本步怎么操作、运行记录 */
+.demo-left { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.stage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1300px) { .stage-grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-card); padding: 12px 16px 14px; min-width: 0; }
+.panel h5 { margin: 0 0 8px; font-size: 12.5px; font-weight: 650; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.panel h5 .hint { margin-left: auto; font-weight: 400; }
+.panel .big { font-size: 15px; font-weight: 600; line-height: 1.55; color: var(--ink); }
+.panel .say { margin-top: 6px; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+.panel .md { font-size: 13px; line-height: 1.65; }
+.panel .md > :first-child { margin-top: 0; }
+.panel .md ul { padding-left: 18px; margin: 4px 0; }
+.panel .empty { font-size: 13px; color: var(--faint); }
 .outline { position: sticky; top: 0; background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; max-height: calc(100vh - 190px); }
 .outline h4 { margin: 0; padding: 12px 14px 10px; font-size: 13px; font-weight: 650; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; }
 .outline h4 .hint { margin-left: auto; font-weight: 400; }
@@ -1551,7 +1565,9 @@ function renderMain() {
     const focus = tasks.find((t) => ['queued', 'demoing', 'wrapping'].includes(t.status)) || tasks[0];
     const outlineScroll = main.querySelector('.outline ol')?.scrollTop;
     fill(main, head, tasks.length
-      ? el('div', { class: 'demo-layout' }, el('div', { class: 'demo-list' }, tasks.map(demoRow)), stepOutline(focus))
+      ? el('div', { class: 'demo-layout' },
+        el('div', { class: 'demo-left' }, el('div', { class: 'demo-list' }, tasks.map(demoRow)), stagePanels(focus)),
+        stepOutline(focus))
       : emptyState('split', '还没有演播卡', '跟 leader 说要演播什么，它会和你定好步骤、写好脚本，再建演播卡。'),
     cancelledSection(cancelled));
     // 重画后保持大纲的滚动位置；当前步换了就把它滚到可见处
@@ -1846,6 +1862,47 @@ function demoDrawerBody(t) {
 // 操作记录：脚本里 worker 写的那一段，打开详情时读一次（脚本有新提交时重读）
 const opsCache = new Map(); // taskId -> { key, html | error }
 let lastOutlineStep = null;
+// 操作记录里某一步的那一条（「### 3. ...」到下一个「### 」之前）
+function opsForStep(raw, n) {
+  const parts = String(raw || '').split(/^(?=###\s)/m);
+  return parts.find((p) => new RegExp(`^###\\s*${n}[.、\\s]`).test(p)) || '';
+}
+// 左栏卡片下面：运行中是「下一步」「这一步怎么操作」；没在运行是「操作记录概况」。最下面是运行记录
+function stagePanels(t) {
+  const sc = loadScript(t);
+  const steps = sc?.steps || [];
+  const running = t.status === 'demoing' && t.demoStep;
+  const cur = running ? t.demoStep.n : 0;
+  const next = steps.find((st) => st.n === cur + 1);
+  const opsHtml = (md) => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(md); return d; }; // renderMarkdown 先转义了 HTML
+  let top;
+  if (running) {
+    const op = opsForStep(sc?.raw, cur).replace(/^###[^\n]*\n?/, '').trim();
+    top = el('div', { class: 'stage-grid' },
+      el('section', { class: 'panel' }, el('h5', null, '下一步', next ? el('span', { class: 'hint' }, `第 ${next.n} 步`) : null),
+        next ? [el('div', { class: 'big' }, next.text), next.narration ? el('div', { class: 'say' }, `讲解：${next.narration}`) : null]
+          : el('div', { class: 'big' }, '这是最后一步，走完就结束了')),
+      el('section', { class: 'panel' }, el('h5', null, '这一步怎么操作', el('span', { class: 'hint' }, '来自操作记录')),
+        op ? opsHtml(op) : el('div', { class: 'empty' }, modeWord(t) === '预演' ? 'worker 预演走通这一步后会写在这里' : '操作记录里没有这一步，worker 在自己摸索')));
+  } else {
+    const written = (sc?.raw?.match(/^###\s*\d+/gm) || []).length;
+    top = el('section', { class: 'panel' },
+      el('h5', null, '操作记录', el('span', { class: 'hint' }, steps.length ? `已写 ${written} / ${steps.length} 步` : '')),
+      !sc ? el('div', { class: 'empty' }, '读取中…') : written ? opsHtml(sc.raw) : el('div', { class: 'empty' }, '还没有操作记录。点「开始预演」，worker 会一步步走通并写在这里。'));
+  }
+  const runs = (t.runs || []).slice().reverse().slice(0, 5);
+  const history = el('section', { class: 'panel' },
+    el('h5', null, '运行记录', el('span', { class: 'hint' }, `共 ${(t.runs || []).length} 次${(t.runs || []).length > 5 ? '，显示最近 5 次' : ''}`)),
+    runs.length ? el('table', { class: 'demo-runs' },
+      el('thead', null, el('tr', null, ['开始', '类型', '执行者', '结果', '说明'].map((h) => el('th', null, h)))),
+      el('tbody', null, runs.map((r) => el('tr', null,
+        el('td', null, fmtTime(r.startedAt)),
+        el('td', null, RUN_MODE[r.mode] || '演播'),
+        el('td', null, agentName(r.by)),
+        el('td', { class: r.outcome ? `r-${r.outcome}` : '' }, RUN_OUTCOME[r.outcome] || '进行中'),
+        el('td', { class: 'note' }, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null))))) : el('div', { class: 'empty' }, '还没运行过'));
+  return [top, history];
+}
 const opsKey = (t) => `${t.commits.length}:${(t.runs || []).length}`;
 // 读脚本（操作记录 + 步骤列表），读完重画；返回缓存，还没读到时返回 null
 function loadScript(t) {
@@ -1889,7 +1946,7 @@ function opsBox(t) {
     opsCache.set(t.id, { key, loading: true });
     fetch(`/api/demo/ops?id=${encodeURIComponent(t.id)}`).then((r) => r.json()).then((out) => {
       const ops = (out.ops || '').replace(/<!--[\s\S]*?-->/g, '').trim();
-      opsCache.set(t.id, { key, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], error: out.ok ? out.error : out.message });
+      opsCache.set(t.id, { key, raw: ops, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], error: out.ok ? out.error : out.message });
     }).catch(() => opsCache.set(t.id, { key, steps: [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); });
   }
   return box;

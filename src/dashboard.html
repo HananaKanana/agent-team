@@ -232,6 +232,13 @@ input[type="checkbox"]:not(.switch):checked::after {
 .banner.demo::before { content: ""; width: 10px; height: 10px; left: 20px; top: 50%; margin-top: -5px; animation: pulse 2s ease-out infinite;
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--working) 55%, transparent); }
 .banner.demo { --c: var(--working); flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+/* 页头「预演中 · 派发已暂停」：在哪个页面都能看到当前处于预演 / 演播模式 */
+.mode-pill { appearance: none; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px 0 10px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); background: color-mix(in srgb, var(--working) 12%, var(--surface));
+  color: var(--working); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.mode-pill[hidden] { display: none; }
+.mode-pill:hover { background: color-mix(in srgb, var(--working) 20%, var(--surface)); }
+.mode-pill .sub { font-weight: 400; opacity: .85; }
 .banner.demo .step { color: var(--muted); flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 演播需求：演播卡列表，每行一张卡 */
@@ -787,6 +794,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>ateam 调度台</h1>
   <span class="vr"></span>
   <div class="workers" id="workers"></div>
+  <button class="mode-pill" id="mode-pill" type="button" hidden></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn" id="notify-btn" type="button" hidden title="允许浏览器弹通知：有需求待验收、任务缺 worker、leader 掉线时提醒你">开启通知</button>
   <button class="btn ghost helper-btn" id="helper-btn" type="button">使用说明</button>
@@ -1859,6 +1867,19 @@ function renderDemoBanner() {
   box.hidden = false;
 }
 
+function renderModePill() {
+  const btn = document.getElementById('mode-pill');
+  const t = data && frozenDemo();
+  if (!t) { btn.hidden = true; btn.replaceChildren(); return; }
+  fill(btn,
+    el('span', { class: 'pulse' }),
+    el('span', null, t.status === 'queued' ? `等待${modeWord(t)}` : `${modeWord(t)}中`),
+    el('span', { class: 'sub' }, '· 派发已暂停'));
+  btn.title = `${t.id} ${t.title}\n${modeWord(t)}期间不派新任务，${modeWord(t)}结束或叫停后自动恢复。点击查看`;
+  btn.onclick = (e) => { e.stopPropagation(); view = { job: t.jobId, task: null, report: false }; saveView(); render(); };
+  btn.hidden = false;
+}
+
 function demoDrawerBody(t) {
   const progress = demoProgress(t);
   return [
@@ -2480,6 +2501,7 @@ function render() {
   renderNeeds();
   if (PROMPTER_ONLY) { renderPrompterStrip(); return; }
   renderDemoBanner();
+  renderModePill();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
   renderWorkers();
   renderJobs();

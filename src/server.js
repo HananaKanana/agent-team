@@ -268,8 +268,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'GET /api/demo/ops': (_b, url) => {
       const task = store.getTask(url.searchParams.get('id') ?? '');
       if (task.kind !== 'demo') throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);
-      try { return { ops: opsSection(readFileSync(join(root, task.script), 'utf8')) }; } catch (err) {
-        return { ops: '', error: `读不到脚本文件 ${task.script}：${err.message}` };
+      // ops：worker 写的操作记录；steps：脚本的步骤列表（编号、做什么、讲解），看板右栏的步骤大纲用
+      try {
+        const text = readFileSync(join(root, task.script), 'utf8');
+        return { ops: opsSection(text), steps: parseSteps(text) };
+      } catch (err) {
+        return { ops: '', steps: [], error: `读不到脚本文件 ${task.script}：${err.message}` };
       }
     },
     'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),

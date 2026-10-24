@@ -236,6 +236,26 @@ input[type="checkbox"]:not(.switch):checked::after {
 
 /* 演播需求：演播卡列表，每行一张卡 */
 .demo-list { display: flex; flex-direction: column; gap: 8px; max-width: 960px; }
+/* 演播需求页：左边是卡和提词，右边是脚本的步骤大纲 */
+.demo-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 20px; align-items: start; }
+.demo-layout .demo-list { max-width: none; }
+@media (max-width: 1100px) { .demo-layout { grid-template-columns: minmax(0, 1fr); } }
+.demo-layout .prompter .say { font-size: 19px; font-weight: 600; -webkit-line-clamp: 3; }
+.outline { position: sticky; top: 0; background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; max-height: calc(100vh - 190px); }
+.outline h4 { margin: 0; padding: 12px 14px 10px; font-size: 13px; font-weight: 650; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 8px; }
+.outline h4 .hint { margin-left: auto; font-weight: 400; }
+.outline ol { position: relative; list-style: none; margin: 0; padding: 6px 0; overflow-y: auto; }
+.outline li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 7px 14px; font-size: 13px; line-height: 1.5; color: var(--ink); }
+.outline li .no { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--sunken); }
+.outline li.done { color: var(--faint); }
+.outline li.done .no { color: var(--on-color); background: color-mix(in srgb, var(--working) 55%, var(--surface)); }
+.outline li.slow .no { color: var(--on-color); background: var(--rework); }
+.outline li.now { background: color-mix(in srgb, var(--working) 9%, var(--raised)); box-shadow: inset 3px 0 0 var(--working); }
+.outline li.now .no { color: var(--on-color); background: var(--working); }
+.outline li.now .what { font-weight: 650; }
+.outline li .say { margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+.outline li.now .say { color: var(--ink); }
+.outline .empty { padding: 16px 14px; font-size: 13px; color: var(--faint); }
 .demo-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px;
   padding: 14px 16px; border: none; border-radius: 6px; text-align: left; cursor: pointer; width: 100%;
@@ -1527,10 +1547,20 @@ function renderMain() {
       (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null);
   if (job.demo) {
     main.removeAttribute('aria-busy');
+    // 一张卡时右边放它的步骤大纲；多张时放正在运行的那张（没有就第一张）
+    const focus = tasks.find((t) => ['queued', 'demoing', 'wrapping'].includes(t.status)) || tasks[0];
+    const outlineScroll = main.querySelector('.outline ol')?.scrollTop;
     fill(main, head, tasks.length
-      ? el('div', { class: 'demo-list' }, tasks.map(demoRow))
+      ? el('div', { class: 'demo-layout' }, el('div', { class: 'demo-list' }, tasks.map(demoRow)), stepOutline(focus))
       : emptyState('split', '还没有演播卡', '跟 leader 说要演播什么，它会和你定好步骤、写好脚本，再建演播卡。'),
     cancelledSection(cancelled));
+    // 重画后保持大纲的滚动位置；当前步换了就把它滚到可见处
+    const ol = main.querySelector('.outline ol');
+    if (ol) {
+      if (outlineScroll != null) ol.scrollTop = outlineScroll;
+      const now = ol.querySelector('li.now');
+      if (now && now.dataset.n !== lastOutlineStep) { ol.scrollTop = now.offsetTop - ol.clientHeight / 2 + now.offsetHeight / 2; lastOutlineStep = now.dataset.n; }
+    }
     return;
   }
   const st = reviewStats(tasks);
@@ -1815,8 +1845,37 @@ function demoDrawerBody(t) {
 
 // 操作记录：脚本里 worker 写的那一段，打开详情时读一次（脚本有新提交时重读）
 const opsCache = new Map(); // taskId -> { key, html | error }
+let lastOutlineStep = null;
+const opsKey = (t) => `${t.commits.length}:${(t.runs || []).length}`;
+// 读脚本（操作记录 + 步骤列表），读完重画；返回缓存，还没读到时返回 null
+function loadScript(t) {
+  const key = opsKey(t);
+  const hit = opsCache.get(t.id);
+  if (hit?.key === key && !hit.loading) return hit;
+  if (!hit?.loading || hit.key !== key) opsBox(t);
+  return null;
+}
+// 右栏：脚本步骤大纲。走过的灰、慢档的红、当前步高亮并展开讲解
+function stepOutline(t) {
+  const sc = loadScript(t);
+  const s = t.status === 'demoing' ? t.demoStep : null;
+  const run = t.runs?.[t.runs.length - 1];
+  const slow = new Set(run?.slowSteps || []);
+  const cur = s?.n ?? 0;
+  const head = el('h4', null, '脚本步骤', el('span', { class: 'hint' }, sc ? `共 ${sc.steps.length} 步` : ''));
+  if (!sc) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '读取中…'));
+  if (sc.error && !sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, sc.error));
+  if (!sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '脚本里没有找到「## 演示步骤」'));
+  return el('aside', { class: 'outline' }, head, el('ol', null, sc.steps.map((st) => {
+    const cls = [st.n < cur ? 'done' : '', st.n === cur ? 'now' : '', slow.has(st.n) && (cur ? st.n <= cur : true) ? 'slow' : ''].filter(Boolean).join(' ');
+    return el('li', { class: cls, 'data-n': st.n },
+      el('span', { class: 'no' }, st.n < cur && !slow.has(st.n) ? '✓' : st.n),
+      el('div', null, el('div', { class: 'what' }, st.text), st.narration && (st.n === cur || !cur) ? el('div', { class: 'say' }, st.narration) : null));
+  })));
+}
+
 function opsBox(t) {
-  const key = `${t.commits.length}:${(t.runs || []).length}`;
+  const key = opsKey(t);
   const box = el('div', { class: 'descbox md ops-box' });
   const hit = opsCache.get(t.id);
   if (hit?.key === key) {
@@ -1830,8 +1889,8 @@ function opsBox(t) {
     opsCache.set(t.id, { key, loading: true });
     fetch(`/api/demo/ops?id=${encodeURIComponent(t.id)}`).then((r) => r.json()).then((out) => {
       const ops = (out.ops || '').replace(/<!--[\s\S]*?-->/g, '').trim();
-      opsCache.set(t.id, { key, html: ops ? renderMarkdown(ops) : '', error: out.ok ? out.error : out.message });
-    }).catch(() => opsCache.set(t.id, { key, error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); });
+      opsCache.set(t.id, { key, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], error: out.ok ? out.error : out.message });
+    }).catch(() => opsCache.set(t.id, { key, steps: [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); });
   }
   return box;
 }

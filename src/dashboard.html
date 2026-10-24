@@ -282,6 +282,10 @@ html.prompter-only .prompter-strip {
 .demo-runs { width: 100%; border-collapse: collapse; font-size: 13px; }
 .demo-runs th { text-align: left; font-weight: 600; color: var(--faint); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .demo-runs td { padding: 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+/* 时间、类型、执行者、结果、操作记录这些短列不换行，只有说明列换行占满剩余宽度 */
+.demo-runs th, .demo-runs td { white-space: nowrap; }
+.demo-runs td.note { white-space: normal; width: 100%; min-width: 220px; line-height: 1.6; overflow-wrap: anywhere; }
+.demo-runs td.note .hint { margin-top: 2px; }
 .demo-runs td.r-done { color: var(--approved); font-weight: 600; }
 .demo-runs td.r-stopped { color: var(--asking); font-weight: 600; }
 .demo-runs td.r-interrupted { color: var(--rework); font-weight: 600; }
@@ -1782,7 +1786,7 @@ function demoDrawerBody(t) {
         el('td', null, RUN_MODE[r.mode] || '演播'),
         el('td', null, agentName(r.by)),
         el('td', { class: r.outcome ? `r-${r.outcome}` : '' }, RUN_OUTCOME[r.outcome] || '进行中'),
-        el('td', null, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null),
+        el('td', { class: 'note' }, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null),
         el('td', null, r.saved ? (r.commit ? el('code', null, r.commit) : '没有改动') : '—'))))) : el('p', { class: 'meta' }, '还没运行过'),
     el('h4', null, '操作记录'),
     opsBox(t),

@@ -137,7 +137,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function overlapsFor(task) {
     const before = ancestors(task.dependsOn);
     return state.tasks
-      .filter((t) => t.id !== task.id && !['approved', 'cancelled'].includes(t.status)
+      .filter((t) => t.id !== task.id && !isDemo(t) && !['approved', 'cancelled'].includes(t.status)
         && !before.has(t.id) && !ancestors(t.dependsOn).has(task.id)
         && pathsOverlap(task.paths, t.paths))
       .map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee, paths: t.paths }));
@@ -146,7 +146,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // ---------- 需求与任务 ----------
 
   // origin：可选，用户提需求时的原话，存了就不能改，审卡时一起对照
-  function createJob({ title, description = '', origin = '' } = {}) {
+  // demo：演示需求，里面只放演示卡（见「演示卡」一节）
+  function createJob({ title, description = '', origin = '', demo = false } = {}) {
     title = requireText(title, '需求标题');
     origin = String(origin ?? '').trim();
     state.seq.job += 1;
@@ -155,6 +156,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       id: `J${state.seq.job}`, title, description: description ?? '', origin,
       status: 'planning', report: null, createdAt: ts, updatedAt: ts,
     };
+    if (demo) job.demo = true;
     state.jobs.push(job);
     changed();
     return job;
@@ -180,6 +182,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function addTask({ jobId, title, role, paths, description = '', acceptance = [], dependsOn = [], top = false } = {}) {
     const job = getJob(jobId);
+    if (job.demo) throw new AteamError('INVALID', `需求 ${job.id} 是演示需求，里面只能放演示卡。请用 ateam demo add --job ${job.id} ...`);
     title = requireText(title, '任务标题');
     role = requireText(role, '角色（--role）');
     paths = cleanList(paths, '路径（--paths）');
@@ -206,6 +209,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function editTask(taskId, patch = {}) {
     const task = getTask(taskId);
+    if (isDemo(task)) return editDemo(task, patch);
     if (task.status !== 'pending' && task.status !== 'held') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有 pending 或 held 的任务可以修改。`);
     }
@@ -372,8 +376,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 只能指派给同角色、在线的 worker；只对还没开始的任务（待领取、已挂起）有意义。
   function assignTask(taskId, agentId) {
     const task = getTask(taskId);
-    if (task.status !== 'pending' && task.status !== 'held') {
-      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有待领取或已挂起的任务可以指派。`);
+    if (isDemo(task) ? task.status !== 'ready' : task.status !== 'pending' && task.status !== 'held') {
+      throw new AteamError('BAD_STATE', isDemo(task)
+        ? `演示卡 ${task.id} 当前状态是 ${task.status}，只有待演示时可以指派。`
+        : `任务 ${task.id} 当前状态是 ${task.status}，只有待领取或已挂起的任务可以指派。`);
     }
     agentId = String(agentId ?? '').trim();
     if (!agentId) {
@@ -457,6 +463,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
     if (agent.currentTask) {
       const task = getTask(agent.currentTask);
+      if (isDemo(task)) return demoNext(task);
       if (task.status !== 'working') return null; // asking / submitted：等答复或 review 结果
       // 规则 1：待送达的打回意见或答复
       if (task.pendingDelivery) {
@@ -473,6 +480,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // 规则 3：领取新任务，派发顺序见 dispatchOrder
     // 掉线前自己在做、还没被别人领走的任务，优先还给自己
     // 用户在看板上指派给别人的任务不领；指派给自己的排在最前（仅次于掉线前自己在做的）
+    // 用户点了「开始演示」的演示卡最先领；演示期间（冻结）不领普通任务
+    const demo = state.tasks.find((t) => isDemo(t) && t.status === 'queued' && sameRole(t.role, agent.role) && (!t.assignTo || t.assignTo === agent.id));
+    if (demo) return claimDemo(agent, demo);
+    if (demoFrozen()) return null;
+
     const own = (t) => t.handoff && t.prevAssignee === agent.id;
     const mine = (t) => t.assignTo === agent.id;
     const candidates = state.tasks
@@ -688,7 +700,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
           .filter((d) => d && d.status !== 'approved')
           .map((d) => ({ id: d.id, status: d.status })),
       }));
-    return { blocked, leaveAsked: !!agent.leaveAsked, critic: isCritic(agent) };
+    const f = demoFrozen();
+    return { blocked, leaveAsked: !!agent.leaveAsked, critic: isCritic(agent), frozen: f ? { taskId: f.id, title: f.title } : null };
   }
 
   // worker 当前持有的任务，且必须处于 working
@@ -702,6 +715,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       throw new AteamError('BAD_STATE', `你当前没有进行中的任务。请运行 ateam wait --as ${agent.id} 领取任务。`);
     }
     const task = getTask(agent.currentTask);
+    if (isDemo(task)) {
+      throw new AteamError('BAD_STATE', task.status === 'wrapping'
+        ? `演示卡 ${task.id} 在收尾：按收尾说明清理、写经验后用 ateam demo save --as ${agent.id} "<记了哪些经验>" 提交。`
+        : `演示中不能提问、报进度或提交。遇到问题自己处理，处理不了就跳过这一步记下来；每步用 ateam demo step --as ${agent.id} <n>/<总数> "<说明>" 报告，跑完用 ateam demo end --as ${agent.id} "<结果>"。`);
+    }
     if (task.status === 'asking') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 正在等待 leader 答复。请运行 ateam wait --as ${agent.id} 等待答复。`);
     }
@@ -1042,11 +1060,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       throw new AteamError('BAD_STATE', `任务 ${ids} 依赖 ${task.id}，不能直接作废。请先把它们也作废（ateam cancel），或用 ateam task edit <编号> --after ... 去掉这个依赖。`);
     }
     const agent = task.assignee && findAgent(task.assignee);
+    if (isDemo(task) && task.status === 'demoing') closeRun(task, 'stopped', '演示卡被作废');
     task.cancelledWhileHeld = !!(agent && agent.currentTask === task.id);
     // worker 正拿着这个任务：记一条作废通知。它下一次调用任何 ateam 命令（wait、progress、submit……）
     // 都会先收到这条通知，停手并还原改动，不会不知情地去领下一个任务
     if (task.cancelledWhileHeld) {
-      agent.cancelNotice = { taskId: task.id, wasWorking: task.status === 'working' || task.status === 'asking' };
+      agent.cancelNotice = { taskId: task.id, wasWorking: ['working', 'asking', 'demoing', 'wrapping'].includes(task.status) };
     }
     releaseAgentOf(task);
     task.status = 'cancelled';
@@ -1061,6 +1080,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function report(jobId, markdown) {
     markdown = requireText(markdown, '汇报内容');
     const job = getJob(jobId);
+    if (job.demo) throw new AteamError('BAD_STATE', `需求 ${job.id} 是演示需求，没有汇报和验收。`);
     const tasks = state.tasks.filter((t) => t.jobId === job.id && t.status !== 'cancelled');
     if (tasks.length === 0) {
       throw new AteamError('BAD_STATE', `需求 ${job.id} 还没有任何有效任务（已作废的不算），不能提交汇报。`);
@@ -1102,6 +1122,17 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 同时把原 worker 标记为掉线：原窗口万一又活过来，会收到「租约已失效」并重新加入，不会和接手的人抢同一个任务。
   function reclaim(taskId, reason = '') {
     const task = getTask(taskId);
+    if (isDemo(task) && (task.status === 'demoing' || task.status === 'wrapping')) {
+      const agent = task.assignee && findAgent(task.assignee);
+      if (agent) {
+        agent.status = 'offline';
+        agent.currentTask = null;
+        delete agent.stale;
+      }
+      interruptDemo(task, `收回 ${agent?.id ?? '原 worker'} 手上的演示${String(reason ?? '').trim() ? `：${String(reason).trim()}` : ''}`);
+      changed();
+      return { task, agentId: agent?.id ?? null };
+    }
     if (task.status !== 'working' && task.status !== 'asking') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中或等待答复的任务可以收回。`);
     }
@@ -1149,7 +1180,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       const quiet = now() - seen;
       if (quiet <= config().leaseMin * 60000) continue;
       const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
-      const active = task && (task.status === 'working' || task.status === 'asking');
+      // 演示卡不等用户确认：演示中掉线就算中断，冻结立即解除
+      const active = task && !isDemo(task) && (task.status === 'working' || task.status === 'asking');
       if (active) {
         if (!agent.stale) {
           agent.stale = true;
@@ -1166,7 +1198,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       count += 1;
       let reclaimed = null;
       if (agent.currentTask) {
-        if (active) {
+        if (task && isDemo(task) && (task.status === 'demoing' || task.status === 'wrapping')) {
+          interruptDemo(task, `${agent.id} 掉线`);
+        } else if (active) {
           task.status = 'pending';
           task.handoff = true;
           task.prevAssignee = agent.id;
@@ -1200,6 +1234,245 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return true;
   }
 
+  // ---------- 演示卡 ----------
+  // 演示卡（kind: 'demo'）只能放在演示需求（job.demo）里，脚本是仓库里的一个文件（task.script）。
+  // 状态：ready（待演示）→ queued（用户点了开始，等 worker 领）→ demoing（前台浏览器演示中）
+  // → wrapping（清理、写经验、提交）→ ready，可以无限次重复。每次演示记一条 task.runs。
+  // queued、以及没叫停的 demoing 期间全队冻结派发（见 nextFor）。读脚本、提交经验在 server 里。
+
+  const DEMO_UNCLAIMED_MS = 2 * 60 * 1000;
+  const isDemo = (t) => t.kind === 'demo';
+  const lastRun = (task) => task.runs?.[task.runs.length - 1] ?? null;
+
+  function addDemo({ jobId, title, script, role = 'test' } = {}) {
+    const job = getJob(jobId);
+    if (!job.demo) throw new AteamError('INVALID', `需求 ${job.id} 不是演示需求，不能放演示卡。请先用 ateam job new "<标题>" --demo 建演示需求。`);
+    title = requireText(title, '演示卡标题');
+    script = requireText(script, '脚本路径（--script）');
+    role = requireText(role || 'test', '角色（--role）');
+    state.seq.task += 1;
+    const task = {
+      id: `T${state.seq.task}`, jobId: job.id, title, role, kind: 'demo', script, paths: [script],
+      description: '', acceptance: [], dependsOn: [],
+      status: 'ready', assignee: null, handoff: false, rejectCount: 0,
+      commits: [], pendingDelivery: null, runs: [], history: [],
+    };
+    addHistory(task, 'created', 'lead', title);
+    state.tasks.push(task);
+    job.status = 'active';
+    job.updatedAt = now();
+    changed();
+    return task;
+  }
+
+  function editDemo(task, patch) {
+    if (task.status !== 'ready') throw new AteamError('BAD_STATE', `演示卡 ${task.id} 当前状态是 ${task.status}，只有待演示时可以修改。`);
+    const other = ['description', 'acceptance', 'paths', 'dependsOn'].filter((k) => patch[k] !== undefined);
+    if (other.length) throw new AteamError('INVALID', '演示卡只能改标题和角色。演示内容写在脚本文件里，改脚本文件并提交即可。');
+    const changes = [];
+    if (patch.title !== undefined) { task.title = requireText(patch.title, '演示卡标题'); changes.push('标题'); }
+    if (patch.role !== undefined) {
+      const role = requireText(patch.role, '角色（--role）');
+      if (role !== task.role) { changes.push(`角色（${task.role} → ${role}）`); task.role = role; }
+    }
+    if (changes.length === 0) throw new AteamError('INVALID', '没有要修改的内容。演示卡可以改 --title、--role。');
+    addHistory(task, 'edited', 'lead', `修改了${changes.join('、')}`);
+    changed();
+    return task;
+  }
+
+  // 造成冻结的演示卡：等 worker 领的，或正在演示、没被叫停的
+  function demoFrozen() {
+    return state.tasks.find((t) => isDemo(t) && (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested))) ?? null;
+  }
+
+  // 开始演示的阻碍，空数组表示可以开始
+  function demoBlockers(taskId) {
+    const task = getTask(taskId);
+    if (!isDemo(task)) throw new AteamError('INVALID', `任务 ${task.id} 不是演示卡。`);
+    const out = [];
+    const busy = state.tasks.filter((t) => !isDemo(t) && ['working', 'asking', 'submitted'].includes(t.status));
+    if (busy.length) out.push(`${busy.map((t) => t.id).join('、')} 还在进行，完成后才能演示`);
+    const other = state.tasks.find((t) => isDemo(t) && t.id !== task.id && ['queued', 'demoing', 'wrapping'].includes(t.status));
+    if (other) out.push(`${other.id} 正在演示或收尾`);
+    const free = state.agents.some((a) => a.status === 'online' && !a.currentTask && !a.dismiss && !isCritic(a)
+      && sameRole(a.role, task.role) && (!task.assignTo || a.id === task.assignTo));
+    if (!free) out.push(task.assignTo ? `指派的 ${task.assignTo} 不在线或手上有任务` : `没有空闲的 ${task.role} worker`);
+    return out;
+  }
+
+  function startDemo(taskId) {
+    const task = getTask(taskId);
+    if (!isDemo(task)) throw new AteamError('INVALID', `任务 ${task.id} 不是演示卡。`);
+    if (task.status !== 'ready') throw new AteamError('BAD_STATE', `演示卡 ${task.id} 当前状态是 ${task.status}，只有待演示时可以开始。`);
+    const blockers = demoBlockers(task.id);
+    if (blockers.length) throw new AteamError('BAD_STATE', `现在不能开始演示：${blockers.join('；')}。`);
+    task.status = 'queued';
+    task.queuedAt = now();
+    emit('demo_queued', { taskId: task.id, text: `用户开始演示 ${task.id} ${task.title}，派发已暂停，等 ${task.role} worker 领取` });
+    changed();
+    return task;
+  }
+
+  function claimDemo(agent, task) {
+    task.status = 'demoing';
+    task.assignee = agent.id;
+    delete task.queuedAt;
+    agent.currentTask = task.id;
+    task.runs.push({ startedAt: now(), by: agent.id });
+    addHistory(task, 'claimed', agent.id, '开始演示');
+    emit('demo_started', { taskId: task.id, agentId: agent.id, text: `${agent.id} 开始演示 ${task.id}` });
+    changed();
+    return { kind: 'demo', task };
+  }
+
+  // 结束这一次演示的记录（跑完、叫停、中断）
+  function closeRun(task, outcome, text = '') {
+    const run = lastRun(task);
+    if (!run || run.endedAt) return;
+    run.outcome = outcome;
+    run.endedAt = now();
+    if (text) run.result = text;
+    const label = { done: '演示跑完', stopped: '演示被叫停', interrupted: '演示中断' }[outcome];
+    addHistory(task, 'demo_ended', run.by, text ? `${label}：${text}` : label);
+  }
+
+  function toWrapping(task) {
+    task.status = 'wrapping';
+    delete task.stopRequested;
+    delete task.demoStep;
+  }
+
+  // 演示中或收尾中 worker 不在了：卡直接回到待演示，这次不收尾
+  function interruptDemo(task, why) {
+    if (task.status === 'demoing') closeRun(task, 'interrupted', why);
+    else addHistory(task, 'demo_ended', 'system', `收尾中断：${why}`);
+    task.status = 'ready';
+    task.assignee = null;
+    delete task.stopRequested;
+    delete task.demoStep;
+    emit('demo_interrupted', { taskId: task.id, text: `演示 ${task.id} 中断（${why}），已回到待演示` });
+  }
+
+  function demoNext(task) {
+    if (task.status === 'demoing' && task.stopRequested) {
+      toWrapping(task);
+      changed();
+      return { kind: 'demo_stopped', task };
+    }
+    if (task.status === 'demoing') return { kind: 'demo', task };
+    if (task.status === 'wrapping') return { kind: 'demo_wrap', task, outcome: lastRun(task)?.outcome ?? 'done' };
+    return null;
+  }
+
+  function stopDemo(taskId) {
+    const task = getTask(taskId);
+    if (!isDemo(task)) throw new AteamError('INVALID', `任务 ${task.id} 不是演示卡。`);
+    if (task.status === 'queued') {
+      task.status = 'ready';
+      delete task.queuedAt;
+      addHistory(task, 'edited', 'user', '撤回开始演示');
+      emit('demo_stopped', { taskId: task.id, text: `用户撤回了演示 ${task.id}，派发恢复` });
+    } else if (task.status === 'demoing' && !task.stopRequested) {
+      task.stopRequested = true;
+      closeRun(task, 'stopped', '用户叫停');
+      emit('demo_stopped', { taskId: task.id, agentId: task.assignee, text: `用户叫停了演示 ${task.id}，派发恢复` });
+    } else {
+      throw new AteamError('BAD_STATE', `演示卡 ${task.id} 当前状态是 ${task.status}，不在演示中。`);
+    }
+    changed();
+    return task;
+  }
+
+  function demoHeld(agentId) {
+    const agent = touch(agentId);
+    const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
+    if (!task || !isDemo(task)) throw new AteamError('BAD_STATE', `你手上没有演示卡。请运行 ateam wait --as ${agent.id}。`);
+    return { agent, task };
+  }
+
+  // 报告当前步，顺带检查是否被叫停。返回 { task, stopped }
+  function demoStep(agentId, n, total, text) {
+    const { agent, task } = demoHeld(agentId);
+    if (task.status === 'demoing' && task.stopRequested) {
+      toWrapping(task);
+      changed();
+      return { task, stopped: true };
+    }
+    if (task.status !== 'demoing') {
+      if (lastRun(task)?.outcome === 'stopped') return { task, stopped: true };
+      throw new AteamError('BAD_STATE', `演示卡 ${task.id} 已经演示完，在收尾。请按收尾说明清理、写经验后运行 ateam demo save --as ${agent.id}。`);
+    }
+    n = Number(n);
+    total = Number(total);
+    if (!Number.isInteger(n) || !Number.isInteger(total) || n < 1 || total < 1 || n > total) {
+      throw new AteamError('INVALID', '步数格式是「第几步/总步数」，比如 3/12。');
+    }
+    task.demoStep = { n, total, text: requireText(text, '这一步的说明'), ts: now() };
+    changed();
+    return { task, stopped: false };
+  }
+
+  function demoEnd(agentId, result) {
+    result = requireText(result, '演示结果');
+    const { agent, task } = demoHeld(agentId);
+    if (task.status !== 'demoing') throw new AteamError('BAD_STATE', `演示卡 ${task.id} 当前状态是 ${task.status}，不在演示中。`);
+    if (task.stopRequested) {
+      toWrapping(task);
+      changed();
+      throw new AteamError('BAD_STATE', `用户已经叫停了演示 ${task.id}。停在当前页面，不要清理；把这次的经验写进脚本的「## 经验」段后运行 ateam demo save --as ${agent.id} "<记了哪些经验>"。`);
+    }
+    closeRun(task, 'done', result);
+    toWrapping(task);
+    emit('demo_ended', { taskId: task.id, agentId: agent.id, text: `${task.id} 演示跑完：${result}` });
+    changed();
+    return task;
+  }
+
+  function demoTaskForSave(agentId) {
+    const { agent, task } = demoHeld(agentId);
+    if (task.status !== 'wrapping') {
+      throw new AteamError('BAD_STATE', `演示卡 ${task.id} 当前状态是 ${task.status}，演示结束后才能提交经验。跑完请先 ateam demo end --as ${agent.id} "<结果>"。`);
+    }
+    return task;
+  }
+
+  function recordDemoSave(agentId, summary, commit) {
+    summary = requireText(summary, '经验总结');
+    const task = demoTaskForSave(agentId);
+    const agent = findAgent(agentId);
+    const list = [].concat(commit ?? []).filter(Boolean);
+    task.commits.push(...list);
+    const run = lastRun(task);
+    if (run) {
+      run.saved = true;
+      run.summary = summary;
+      run.commit = list.length ? list.join('、') : null;
+    }
+    task.status = 'ready';
+    task.assignee = null;
+    agent.currentTask = null;
+    addHistory(task, 'demo_saved', agent.id, summary, list.length ? list.join('、') : undefined);
+    emit('demo_saved', { taskId: task.id, agentId: agent.id, text: `${task.id} 演示收尾完成${list.length ? `，经验已提交 ${list.join('、')}` : '（没有新经验）'}` });
+    changed();
+    return task;
+  }
+
+  // 开始后 2 分钟没人领：撤回，解除冻结
+  function expireDemoRequests() {
+    let count = 0;
+    for (const t of state.tasks) {
+      if (!isDemo(t) || t.status !== 'queued' || now() - t.queuedAt <= DEMO_UNCLAIMED_MS) continue;
+      t.status = 'ready';
+      delete t.queuedAt;
+      addHistory(t, 'edited', 'system', '2 分钟没有 worker 来领，已撤回开始演示');
+      emit('demo_unclaimed', { taskId: t.id, text: `没有 worker 来领演示 ${t.id}，请确认 ${t.role} 窗口还在` });
+      count += 1;
+    }
+    if (count) changed();
+    return count;
+  }
+
   // ---------- 查询 ----------
 
   function pendingActions() {
@@ -1228,5 +1501,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
+    addDemo, demoBlockers, startDemo, stopDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };
 }

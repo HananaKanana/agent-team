@@ -53,23 +53,23 @@
 - run 记录格式（`task.runs` 的元素）：`{ startedAt, by, endedAt, outcome: 'done' | 'stopped' | 'interrupted', result, saved, commit }`。
 - `nextFor` 新增返回：`{ kind: 'demo', task }`（领到或重复 wait 时）、`{ kind: 'demo_stopped', task }`（叫停后第一次 wait）、`{ kind: 'demo_wrap', task, outcome }`（wrapping 中 wait）。
 
-- [ ] **Step 1: 需求标记和建演示卡**：`createJob` 收 `demo`；新增 `addDemo`；`addTask` 遇到 `job.demo` 抛 `INVALID`（「演示需求里只能放演示卡，请用 ateam demo add」），`addDemo` 遇到普通需求同样报错。`editTask` 对演示卡只允许 `ready` 时改标题和角色。
+- [x] **Step 1: 需求标记和建演示卡**：`createJob` 收 `demo`；新增 `addDemo`；`addTask` 遇到 `job.demo` 抛 `INVALID`（「演示需求里只能放演示卡，请用 ateam demo add」），`addDemo` 遇到普通需求同样报错。`editTask` 对演示卡只允许 `ready` 时改标题和角色。
 
-- [ ] **Step 2: 开始、叫停、冻结**：实现 `demoBlockers`、`startDemo`、`stopDemo`、`demoFrozen`、`expireDemoRequests`。`demoBlockers` 的第 1 条检查普通任务（非 demo）里 `working` / `asking` / `submitted` 的；第 3 条看同角色、在线、`currentTask` 为空、非 critic 的 worker（有 `assignTo` 时只看那一个）。
+- [x] **Step 2: 开始、叫停、冻结**：实现 `demoBlockers`、`startDemo`、`stopDemo`、`demoFrozen`、`expireDemoRequests`。`demoBlockers` 的第 1 条检查普通任务（非 demo）里 `working` / `asking` / `submitted` 的；第 3 条看同角色、在线、`currentTask` 为空、非 critic 的 worker（有 `assignTo` 时只看那一个）。
 
-- [ ] **Step 3: nextFor 接入**：
+- [x] **Step 3: nextFor 接入**：
   - 手上是演示卡：`demoing` 且 `stopRequested` → 转 `wrapping`，返回 `demo_stopped`；`demoing` → `demo`；`wrapping` → `demo_wrap`（outcome 取最后一个 run）。
   - 领新任务前：有同角色、`queued`、（无 `assignTo` 或指派给自己）的演示卡 → 领走：`status = 'demoing'`、`assignee`、`agent.currentTask`、`runs.push({ startedAt: now(), by: agent.id })`、history `claimed`，emit `demo_started`，返回 `demo`。
   - `demoFrozen()` 非空时，普通候选一律不领，返回 null。critic 不受影响。
   - `waitingInfo` 在冻结时带上 `frozen: { taskId, title }`，供 Task 3 输出提示。
 
-- [ ] **Step 4: 演示中的 worker 命令**：实现 `demoStep`、`demoEnd`、`demoTaskForSave`、`recordDemoSave`。`workingTaskOf`（progress / ask / submit 共用）遇到手上是演示卡时抛 `BAD_STATE`：demoing 时「演示中不能提问或提交，遇到问题自己处理或跳过这一步；每步用 ateam demo step 报告，跑完用 ateam demo end」，wrapping 时「请按收尾说明清理、写经验后用 ateam demo save 提交」。演示卡的步骤报告也算心跳（调用 `touch`）。
+- [x] **Step 4: 演示中的 worker 命令**：实现 `demoStep`、`demoEnd`、`demoTaskForSave`、`recordDemoSave`。`workingTaskOf`（progress / ask / submit 共用）遇到手上是演示卡时抛 `BAD_STATE`：demoing 时「演示中不能提问或提交，遇到问题自己处理或跳过这一步；每步用 ateam demo step 报告，跑完用 ateam demo end」，wrapping 时「请按收尾说明清理、写经验后用 ateam demo save 提交」。演示卡的步骤报告也算心跳（调用 `touch`）。
 
-- [ ] **Step 5: 掉线和作废**：`sweep` 里演示卡不算 `active`（不打 stale 标记），租约到期直接判掉线：`demoing` → 当前 run `outcome = 'interrupted'`、卡回 `ready`；`wrapping` → 卡回 `ready`（run 的 `saved` 保持 false）；两种都清 `assignee`、`demoStep`、`stopRequested`，emit `demo_interrupted`。`reclaim` 对演示卡同样处理。`cancel` 演示卡：`demoing` / `queued` 时先等同叫停再作废。
+- [x] **Step 5: 掉线和作废**：`sweep` 里演示卡不算 `active`（不打 stale 标记），租约到期直接判掉线：`demoing` → 当前 run `outcome = 'interrupted'`、卡回 `ready`；`wrapping` → 卡回 `ready`（run 的 `saved` 保持 false）；两种都清 `assignee`、`demoStep`、`stopRequested`，emit `demo_interrupted`。`reclaim` 对演示卡同样处理。`cancel` 演示卡：`demoing` / `queued` 时先等同叫停再作废。
 
-- [ ] **Step 6: 排除统计**：`overlapsFor`、`report`（演示需求直接报错「演示需求没有汇报」）、`acceptJobs`（跳过演示需求）、`pendingActions`、`critiquable`、`checkIdle` 的待办判断都排除 `kind === 'demo'` 或演示需求。
+- [x] **Step 6: 排除统计**：`overlapsFor`、`report`（演示需求直接报错「演示需求没有汇报」）、`acceptJobs`（跳过演示需求）、`pendingActions`、`critiquable`、`checkIdle` 的待办判断都排除 `kind === 'demo'` 或演示需求。
 
-- [ ] **Step 7: 探测验证**：在 scratchpad 写一次性脚本，用 `createStore({ now: () => clock })` 驱动：
+- [x] **Step 7: 探测验证**：在 scratchpad 写一次性脚本，用 `createStore({ now: () => clock })` 驱动：
   - 有一张普通卡 working 时 `demoBlockers` 非空；通过后可以开始。
   - `startDemo` 后普通 worker `nextFor` 返回 null 且 `waitingInfo(...).frozen` 存在；test worker 领到 `demo`。
   - 四种出口各跑一次后 `demoFrozen()` 为 null：跑完（`demoEnd`）、叫停（`stopDemo` 后 `demoStep` 返回 `stopped: true`）、超时（clock + 121 秒后 `expireDemoRequests()` 返回 1）、掉线（clock 超过租约后 `sweep(() => false)`）。
@@ -79,7 +79,7 @@
   Run: `node --check src/store.js && node <scratchpad>/probe-demo-store.mjs`
   Expected: 脚本打印全部断言通过；之后删除脚本。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/store.js docs/superpowers/plans/2026-10-24-demo-cards.md

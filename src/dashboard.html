@@ -2283,7 +2283,8 @@ function attentionItems() {
       items.push({ key: `quiet:${a.id}`, text: `${a.id} 可能停了`, body: `${a.id} 很久没动静（手上 ${a.currentTask}），请确认窗口还在不在` });
     }
   }
-  const busy = data.state.jobs.some((j) => j.status === 'planning' || j.status === 'active');
+  // 演示需求一直是进行中，但不需要 leader 在线
+  const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
   if (busy && data.leader && !data.leader.online) items.push({ key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
   return items;
 }

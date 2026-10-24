@@ -189,8 +189,9 @@ export async function latestChangeTime(root, paths) {
 
 // 文件在所属仓库 HEAD 里的内容（path 相对项目目录），没有提交过返回 null
 export async function headContent(root, path) {
-  const [[top, { paths }] = []] = await groupByRepo(root, [path]);
-  if (!top) return null;
+  const [entry] = await groupByRepo(root, [path]);
+  if (!entry) return null; // 不在任何仓库里
+  const [top, { paths }] = entry;
   try {
     const { stdout } = await run(top, ['show', `HEAD:${paths[0].split(sep).join('/')}`]);
     return stdout;

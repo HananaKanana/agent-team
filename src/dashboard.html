@@ -331,9 +331,13 @@ html.prompter-only .prompter-strip {
 /* 顶部细进度条：走到第几步一眼可见 */
 /* 悬浮窗顶部 28px 是系统的透明标题栏，按住拖动窗口：内容让开，画一条小把手提示 */
 html.prompter-native, html.prompter-native body { background: transparent; }
-html.prompter-native .prompter-strip { padding: 26px 2.4vw 2.6vh; gap: 1vh; background: rgba(14, 17, 20, .58); border-radius: 12px; }
-html.prompter-native .prompter-strip .say { font-size: max(15px, min(2.4vw, 15vh)); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
-html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: max(11px, 6vh); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+html.prompter-native .prompter-strip { padding: 26px 2.4vw 2.6vh; gap: 1vh; background: rgba(14, 17, 20, var(--p-alpha, .58)); border-radius: 12px; }
+html.prompter-native .prompter-strip .say { font-size: calc(var(--p-scale, 1) * max(15px, min(2.4vw, 15vh))); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+html.prompter-native .prompter-strip .head .tools .grp { display: inline-flex; }
+html.prompter-native .prompter-strip .head .tools .grp button:first-child { border-radius: 6px 0 0 6px; }
+html.prompter-native .prompter-strip .head .tools .grp button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+html.prompter-native .prompter-strip .head .tools button.on { color: #a9cbff; border-color: #4c8dff; background: rgba(76, 141, 255, .16); }
+html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: calc(var(--p-scale, 1) * max(11px, 6vh)); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 12px; left: 50%; width: 44px; height: 4px; margin-left: -22px; border-radius: 2px; background: #3a434c; }
 html.prompter-native .prompter-strip .bar { top: 0; }
 .prompter-strip .bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #262c33; }
@@ -1848,6 +1852,36 @@ function prompter(t) {
     stepsBar(t),
     el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方，可以拖到第二块屏幕', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, icon('popout'), '弹出提词'));
 }
+// 悬浮窗的偏好：置顶、字号、背景浓淡，存在本窗口的 localStorage。
+// 置顶和关闭要窗口自己做：写进地址的 #pin=0/1、#close=1，src/prompter.jxa 每 0.3 秒读一次
+const promptPrefs = (() => {
+  const d = { pin: true, scale: 1, alpha: 0.58 };
+  try { return { ...d, ...JSON.parse(localStorage.getItem('ateam-prompter-prefs') || '{}') }; } catch { return d; }
+})();
+function applyPromptPrefs(extra = '') {
+  const root = document.documentElement.style;
+  root.setProperty('--p-scale', promptPrefs.scale);
+  root.setProperty('--p-alpha', promptPrefs.alpha);
+  try { localStorage.setItem('ateam-prompter-prefs', JSON.stringify(promptPrefs)); } catch {}
+  history.replaceState(null, '', `${location.pathname}${location.search}#pin=${promptPrefs.pin ? 1 : 0}${extra}`);
+}
+if (PROMPTER_NATIVE) applyPromptPrefs();
+function nativeTools() {
+  const set = (k, v) => { promptPrefs[k] = v; applyPromptPrefs(); renderPrompterStrip(); };
+  const clamp = (v, lo, hi) => Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100;
+  return [
+    el('button', { class: promptPrefs.pin ? 'on' : '', title: promptPrefs.pin ? '现在浮在所有窗口上面；点一下变成普通窗口，会被别的窗口盖住' : '点一下浮到所有窗口上面', onclick: () => set('pin', !promptPrefs.pin) },
+      promptPrefs.pin ? '已置顶' : '置顶'),
+    el('span', { class: 'grp', title: '字号' },
+      el('button', { onclick: () => set('scale', clamp(promptPrefs.scale - 0.1, 0.6, 1.8)) }, 'A−'),
+      el('button', { onclick: () => set('scale', clamp(promptPrefs.scale + 0.1, 0.6, 1.8)) }, 'A+')),
+    el('span', { class: 'grp', title: '背景浓淡' },
+      el('button', { onclick: () => set('alpha', clamp(promptPrefs.alpha - 0.15, 0, 0.95)) }, '更透'),
+      el('button', { onclick: () => set('alpha', clamp(promptPrefs.alpha + 0.15, 0, 0.95)) }, '更实')),
+    el('button', { onclick: () => applyPromptPrefs('&close=1') }, '关闭'),
+  ];
+}
+
 // 小窗里的内容：演播没在进行时也留着窗口，显示等待；下次开始自动接上
 function renderPrompterStrip() {
   const box = document.getElementById('prompter-strip');
@@ -1856,13 +1890,9 @@ function renderPrompterStrip() {
     ? tasks.find((x) => isDemoTask(x) && x.status === 'demoing') || tasks.find((x) => isDemoTask(x) && (x.status === 'queued' || x.status === 'wrapping'))
     : tasks.find((x) => x.id === PROMPTER_ONLY);
   document.title = t ? `提词 · ${t.title}` : '提词';
-  const tools = el('span', { class: 'tools' },
-    PROMPTER_NATIVE ? null : el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
-    el('button', {
-      onclick: () => (PROMPTER_NATIVE
-        ? fetch('/api/prompter/close', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
-        : window.close()),
-    }, '关闭'));
+  const tools = el('span', { class: 'tools' }, PROMPTER_NATIVE ? nativeTools() : [
+    el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
+    el('button', { onclick: () => window.close() }, '关闭')]);
   if (!t || t.status !== 'demoing') {
     const why = !t ? (PROMPTER_ONLY === 'auto' ? '现在没有在跑的预演或演播，开始后这里会自动显示' : `找不到 ${PROMPTER_ONLY}`) : t.status === 'queued' ? '等 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 在收尾' : '还没开始，在调度台点开始后这里会自动显示';
     fill(box, el('div', { class: 'head' }, el('b', null, t ? t.title : '提词'), tools), el('div', { class: 'idle' }, why));

@@ -1,7 +1,7 @@
 // 提词悬浮窗（macOS）：osascript -l JavaScript src/prompter.jxa <提词页地址>
 // 系统自带的窗口 + WebKit 网页视图，不依赖浏览器：没有地址栏、标签栏和红黄绿按钮，浮在所有窗口（包括全屏 Chrome）上面。
 // 顶部一条透明标题栏区域用来拖动；窗口位置和大小由系统按 autosave 名字记住，下次打开回到原处。
-// 由 ateam serve 启动和关闭（POST /api/prompter/open、/close），不单独运行。
+// 由 ateam serve 启动（POST /api/prompter/open）；网页上的置顶、关闭按钮通过地址的 # 部分通知这里。
 ObjC.import('Cocoa');
 ObjC.import('WebKit');
 
@@ -32,6 +32,18 @@ function run(argv) {
   try { web.setValueForKey($.NSNumber.numberWithBool(false), 'drawsBackground'); } catch (e) {} // 加载前不闪白
   win.contentView.addSubview(web);
   web.loadRequest($.NSURLRequest.requestWithURL($.NSURL.URLWithString(url)));
+
+  // 网页上的按钮通过地址的 # 部分告诉窗口：pin=0/1 置顶开关，close=1 关闭
+  let lastFrag = null;
+  $.NSTimer.scheduledTimerWithTimeIntervalRepeatsBlock(0.3, true, () => {
+    const u = web.URL;
+    if (!u || u.isNil()) return;
+    const frag = ObjC.unwrap(u.fragment) || '';
+    if (frag === lastFrag) return;
+    lastFrag = frag;
+    if (/(^|&)close=1/.test(frag)) { app.terminate(null); return; }
+    win.level = /(^|&)pin=0/.test(frag) ? 0 : 3;
+  });
 
   win.orderFrontRegardless; // 不抢焦点，演播的浏览器还是当前窗口
   app.run;

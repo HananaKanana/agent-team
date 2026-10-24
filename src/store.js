@@ -1366,6 +1366,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   function demoNext(task) {
+    if (task.status === 'wrapping' && task.stopNotice) {
+      delete task.stopNotice;
+      changed();
+      return { kind: 'demo_stopped', task };
+    }
+    // 老数据：叫停后还停在 demoing 的
     if (task.status === 'demoing' && task.stopRequested) {
       toWrapping(task);
       changed();
@@ -1385,8 +1391,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       addHistory(task, 'edited', 'user', '撤回开始演播');
       emit('demo_stopped', { taskId: task.id, text: `用户撤回了演播 ${task.id}，派发恢复` });
     } else if (task.status === 'demoing' && !task.stopRequested) {
-      task.stopRequested = true;
+      // 叫停立刻生效：卡直接进收尾、派发恢复，不等 worker 回应。worker 下次调用时收到「已叫停」（stopNotice）
       closeRun(task, 'stopped', '用户叫停');
+      toWrapping(task);
+      task.stopNotice = true;
       emit('demo_stopped', { taskId: task.id, agentId: task.assignee, text: `用户叫停了演播 ${task.id}，派发恢复` });
     } else {
       throw new AteamError('BAD_STATE', `演播卡 ${task.id} 当前状态是 ${task.status}，不在演播中。`);
@@ -1398,6 +1406,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function demoHeld(agentId) {
     const agent = touch(agentId);
     const task = agent.currentTask && state.tasks.find((t) => t.id === agent.currentTask);
+    if ((!task || !isDemo(task)) && agent.demoReleased) {
+      const id = agent.demoReleased;
+      delete agent.demoReleased;
+      changed();
+      throw new AteamError('BAD_STATE', `用户已经结束了演播卡 ${id} 的这次运行（卡已回到待演播）。立刻停手，不要再操作浏览器，也不要提交；直接运行 ateam wait --as ${agent.id}。`);
+    }
     if (!task || !isDemo(task)) throw new AteamError('BAD_STATE', `你手上没有演播卡。请运行 ateam wait --as ${agent.id}。`);
     return { agent, task };
   }
@@ -1413,7 +1427,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       return { task, stopped: true };
     }
     if (task.status !== 'demoing') {
-      if (lastRun(task)?.outcome === 'stopped') return { task, stopped: true };
+      if (lastRun(task)?.outcome === 'stopped') {
+        if (task.stopNotice) { delete task.stopNotice; changed(); }
+        return { task, stopped: true };
+      }
       throw new AteamError('BAD_STATE', `演播卡 ${task.id} 已经演播完，在收尾。请按收尾说明清理、写操作记录后运行 ateam demo save --as ${agent.id}。`);
     }
     n = Number(n);
@@ -1439,6 +1456,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function demoEnd(agentId, result, stuck = false) {
     result = requireText(result, '演播结果');
     const { agent, task } = demoHeld(agentId);
+    if (task.status === 'wrapping' && lastRun(task)?.outcome === 'stopped') {
+      delete task.stopNotice;
+      changed();
+      throw new AteamError('BAD_STATE', `用户已经叫停了 ${task.id}。停在当前页面，不要清理；把已走通的操作写进脚本的「## 操作记录」段后运行 ateam demo save --as ${agent.id} "<记了哪些操作>"。`);
+    }
     if (task.status !== 'demoing') throw new AteamError('BAD_STATE', `演播卡 ${task.id} 当前状态是 ${task.status}，不在演播中。`);
     if (task.stopRequested) {
       toWrapping(task);
@@ -1491,6 +1513,30 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
+  // 用户在看板上「结束收尾」：worker 迟迟不收尾（卡住、窗口没了）时，卡直接回到待演播，不等它。
+  // worker 下次调用演播命令时被告知停手（demoReleased）
+  function releaseDemo(taskId) {
+    const task = getTask(taskId);
+    if (!isDemo(task)) throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);
+    if (!(task.status === 'wrapping' || (task.status === 'demoing' && task.stopRequested))) {
+      throw new AteamError('BAD_STATE', `演播卡 ${task.id} 当前状态是 ${task.status}，只有收尾中（或已叫停）的卡可以直接结束。正在运行的请先停止。`);
+    }
+    const agent = task.assignee && findAgent(task.assignee);
+    if (agent && agent.currentTask === task.id) {
+      agent.currentTask = null;
+      agent.demoReleased = task.id;
+    }
+    task.status = 'ready';
+    task.assignee = null;
+    delete task.stopNotice;
+    delete task.stopRequested;
+    delete task.demoStep;
+    addHistory(task, 'demo_ended', 'user', '用户结束收尾，卡回到待演播（这次的操作记录如果还没提交就不保存）');
+    emit('demo_stopped', { taskId: task.id, agentId: agent?.id, text: `用户结束了 ${task.id} 的收尾，卡回到待演播` });
+    changed();
+    return task;
+  }
+
   // 开始后 2 分钟没人领：撤回，解除冻结
   function expireDemoRequests() {
     let count = 0;
@@ -1534,6 +1580,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
-    addDemo, demoBlockers, startDemo, stopDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
+    addDemo, demoBlockers, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };
 }

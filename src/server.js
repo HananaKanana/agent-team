@@ -279,6 +279,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
     },
     'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
+    'POST /api/demo/release': (b) => ({ task: store.releaseDemo(requireId(b)) }),
     'POST /api/demo/step': (b) => {
       // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演播
       let cue = null;

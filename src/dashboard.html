@@ -1730,6 +1730,10 @@ function demoButton(t) {
   if (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)) {
     return el('button', { class: 'btn warn', onclick: (e) => { stop(e); demoAction('stop', t); } }, `停止${modeWord(t)}`);
   }
+  // 收尾中（或老数据里叫停了还停在演播中）：worker 迟迟不收尾时，用户可以直接结束
+  if (t.status === 'wrapping' || (t.status === 'demoing' && t.stopRequested)) {
+    return el('button', { class: 'btn', title: `不等 ${agentName(t.assignee)} 收尾了，卡直接回到待演播（这次还没提交的操作记录不保存）`, onclick: (e) => { stop(e); demoAction('release', t); } }, '结束收尾');
+  }
   return null;
 }
 

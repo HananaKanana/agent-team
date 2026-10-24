@@ -362,6 +362,9 @@ html.prompter-native .prompter-strip .bar { top: 0; }
 .prompter-strip .say { font-size: max(16px, min(4vw, 18vh)); line-height: 1.38; font-weight: 650; letter-spacing: .01em; overflow-wrap: anywhere;
   padding-left: .55em; border-left: 4px solid #4c8dff; text-wrap: pretty;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* 提词小窗 / 悬浮窗：讲解占满剩下的高度，放不下就由 fitSay 自动缩小字号，不截断 */
+html.prompter-only .prompter-strip > .head, html.prompter-only .prompter-strip > .next, html.prompter-only .prompter-strip > .idle { flex: none; }
+html.prompter-only .prompter-strip > .say { flex: 0 1 auto; min-height: 0; display: block; -webkit-line-clamp: unset; }
 .prompter-strip .say.enter { animation: cue-in .35s ease-out; }
 @keyframes cue-in { from { opacity: 0; transform: translateY(6px); } }
 .prompter-strip .next { display: flex; align-items: center; gap: 10px; font-size: max(12px, 6.5vh); color: #7d8b99; white-space: nowrap; overflow: hidden; }
@@ -1920,7 +1923,17 @@ function renderPrompterStrip() {
       s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
     el('div', { class: `say${changed ? ' enter' : ''}` }, c.say),
     c.next ? el('div', { class: 'next' }, el('span', { class: 'lbl' }, '下一步'), el('span', null, c.next)) : null);
+  fitSay();
 }
+// 讲解放不下时一像素一像素缩小字号（最小 11px），保证整句都看得到；字号上限就是 CSS 里的大小（含 A−/A+）
+function fitSay() {
+  const say = document.querySelector('#prompter-strip .say');
+  if (!say) return;
+  say.style.fontSize = '';
+  let size = parseFloat(getComputedStyle(say).fontSize);
+  while (size > 11 && say.scrollHeight > say.clientHeight + 1) { size -= 1; say.style.fontSize = `${size}px`; }
+}
+if (PROMPTER_ONLY) addEventListener('resize', fitSay);
 let lastStripStep = null;
 
 function demoRow(t) {

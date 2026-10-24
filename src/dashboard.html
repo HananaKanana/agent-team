@@ -248,24 +248,33 @@ input[type="checkbox"]:not(.switch):checked::after {
 .demo-row .since svg, .banner.demo .since svg { width: 12px; height: 12px; }
 .demo-row .since, .banner.demo .since { display: inline-flex; align-items: center; gap: 4px; }
 /* 提词区：演播中的卡下方，大字是这一步的讲解（只给讲解的用户看，不碰演播页面） */
-.prompter { grid-column: 1 / -1; position: relative; margin-top: 4px; padding: 14px 16px 12px; border-radius: 6px;
-  background: color-mix(in srgb, var(--working) 8%, var(--surface)); box-shadow: inset 3px 0 0 var(--working); cursor: default; }
-.prompter .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-right: 96px; font-size: 12.5px; color: var(--muted); }
+.prompter { grid-column: 1 / -1; position: relative; margin-top: 4px; padding: 10px 14px; border-radius: 6px;
+  background: color-mix(in srgb, var(--working) 7%, var(--surface)); box-shadow: inset 3px 0 0 var(--working); cursor: default; }
+.prompter .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-right: 110px; font-size: 12.5px; color: var(--muted); }
 .prompter .head b { color: var(--working); font-weight: 650; }
-.prompter .say { margin: 8px 0 6px; font-size: 22px; line-height: 1.5; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
-.prompter .next { font-size: 13px; color: var(--faint); }
-.prompter .full { position: absolute; top: 10px; right: 10px; }
-/* 全屏提词：整页只有提词，放第二块屏幕或平板 */
-.prompter-full { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; justify-content: center; gap: 28px;
-  padding: 48px 8vw; background: var(--bg); }
-.prompter-full[hidden] { display: none; }
-.prompter-full .head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; font-size: 20px; color: var(--muted); }
-.prompter-full .head b { color: var(--working); }
-.prompter-full .say { font-size: clamp(32px, 5vw, 60px); line-height: 1.4; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
-.prompter-full .next { font-size: clamp(18px, 2.2vw, 26px); color: var(--faint); }
-.prompter-full .close { position: absolute; top: 16px; right: 16px; }
-.prompter-full .since svg { width: 18px; height: 18px; }
-.prompter-full .since { display: inline-flex; align-items: center; gap: 6px; }
+.prompter .say { margin: 4px 0 2px; font-size: 14.5px; line-height: 1.55; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prompter .pop { position: absolute; top: 8px; right: 10px; }
+/* 弹出的提词小窗（?prompter=T12）：整个窗口就是一条字幕，放在屏幕最下方 */
+.prompter-strip { display: none; }
+html.prompter-only body > :not(.prompter-strip) { display: none !important; }
+html.prompter-only body { background: #14171a; height: 100vh; overflow: hidden; }
+html.prompter-only .prompter-strip {
+  display: flex; flex-direction: column; justify-content: center; gap: 1.2vh; height: 100vh; padding: 2vh 3vw;
+  color: #eef1f4; font-family: inherit;
+}
+.prompter-strip .head { display: flex; align-items: center; gap: 14px; font-size: max(12px, 7vh); color: #9fadbc; white-space: nowrap; overflow: hidden; }
+.prompter-strip .head b { color: #85b8ff; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.prompter-strip .head .since { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.prompter-strip .head .since svg { width: 1em; height: 1em; }
+.prompter-strip .head .tag { flex: none; }
+.prompter-strip .head .tools { margin-left: auto; display: flex; gap: 6px; flex: none; }
+.prompter-strip .head .tools button { font: inherit; font-size: 12px; padding: 2px 8px; border: 1px solid #3a434c; border-radius: 4px; background: transparent; color: #9fadbc; cursor: pointer; }
+.prompter-strip .head .tools button:hover { color: #fff; border-color: #6b7783; }
+.prompter-strip .say { font-size: max(16px, min(4.2vw, 17vh)); line-height: 1.35; font-weight: 650; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.prompter-strip .next { font-size: max(12px, 7vh); color: #8c9bab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prompter-strip .idle { font-size: max(14px, 9vh); color: #8c9bab; }
 .demo-acts { display: flex; gap: 8px; }
 .ops-box { max-height: 420px; overflow-y: auto; padding: 10px 14px; border: 1px solid var(--line-soft); border-radius: 6px; }
 .demo-runs { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -725,7 +734,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <main id="main" aria-busy="true"><div class="sk sk-line" style="width: 90px"></div><div class="sk sk-title"></div><div class="sk sk-line" style="width: 70%"></div><div class="sk sk-line" style="width: 48%"></div><div class="sk-board"><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div><div class="sk-lane"></div><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div></div></main>
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
-<div class="prompter-full" id="prompter-full" hidden role="dialog" aria-label="全屏提词"></div>
+<div class="prompter-strip" id="prompter-strip" aria-live="polite"></div>
 <div class="modal-back" id="attention-list" hidden role="dialog" aria-modal="true" aria-label="需要你处理"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
@@ -1678,26 +1687,43 @@ function runSince(t) {
   tickSince(n);
   return n;
 }
-let prompterFull = null; // 全屏提词的演播卡编号
+// 提词小窗：单独的浏览器小窗口，打开就放到屏幕最下方，像字幕条；可以拖到第二块屏幕
+const PROMPTER_ONLY = new URLSearchParams(location.search).get('prompter');
+if (PROMPTER_ONLY) document.documentElement.classList.add('prompter-only');
+function openPrompter(t) {
+  const w = Math.min(1200, screen.availWidth - 40);
+  const h = 190;
+  const left = (screen.availLeft ?? 0) + Math.round((screen.availWidth - w) / 2);
+  const top = (screen.availTop ?? 0) + screen.availHeight - h - 8;
+  const win = window.open(`/?prompter=${encodeURIComponent(t.id)}`, 'ateam-prompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
+  win?.focus();
+}
 function prompter(t) {
   const c = cueOf(t);
   return el('div', { class: 'prompter', onclick: (e) => e.stopPropagation() },
     el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '这一步照操作记录没走通，worker 在自己摸索，会停顿几秒' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
     el('div', { class: 'say' }, c.say),
-    c.next ? el('div', { class: 'next' }, `下一步：${c.next}`) : null,
-    el('button', { class: 'btn sm full', onclick: (e) => { e.stopPropagation(); prompterFull = t.id; renderPrompterFull(); } }, '全屏提词'));
+    el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, '弹出提词窗'));
 }
-function renderPrompterFull() {
-  const box = document.getElementById('prompter-full');
-  const t = prompterFull && data?.state.tasks.find((x) => x.id === prompterFull);
-  if (!t || t.status !== 'demoing') { prompterFull = null; box.hidden = true; box.replaceChildren(); return; }
+// 小窗里的内容：演播没在进行时也留着窗口，显示等待；下次开始自动接上
+function renderPrompterStrip() {
+  const box = document.getElementById('prompter-strip');
+  const t = data?.state.tasks.find((x) => x.id === PROMPTER_ONLY);
+  document.title = t ? `提词 · ${t.title}` : '提词';
+  const tools = el('span', { class: 'tools' },
+    el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
+    el('button', { onclick: () => window.close() }, '关闭'));
+  if (!t || t.status !== 'demoing') {
+    const why = !t ? `找不到 ${PROMPTER_ONLY}` : t.status === 'queued' ? '等 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 在收尾' : '还没开始，在调度台点开始后这里会自动显示';
+    fill(box, el('div', { class: 'head' }, el('b', null, t ? t.title : '提词'), tools), el('div', { class: 'idle' }, why));
+    return;
+  }
   const c = cueOf(t);
   fill(box,
-    el('button', { class: 'btn close', onclick: () => { prompterFull = null; renderPrompterFull(); } }, '退出全屏（Esc）'),
-    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
+    el('div', { class: 'head' }, el('b', null, c.head), runSince(t),
+      t.demoStep?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
     el('div', { class: 'say' }, c.say),
     c.next ? el('div', { class: 'next' }, `下一步：${c.next}`) : null);
-  box.hidden = false;
 }
 
 function demoRow(t) {
@@ -2302,8 +2328,8 @@ themeBtn.addEventListener('click', () => {
 function render() {
   if (!data) return;
   renderNeeds();
+  if (PROMPTER_ONLY) { renderPrompterStrip(); return; }
   renderDemoBanner();
-  renderPrompterFull();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
   renderWorkers();
   renderJobs();
@@ -2525,7 +2551,7 @@ async function poll() {
     } else {
       renderWorkers(); // 只刷新「心跳 N 分钟前」
     }
-    renderAttention();
+    if (!PROMPTER_ONLY) renderAttention();
   } catch {
     document.getElementById('banner').hidden = false;
     lastJson = null; // 恢复连接后重新渲染，刷新提醒
@@ -2536,7 +2562,6 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (prompterFull) { prompterFull = null; renderPrompterFull(); return; }
   if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }

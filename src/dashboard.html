@@ -228,7 +228,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 .banner[hidden], .needs[hidden] { display: none; }
 .banner.stale { --c: var(--asking); }
 .needs { --c: var(--asking); }
-.banner.demo { --c: var(--working); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.banner.demo:not([hidden]) { display: flex; }
+.banner.demo { --c: var(--working); flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .banner.demo .step { color: var(--muted); }
 
 /* 演示需求：演示卡列表，每行一张卡 */

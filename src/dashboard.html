@@ -329,6 +329,10 @@ html.prompter-only .prompter-strip {
   color: #f1f3f5; font-family: inherit;
 }
 /* 顶部细进度条：走到第几步一眼可见 */
+/* 悬浮窗顶部 28px 是系统的透明标题栏，按住拖动窗口：内容让开，画一条小把手提示 */
+html.prompter-native .prompter-strip { padding-top: 30px; }
+html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 12px; left: 50%; width: 44px; height: 4px; margin-left: -22px; border-radius: 2px; background: #3a434c; }
+html.prompter-native .prompter-strip .bar { top: 0; }
 .prompter-strip .bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #262c33; }
 .prompter-strip .bar i { display: block; height: 100%; background: linear-gradient(90deg, #4c8dff, #85b8ff); transition: width .5s ease; }
 .prompter-strip .head { display: flex; align-items: center; gap: 12px; font-size: max(12px, 6.5vh); color: #8c9bab; white-space: nowrap; overflow: hidden; }
@@ -1801,12 +1805,26 @@ function runSince(t) {
 // ?prompter（不带卡号）跟随当前在跑的演播卡：Safari「添加到程序坞」做成网页 App 后一直用这一个
 const PROMPTER_PARAMS = new URLSearchParams(location.search);
 const PROMPTER_ONLY = PROMPTER_PARAMS.has('prompter') ? PROMPTER_PARAMS.get('prompter') || 'auto' : null;
+// &native：在 macOS 提词悬浮窗（src/prompter.jxa）里，顶部留出拖动条，关闭走服务
+const PROMPTER_NATIVE = PROMPTER_PARAMS.has('native');
+if (PROMPTER_NATIVE) document.documentElement.classList.add('prompter-native');
+const IS_MAC = /Mac/i.test(navigator.platform || navigator.userAgent);
 if (PROMPTER_ONLY) document.documentElement.classList.add('prompter-only');
 function openPrompter(t) {
   const w = Math.min(1200, screen.availWidth - 40);
   const h = 190;
   const left = (screen.availLeft ?? 0) + Math.round((screen.availWidth - w) / 2);
   const top = (screen.availTop ?? 0) + screen.availHeight - h - 8;
+  // macOS：让服务开系统悬浮窗（没有浏览器边框、浮在最上层）；开不了再用普通弹窗
+  if (IS_MAC) {
+    fetch('/api/prompter/open', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+      .then((r) => r.json()).catch(() => ({ ok: false }))
+      .then((r) => { if (!r.ok) popupPrompter(t, w, h, left, top); });
+    return;
+  }
+  popupPrompter(t, w, h, left, top);
+}
+function popupPrompter(t, w, h, left, top) {
   const win = window.open(`/?prompter=${encodeURIComponent(t.id)}`, 'ateam-prompter', `popup,width=${w},height=${h},left=${left},top=${top}`);
   win?.focus();
 }
@@ -1836,8 +1854,12 @@ function renderPrompterStrip() {
     : tasks.find((x) => x.id === PROMPTER_ONLY);
   document.title = t ? `提词 · ${t.title}` : '提词';
   const tools = el('span', { class: 'tools' },
-    el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
-    el('button', { onclick: () => window.close() }, '关闭'));
+    PROMPTER_NATIVE ? null : el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
+    el('button', {
+      onclick: () => (PROMPTER_NATIVE
+        ? fetch('/api/prompter/close', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+        : window.close()),
+    }, '关闭'));
   if (!t || t.status !== 'demoing') {
     const why = !t ? (PROMPTER_ONLY === 'auto' ? '现在没有在跑的预演或演播，开始后这里会自动显示' : `找不到 ${PROMPTER_ONLY}`) : t.status === 'queued' ? '等 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 在收尾' : '还没开始，在调度台点开始后这里会自动显示';
     fill(box, el('div', { class: 'head' }, el('b', null, t ? t.title : '提词'), tools), el('div', { class: 'idle' }, why));

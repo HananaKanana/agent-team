@@ -1,4 +1,5 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTim
 import { checkOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
+const PROMPTER_JXA = join(dirname(fileURLToPath(import.meta.url)), 'prompter.jxa');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
 const TOOL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
@@ -236,6 +238,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return body.id.trim();
   }
 
+  // 提词悬浮窗进程（osascript）；服务退出时一起关掉
+  let prompterProc = null;
+  process.on('exit', () => prompterProc?.kill());
+
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
     'POST /api/join': (b) => ({ agent: store.join(b.role, b.name, b.id) }),
@@ -280,6 +286,18 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
     'POST /api/demo/release': (b) => ({ task: store.releaseDemo(requireId(b)) }),
+    // 提词悬浮窗（只有 macOS）：服务替看板起一个系统窗口，没有浏览器边框、浮在最上层。
+    // 同一时间只留一个；再点就关掉旧的重开（跳到最前）。其他系统返回错误，看板改用普通弹窗
+    'POST /api/prompter/open': () => {
+      if (process.platform !== 'darwin') throw new AteamError('INVALID', '提词悬浮窗只支持 macOS');
+      prompterProc?.kill();
+      const proc = spawn('osascript', ['-l', 'JavaScript', PROMPTER_JXA, `http://127.0.0.1:${server.address().port}/?prompter&native`], { stdio: 'ignore' });
+      proc.on('exit', () => { if (prompterProc === proc) prompterProc = null; });
+      proc.on('error', () => { if (prompterProc === proc) prompterProc = null; });
+      prompterProc = proc;
+      return {};
+    },
+    'POST /api/prompter/close': () => { prompterProc?.kill(); prompterProc = null; return {}; },
     'POST /api/demo/step': (b) => {
       // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演播
       let cue = null;

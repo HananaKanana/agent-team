@@ -1,0 +1,36 @@
+// 提词悬浮窗（macOS）：osascript -l JavaScript src/prompter.jxa <提词页地址>
+// 系统自带的窗口 + WebKit 网页视图，不依赖浏览器：没有地址栏、标签栏和红黄绿按钮，浮在所有窗口（包括全屏 Chrome）上面。
+// 顶部一条透明标题栏区域用来拖动；窗口位置和大小由系统按 autosave 名字记住，下次打开回到原处。
+// 由 ateam serve 启动和关闭（POST /api/prompter/open、/close），不单独运行。
+ObjC.import('Cocoa');
+ObjC.import('WebKit');
+
+function run(argv) {
+  const url = argv[0];
+  const app = $.NSApplication.sharedApplication;
+  app.setActivationPolicy(1); // Accessory：不进程序坞、不抢菜单栏
+
+  const vis = $.NSScreen.mainScreen.visibleFrame;
+  const w = Math.min(1200, vis.size.width - 40);
+  const h = 190;
+  const rect = $.NSMakeRect(vis.origin.x + (vis.size.width - w) / 2, vis.origin.y + 8, w, h);
+  // Titled | Resizable | FullSizeContentView：保留可拖动的标题栏区域，但让网页铺满整个窗口
+  const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(rect, 1 | 8 | 32768, 2, false);
+  win.titlebarAppearsTransparent = true;
+  win.titleVisibility = 1; // Hidden
+  for (const b of [0, 1, 2]) win.standardWindowButton(b).setHidden(true);
+  win.level = 3; // Floating：盖在普通窗口上
+  win.collectionBehavior = 1 | 256; // 所有桌面都显示；能浮在全屏窗口上
+  win.releasedWhenClosed = false;
+  win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.07, 0.08, 0.09, 1);
+  win.setFrameAutosaveName('ateam-prompter');
+
+  const web = $.WKWebView.alloc.initWithFrameConfiguration(win.contentView.bounds, $.WKWebViewConfiguration.alloc.init);
+  web.autoresizingMask = 2 | 16; // 宽高跟着窗口
+  try { web.setValueForKey($.NSNumber.numberWithBool(false), 'drawsBackground'); } catch (e) {} // 加载前不闪白
+  win.contentView.addSubview(web);
+  web.loadRequest($.NSURLRequest.requestWithURL($.NSURL.URLWithString(url)));
+
+  win.orderFrontRegardless; // 不抢焦点，演播的浏览器还是当前窗口
+  app.run;
+}

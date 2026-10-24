@@ -1752,7 +1752,7 @@ function jobSide(job, tasks) {
   const acts = tasks.flatMap((t) => t.history.filter((h) => ACTIVITY_TYPES.has(h.type)).map((h) => ({ ...h, task: t })));
   if (job.acceptedAt) acts.push({ ts: job.acceptedAt, type: 'job_accepted' });
   acts.sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  const shown = acts.slice(0, 30);
+  const shown = acts.slice(0, 5);
   const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
   return el('aside', { class: 'job-side', 'aria-label': '概览和最近动态' },
     el('div', { class: 'inner' },
@@ -1769,7 +1769,7 @@ function jobSide(job, tasks) {
             role, el('i', null, el('i', { style: `width:${Math.round((r.done / r.all) * 100)}%` })), el('b', null, `${r.done}/${r.all}`))),
           workers.length ? el('span', { class: 'who', title: workers.map(agentName).join('\n') }, `${workers.length} 个 worker 参与`) : null) : null),
       el('div', { class: 'side-sec activity' },
-        el('div', { class: 'side-h' }, el('span', null, '最近动态'), acts.length > shown.length ? el('span', { class: 'sub' }, `最近 ${shown.length} 条`) : null),
+        el('div', { class: 'side-h' }, el('span', null, '最近动态'), acts.length > shown.length ? el('span', { class: 'sub' }, `共 ${acts.length} 条，显示最近 5 条`) : null),
         shown.length ? el('ol', { class: 'acts' }, shown.map((a) => {
           if (a.type === 'job_accepted') return el('li', { class: 'c-approved' }, el('i'), el('span', { class: 'when' }, fmtTime(a.ts)), el('span', { class: 'what' }, '需求验收通过'));
           const [label, color] = HISTORY[a.type] || [a.type, 'pending'];

@@ -337,7 +337,7 @@ html.prompter-native .prompter-strip .head .tools .grp { display: inline-flex; }
 html.prompter-native .prompter-strip .head .tools .grp button:first-child { border-radius: 6px 0 0 6px; }
 html.prompter-native .prompter-strip .head .tools .grp button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 html.prompter-native .prompter-strip .head .tools button.on { color: #a9cbff; border-color: #4c8dff; background: rgba(76, 141, 255, .16); }
-html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: calc(var(--p-scale, 1) * max(11px, 6vh)); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: 12px; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 4px; left: 50%; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
 /* 悬浮窗里 :hover 不可靠（鼠标从顶部原生拖动条离开时网页收不到离开事件，按钮会一直显示），改由脚本控制：动了鼠标才显示，停 2.5 秒自动收起 */
 html.prompter-native .prompter-strip:hover .head .tools { opacity: 0; }
@@ -1928,7 +1928,8 @@ function renderPrompterStrip() {
     c.next ? el('div', { class: 'next' }, el('span', { class: 'lbl' }, '下一步'), el('span', null, c.next)) : null);
   fitSay();
 }
-// 讲解放不下时一像素一像素缩小字号（最小 11px），保证整句都看得到；字号上限就是 CSS 里的大小（含 A−/A+）
+// 讲解放不下时一像素一像素缩小字号（最小 11px），保证整句都看得到；字号上限就是 CSS 里的大小（含 A−/A+）。
+// A−/A+ 只放大讲解，上下两行固定 12px，否则放大会挤占讲解的高度、讲解反而被缩小
 function fitSay() {
   const say = document.querySelector('#prompter-strip .say');
   if (!say) return;

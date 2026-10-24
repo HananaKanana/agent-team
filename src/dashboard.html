@@ -330,7 +330,10 @@ html.prompter-only .prompter-strip {
 }
 /* 顶部细进度条：走到第几步一眼可见 */
 /* 悬浮窗顶部 28px 是系统的透明标题栏，按住拖动窗口：内容让开，画一条小把手提示 */
-html.prompter-native .prompter-strip { padding-top: 30px; }
+html.prompter-native, html.prompter-native body { background: transparent; }
+html.prompter-native .prompter-strip { padding: 26px 2.4vw 2.6vh; gap: 1vh; background: rgba(14, 17, 20, .58); border-radius: 12px; }
+html.prompter-native .prompter-strip .say { font-size: max(15px, min(2.4vw, 15vh)); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: max(11px, 6vh); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 12px; left: 50%; width: 44px; height: 4px; margin-left: -22px; border-radius: 2px; background: #3a434c; }
 html.prompter-native .prompter-strip .bar { top: 0; }
 .prompter-strip .bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #262c33; }

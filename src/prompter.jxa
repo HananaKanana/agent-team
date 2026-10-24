@@ -12,7 +12,7 @@ function run(argv) {
 
   const vis = $.NSScreen.mainScreen.visibleFrame;
   const w = Math.min(1200, vis.size.width - 40);
-  const h = 190;
+  const h = 150;
   const rect = $.NSMakeRect(vis.origin.x + (vis.size.width - w) / 2, vis.origin.y + 8, w, h);
   // Titled | Resizable | FullSizeContentView：保留可拖动的标题栏区域，但让网页铺满整个窗口
   const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(rect, 1 | 8 | 32768, 2, false);
@@ -22,7 +22,9 @@ function run(argv) {
   win.level = 3; // Floating：盖在普通窗口上
   win.collectionBehavior = 1 | 256; // 所有桌面都显示；能浮在全屏窗口上
   win.releasedWhenClosed = false;
-  win.backgroundColor = $.NSColor.colorWithSRGBRedGreenBlueAlpha(0.07, 0.08, 0.09, 1);
+  // 窗口本身全透明，底色由网页画（半透明深色），后面的内容能透出来
+  win.opaque = false;
+  win.backgroundColor = $.NSColor.clearColor;
   win.setFrameAutosaveName('ateam-prompter');
 
   const web = $.WKWebView.alloc.initWithFrameConfiguration(win.contentView.bounds, $.WKWebViewConfiguration.alloc.init);

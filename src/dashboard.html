@@ -1798,7 +1798,9 @@ function runSince(t) {
   return n;
 }
 // 提词小窗：单独的浏览器小窗口，打开就放到屏幕最下方，像字幕条；可以拖到第二块屏幕
-const PROMPTER_ONLY = new URLSearchParams(location.search).get('prompter');
+// ?prompter（不带卡号）跟随当前在跑的演播卡：Safari「添加到程序坞」做成网页 App 后一直用这一个
+const PROMPTER_PARAMS = new URLSearchParams(location.search);
+const PROMPTER_ONLY = PROMPTER_PARAMS.has('prompter') ? PROMPTER_PARAMS.get('prompter') || 'auto' : null;
 if (PROMPTER_ONLY) document.documentElement.classList.add('prompter-only');
 function openPrompter(t) {
   const w = Math.min(1200, screen.availWidth - 40);
@@ -1828,13 +1830,16 @@ function prompter(t) {
 // 小窗里的内容：演播没在进行时也留着窗口，显示等待；下次开始自动接上
 function renderPrompterStrip() {
   const box = document.getElementById('prompter-strip');
-  const t = data?.state.tasks.find((x) => x.id === PROMPTER_ONLY);
+  const tasks = data?.state.tasks || [];
+  const t = PROMPTER_ONLY === 'auto'
+    ? tasks.find((x) => isDemoTask(x) && x.status === 'demoing') || tasks.find((x) => isDemoTask(x) && (x.status === 'queued' || x.status === 'wrapping'))
+    : tasks.find((x) => x.id === PROMPTER_ONLY);
   document.title = t ? `提词 · ${t.title}` : '提词';
   const tools = el('span', { class: 'tools' },
     el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
     el('button', { onclick: () => window.close() }, '关闭'));
   if (!t || t.status !== 'demoing') {
-    const why = !t ? `找不到 ${PROMPTER_ONLY}` : t.status === 'queued' ? '等 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 在收尾' : '还没开始，在调度台点开始后这里会自动显示';
+    const why = !t ? (PROMPTER_ONLY === 'auto' ? '现在没有在跑的预演或演播，开始后这里会自动显示' : `找不到 ${PROMPTER_ONLY}`) : t.status === 'queued' ? '等 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 在收尾' : '还没开始，在调度台点开始后这里会自动显示';
     fill(box, el('div', { class: 'head' }, el('b', null, t ? t.title : '提词'), tools), el('div', { class: 'idle' }, why));
     return;
   }

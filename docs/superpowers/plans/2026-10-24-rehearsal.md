@@ -86,9 +86,9 @@
 - 抽屉：新增「操作记录」区，打开抽屉时 `GET /api/demo/ops?id=` 取一次，`renderMarkdown` 渲染（缓存到下次 state 变化）；运行记录表加「类型」列，演播行在说明后附「慢档：第 x、y 步」。
 - 横幅：「预演中 / 演播中：<标题>」。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** 语法检查 `node -e "...new Function(...)"` → `syntax ok`；代码审阅普通需求页面不受影响。
-- [ ] **Step 3: Commit** `dashboard: 演播卡 — rehearse/show buttons, rehearsal flags, ops record panel, slow-step marks`
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** 语法检查 `node -e "...new Function(...)"` → `syntax ok`；代码审阅普通需求页面不受影响。
+- [x] **Step 3: Commit** `dashboard: 演播卡 — rehearse/show buttons, rehearsal flags, ops record panel, slow-step marks`
 
 ### Task 5: skill 与核对清单
 

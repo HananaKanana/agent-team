@@ -1,5 +1,6 @@
-// 演示脚本（docs/demo/*.md）的格式约定：四段固定标题「## 准备」「## 演示步骤」「## 清理」「## 经验」。
-// 前三段由 leader 写，「经验」段由演示的 worker 维护。纯文本处理，不碰磁盘。
+// 演播脚本（docs/demo/*.md）的格式约定：四段固定标题「## 准备」「## 演示步骤」「## 清理」「## 操作记录」。
+// 前三段由 leader 写，「操作记录」段由 worker 维护（预演时写，演播时修正）。老脚本的「## 经验」段同样算 worker 段。
+// 纯文本处理，不碰磁盘。
 
 const SECTION = /^##\s+(.+?)\s*$/;
 
@@ -14,12 +15,20 @@ function sections(markdown) {
   return out;
 }
 
-// 去掉「## 经验」段后的其余内容，用来判断 worker 有没有改经验以外的部分
-export function withoutExperience(markdown) {
+const OPS_TITLES = new Set(['操作记录', '经验']);
+
+// 去掉 worker 段后的其余内容，用来判断 worker 有没有改它不该改的部分
+export function withoutOps(markdown) {
   return sections(markdown)
-    .filter((s) => s.title !== '经验')
+    .filter((s) => !OPS_TITLES.has(s.title))
     .map((s) => s.lines.join('\n').replace(/\s+$/, ''))
     .join('\n');
+}
+
+// worker 段的正文（不含标题），没有则空串
+export function opsSection(markdown) {
+  return sections(markdown).filter((s) => OPS_TITLES.has(s.title))
+    .map((s) => s.lines.slice(1).join('\n')).join('\n').trim();
 }
 
 const STEP_LINE = /^\s*(\d+)[.、]\s*(.*)$/;

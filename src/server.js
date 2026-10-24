@@ -9,7 +9,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
-import { parseSteps, stepCount, withoutExperience } from './demo.js';
+import { opsSection, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
@@ -144,14 +144,16 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (rules) out.rules = rules;
     const job = store.state.jobs.find((j) => j.id === result.task.jobId);
     if (job?.description?.trim()) out.job = { id: job.id, title: job.title, description: job.description.trim() };
-    // 演示卡：附上脚本全文，worker 不用自己去找文件
+    // 演播卡：附上脚本全文，worker 不用自己去找文件
     if (result.task.kind === 'demo') {
       try {
         const text = readFileSync(join(root, result.task.script), 'utf8');
-        out.script = { path: result.task.script, text, steps: stepCount(text) };
+        out.script = { path: result.task.script, text, steps: stepCount(text), hasOps: !!opsSection(text).replace(/<!--[\s\S]*?-->/g, '').trim() };
       } catch (err) {
-        out.script = { path: result.task.script, text: '', steps: 0, error: `读不到脚本文件：${err.message}` };
+        out.script = { path: result.task.script, text: '', steps: 0, hasOps: false, error: `读不到脚本文件：${err.message}` };
       }
+      const runs = result.task.runs ?? [];
+      out.script.mode = runs[runs.length - 1]?.mode ?? 'show';
     }
     return out;
   }
@@ -259,13 +261,20 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       if (typeof b.script !== 'string' || !b.script.trim()) throw new AteamError('INVALID', '缺少脚本路径（--script），比如 docs/demo/protocol-adapter.md。');
       const script = relative(root, resolve(root, b.script.trim())).split(sep).join('/');
       if (!script || script.startsWith('..')) throw new AteamError('INVALID', `脚本路径 ${b.script} 不在项目目录（${root}）里。`);
-      if (!existsSync(join(root, script))) throw new AteamError('INVALID', `脚本文件 ${script} 不存在，请先按演示脚本格式写好并提交，再建演示卡。`);
+      if (!existsSync(join(root, script))) throw new AteamError('INVALID', `脚本文件 ${script} 不存在，请先按演播脚本格式写好并提交，再建演播卡。`);
       return { task: store.addDemo({ jobId: b.jobId, title: b.title, script, role: b.role }) };
     },
-    'POST /api/demo/start': (b) => ({ task: store.startDemo(requireId(b)) }),
+    'POST /api/demo/start': (b) => ({ task: store.startDemo(requireId(b), b.mode ?? 'show') }),
+    'GET /api/demo/ops': (_b, url) => {
+      const task = store.getTask(url.searchParams.get('id') ?? '');
+      if (task.kind !== 'demo') throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);
+      try { return { ops: opsSection(readFileSync(join(root, task.script), 'utf8')) }; } catch (err) {
+        return { ops: '', error: `读不到脚本文件 ${task.script}：${err.message}` };
+      }
+    },
     'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
     'POST /api/demo/step': (b) => {
-      // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演示
+      // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演播
       let cue = null;
       const held = store.state.agents.find((a) => a.id === b.as)?.currentTask;
       const task = held && store.state.tasks.find((t) => t.id === held && t.kind === 'demo');
@@ -277,12 +286,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
           cue = { narration: step?.narration ?? '', next: steps[i + 1]?.text ?? '' };
         } catch {}
       }
-      return store.demoStep(b.as, b.n, b.total, b.text, cue);
+      return store.demoStep(b.as, b.n, b.total, b.text, cue, !!b.slow);
     },
-    'POST /api/demo/end': (b) => ({ task: store.demoEnd(b.as, b.result) }),
+    'POST /api/demo/end': (b) => ({ task: store.demoEnd(b.as, b.result, !!b.stuck) }),
     'POST /api/demo/save': (b) => serial(async () => {
       const task = store.demoTaskForSave(b.as);
-      if (typeof b.summary !== 'string' || !b.summary.trim()) throw new AteamError('INVALID', '经验总结不能为空。写明这次记了哪些经验；没有新经验就加 --no-changes。');
+      if (typeof b.summary !== 'string' || !b.summary.trim()) throw new AteamError('INVALID', '总结不能为空。写明这次记了或改了哪些操作；操作记录没有改动就加 --no-changes。');
       if (b.noChanges) return { task: store.recordDemoSave(b.as, b.summary, null), commit: null };
       let current;
       try { current = readFileSync(join(root, task.script), 'utf8'); } catch {
@@ -290,11 +299,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       const head = await headContent(root, task.script);
       if (head === null) throw new AteamError('INVALID', `脚本文件 ${task.script} 还没有提交过，请通知用户让 leader 先提交脚本。`);
-      if (withoutExperience(current) !== withoutExperience(head)) {
-        throw new AteamError('INVALID', `只能改脚本的「## 经验」段，其他段有改动。请把其他段恢复原样（git diff ${task.script} 查看）后再 demo save。`);
+      if (withoutOps(current) !== withoutOps(head)) {
+        throw new AteamError('INVALID', `只能改脚本的「## 操作记录」段，其他段有改动。请把其他段恢复原样（git diff ${task.script} 查看）后再 demo save。`);
       }
-      const result = await commitPaths(root, [task.script], `[${task.id}] 演示经验：${b.summary.trim()}`);
-      if (result.nothing) throw new AteamError('INVALID', `脚本 ${task.script} 没有改动。没有新经验就加 --no-changes。`);
+      const result = await commitPaths(root, [task.script], `[${task.id}] 操作记录：${b.summary.trim()}`);
+      if (result.nothing) throw new AteamError('INVALID', `脚本 ${task.script} 没有改动。操作记录没有改动就加 --no-changes。`);
       return { task: store.recordDemoSave(b.as, b.summary, result.commits), commit: result.commits.join('、') };
     }),
     'POST /api/jobs/edit': (b) => {
@@ -360,7 +369,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       config: store.config(),
-      // 待演示的演示卡现在能不能开始、缺什么
+      // 待演播的演播卡现在能不能开始、缺什么
       demoBlockers: Object.fromEntries(store.state.tasks.filter((t) => t.kind === 'demo' && t.status === 'ready').map((t) => [t.id, store.demoBlockers(t.id)])),
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
       leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline() },

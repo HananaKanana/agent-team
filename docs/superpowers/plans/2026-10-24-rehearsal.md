@@ -54,10 +54,10 @@
 - 路由：`POST /api/demo/start` 透传 `mode`；`POST /api/demo/step` 透传 `slow`；`POST /api/demo/end` 透传 `stuck`；新增 `GET /api/demo/ops?id=T?` → `{ ops: string }`（读脚本文件，读不到返回空串和 `error`）。`demo/save` 用 `withoutOps`，报错文案改为「只能改脚本的『## 操作记录』段」。
 - wait 结果的 `script` 增加 `mode`（当前 run 的 mode）和 `hasOps`（操作记录段非空）。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测（临时 git 仓库 + 真服务）：只改「## 操作记录」能 save；只改旧「## 经验」也能；改「## 演示步骤」被拒；`/api/demo/ops` 返回段内容；未预演 start show 返回错误；预演 start → wait 拿到 `script.mode === 'rehearsal'`。
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测（临时 git 仓库 + 真服务）：只改「## 操作记录」能 save；只改旧「## 经验」也能；改「## 演示步骤」被拒；`/api/demo/ops` 返回段内容；未预演 start show 返回错误；预演 start → wait 拿到 `script.mode === 'rehearsal'`。
   Run: `node --check src/demo.js src/server.js && node <scratchpad>/probe-rehearsal-server.mjs <scratchpad>` → `ALL PASS`，删除脚本和临时目录。
-- [ ] **Step 3: Commit** `server: rehearsal/show start, slow/stuck flags, ops section endpoint`
+- [x] **Step 3: Commit** `server: rehearsal/show start, slow/stuck flags, ops section endpoint`
 
 ### Task 3: 命令行与 worker 指令
 

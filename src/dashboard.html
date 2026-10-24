@@ -1854,29 +1854,31 @@ function demoRow(t) {
         t.rehearsedAt && opsCache.get(t.id)?.viewport ? el('span', { title: '坐标按这个视口录的，演播前把浏览器窗口调成一样大' }, `浏览器视口 ${opsCache.get(t.id).viewport}`) : null,
         t.assignTo && t.status === 'ready' ? el('span', null, `指派 ${agentName(t.assignTo)}`) : null)),
     el('div', { class: 'demo-acts' }, demoButton(t)),
-    t.status === 'ready' && t.rehearsedAt && opsCache.get(t.id)?.viewport ? viewportTip(t) : null,
+    t.status === 'ready' ? viewportTip(t) : null,
     t.status === 'demoing' ? prompter(t) : progress ? el('div', { class: 'step' }, progress) : null,
     demoError?.id === t.id ? el('div', { class: 'step hint' }, demoError.message) : null);
 }
 
-// 演播前把 Chrome 窗口调到预演时的视口：在项目目录的终端里运行这条命令
+// 演播前把 Chrome 窗口调到预演时的视口。Chrome 窗口左右没有边框，顶上标签栏 + 地址栏 + WorkBuddy 调试提示条
+// 在用户这台 Mac 上量得共 143 高，所以窗口设成 宽 × (高 + 143) 视口就对上了
+const CHROME_FRAME_H = 143;
+const DEFAULT_VIEWPORT = '1600x800';
 let showVpManual = false;
 function viewportTip(t) {
-  const vp = opsCache.get(t.id).viewport;
-  const [w, h] = vp.split('x');
+  const recorded = t.rehearsedAt ? opsCache.get(t.id)?.viewport : null;
+  const vp = recorded || DEFAULT_VIEWPORT;
+  const [w, h] = vp.split('x').map(Number);
   return el('div', { class: 'vp-tip' },
-    el('div', { class: 'hint' }, `演播前浏览器视口要和预演时一样（${vp}），否则点击位置会偏。在项目目录的终端里运行：`),
-    promptBlock(`ateam demo viewport ${t.id}`, render),
+    el('div', { class: 'hint' }, (recorded
+      ? `演播前浏览器视口要和预演时一样（${vp}），否则点击位置会偏。`
+      : `预演前把浏览器视口调成 ${vp}（固定用这个尺寸，以后演播照样调回来）。`) + `先让 worker 连上浏览器（页面顶上出现「WorkBuddy 已开始调试此浏览器」），把演播用的 Chrome 窗口放在最前面，在终端运行：`),
+    promptBlock(`osascript -e 'tell application "Google Chrome" to set bounds of front window to {0, 30, ${w}, ${30 + h + CHROME_FRAME_H}}'`, render),
     el('button', { class: 'linkish', onclick: (e) => { e.stopPropagation(); showVpManual = !showVpManual; render(); } },
-      showVpManual ? '收起手动调整方法' : '命令读不到当前视口？手动调整方法'),
+      showVpManual ? '收起' : '调完还对不上？'),
     showVpManual ? el('ol', { class: 'hint vp-manual' },
-      el('li', null, '先按 Cmd+0 把网页缩放恢复到 100%，演播用的 Chrome 窗口放在最前面。'),
-      el('li', null, `在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到现在的视口（比如 1600x760），关掉控制台后运行（把 1600x760 换成你看到的）。量过一次本机就记住了工具栏高度，以后直接运行上面那条命令即可：`,
-        promptBlock(`ateam demo viewport ${t.id} --now 1600x760`, render)),
-      el('li', null, `或者完全手动：先读出窗口位置（左, 上, 右, 下），再把「右」加上 ${w} 减现在的宽、「下」加上 ${h} 减现在的高，填进第二条命令的花括号里：`,
-        promptBlock(`osascript -e 'tell application "Google Chrome" to get bounds of front window'`, render),
-        promptBlock(`osascript -e 'tell application "Google Chrome" to set bounds of front window to {左, 上, 右, 下}'`, render)),
-      el('li', null, '想让命令自动读取当前视口：Chrome 菜单「查看 > 开发者 > 允许 Apple 事件中的 JavaScript」打勾一次。')) : null);
+      el('li', null, `上面的命令按 Chrome 顶部（标签栏、地址栏、调试提示条）共 ${CHROME_FRAME_H} 高算的；显示了书签栏、没出现调试提示条、或网页缩放不是 100%（按 Cmd+0 恢复）都会偏。`),
+      el('li', null, `核对：在页面上按 Cmd+Option+J，手打 innerWidth+'x'+innerHeight 回车，应该是 '${vp}'。不是的话关掉控制台，把看到的数字填进下面命令再运行，它会按差值精确调整：`,
+        promptBlock(recorded ? `ateam demo viewport ${t.id} --now 看到的数字` : `ateam demo viewport ${vp} --now 看到的数字`, render))) : null);
 }
 
 function renderDemoBanner() {

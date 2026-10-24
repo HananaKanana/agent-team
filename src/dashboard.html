@@ -331,14 +331,18 @@ html.prompter-only .prompter-strip {
 /* 顶部细进度条：走到第几步一眼可见 */
 /* 悬浮窗顶部 28px 是系统的透明标题栏，按住拖动窗口：内容让开，画一条小把手提示 */
 html.prompter-native, html.prompter-native body { background: transparent; }
-html.prompter-native .prompter-strip { padding: 26px 2.4vw 2.6vh; gap: 1vh; background: rgba(14, 17, 20, var(--p-alpha, .58)); border-radius: 12px; }
+html.prompter-native .prompter-strip { padding: 8px 2.4vw 2.2vh; gap: 1vh; background: rgba(14, 17, 20, var(--p-alpha, .58)); border-radius: 12px; }
 html.prompter-native .prompter-strip .say { font-size: calc(var(--p-scale, 1) * max(15px, min(2.4vw, 15vh))); text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
 html.prompter-native .prompter-strip .head .tools .grp { display: inline-flex; }
 html.prompter-native .prompter-strip .head .tools .grp button:first-child { border-radius: 6px 0 0 6px; }
 html.prompter-native .prompter-strip .head .tools .grp button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 html.prompter-native .prompter-strip .head .tools button.on { color: #a9cbff; border-color: #4c8dff; background: rgba(76, 141, 255, .16); }
 html.prompter-native .prompter-strip .head, html.prompter-native .prompter-strip .next { font-size: calc(var(--p-scale, 1) * max(11px, 6vh)); text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
-html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 12px; left: 50%; width: 44px; height: 4px; margin-left: -22px; border-radius: 2px; background: #3a434c; }
+html.prompter-native .prompter-strip::before { content: ""; position: absolute; top: 4px; left: 50%; width: 36px; height: 3px; margin-left: -18px; border-radius: 2px; background: rgba(255, 255, 255, .18); }
+/* 顶部约 28px 是系统标题栏（按住拖窗口，点不到按钮），所以工具条浮在它下面 */
+html.prompter-native .prompter-strip .head .tools { position: absolute; right: 10px; top: 32px; z-index: 1; padding: 3px; gap: 4px; border-radius: 8px; background: rgba(14, 17, 20, .88); }
+html.prompter-native .prompter-strip .head .tools button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; }
+html.prompter-native .prompter-strip .head .tools button svg { width: 15px; height: 15px; }
 html.prompter-native .prompter-strip .bar { top: 0; }
 .prompter-strip .bar { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #262c33; }
 .prompter-strip .bar i { display: block; height: 100%; background: linear-gradient(90deg, #4c8dff, #85b8ff); transition: width .5s ease; }
@@ -818,6 +822,11 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   <symbol id="i-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 12.3l2.7 2.7L16.2 9.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2"/></symbol>
   <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 16 16"><path d="M10 2.5l3.5 3.5-2.2 1-2.3 2.3.3 2.7-1 1L2.9 7.6l1-1 2.7.3L8.9 4.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.7 10.3L2.5 13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-text-down" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-text-up" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4M12.5 6v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-bg-less" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
+  <symbol id="i-bg-more" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".55" stroke="currentColor" stroke-width="1.4"/></symbol>
   <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13.5 2.5v11M2.5 8h8M7.5 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 <header class="top">
@@ -1870,15 +1879,14 @@ function nativeTools() {
   const set = (k, v) => { promptPrefs[k] = v; applyPromptPrefs(); renderPrompterStrip(); };
   const clamp = (v, lo, hi) => Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100;
   return [
-    el('button', { class: promptPrefs.pin ? 'on' : '', title: promptPrefs.pin ? '现在浮在所有窗口上面；点一下变成普通窗口，会被别的窗口盖住' : '点一下浮到所有窗口上面', onclick: () => set('pin', !promptPrefs.pin) },
-      promptPrefs.pin ? '已置顶' : '置顶'),
-    el('span', { class: 'grp', title: '字号' },
-      el('button', { onclick: () => set('scale', clamp(promptPrefs.scale - 0.1, 0.6, 1.8)) }, 'A−'),
-      el('button', { onclick: () => set('scale', clamp(promptPrefs.scale + 0.1, 0.6, 1.8)) }, 'A+')),
-    el('span', { class: 'grp', title: '背景浓淡' },
-      el('button', { onclick: () => set('alpha', clamp(promptPrefs.alpha - 0.15, 0, 0.95)) }, '更透'),
-      el('button', { onclick: () => set('alpha', clamp(promptPrefs.alpha + 0.15, 0, 0.95)) }, '更实')),
-    el('button', { onclick: () => applyPromptPrefs('&close=1') }, '关闭'),
+    el('button', { class: promptPrefs.pin ? 'on' : '', title: promptPrefs.pin ? '已置顶：浮在所有窗口上面。点一下取消置顶' : '未置顶：会被别的窗口盖住。点一下置顶', onclick: () => set('pin', !promptPrefs.pin) }, icon('pin')),
+    el('span', { class: 'grp' },
+      el('button', { title: '字小一点', onclick: () => set('scale', clamp(promptPrefs.scale - 0.1, 0.6, 1.8)) }, icon('text-down')),
+      el('button', { title: '字大一点', onclick: () => set('scale', clamp(promptPrefs.scale + 0.1, 0.6, 1.8)) }, icon('text-up'))),
+    el('span', { class: 'grp' },
+      el('button', { title: '背景更透明', onclick: () => set('alpha', clamp(promptPrefs.alpha - 0.15, 0, 0.95)) }, icon('bg-less')),
+      el('button', { title: '背景更深', onclick: () => set('alpha', clamp(promptPrefs.alpha + 0.15, 0, 0.95)) }, icon('bg-more'))),
+    el('button', { title: '关闭提词窗', onclick: () => applyPromptPrefs('&close=1') }, icon('close')),
   ];
 }
 

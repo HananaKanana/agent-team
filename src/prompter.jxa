@@ -33,6 +33,14 @@ function run(argv) {
   win.contentView.addSubview(web);
   web.loadRequest($.NSURLRequest.requestWithURL($.NSURL.URLWithString(url)));
 
+  // 拖动条：网页会抢标题栏区域的鼠标事件，拖动时灵时不灵。顶部 28px 盖一层透明的原生视图，
+  // 它不处理鼠标，事件交给窗口按背景拖动，按住这一条一定能拖
+  win.movableByWindowBackground = true;
+  const b = win.contentView.bounds;
+  const grip = $.NSView.alloc.initWithFrame($.NSMakeRect(0, b.size.height - 28, b.size.width, 28));
+  grip.autoresizingMask = 2 | 8; // 宽度跟着窗口，贴住顶部
+  win.contentView.addSubviewPositionedRelativeTo(grip, 1, web); // 放在网页上面
+
   // 网页上的按钮通过地址的 # 部分告诉窗口：pin=0/1 置顶开关，close=1 关闭
   let lastFrag = null;
   $.NSTimer.scheduledTimerWithTimeIntervalRepeatsBlock(0.3, true, () => {

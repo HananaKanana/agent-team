@@ -145,18 +145,18 @@ git commit -m "server: demo routes, script attached to wait, experience-only sav
   - `ateam demo save --as <编号> "<经验总结>" [--no-changes]`
   - USAGE 里分别加到 worker / leader 两组。
 
-- [ ] **Step 1: 命令**：按上面加到 `commands`。`demo step` 的 `3/12` 解析成 `n`、`total`，格式不对报「格式是 3/12」。`demo step` 返回 `stopped: true` 时输出 `# 演示已叫停`（同 Step 2 的文案）并以 0 退出。
+- [x] **Step 1: 命令**：按上面加到 `commands`。`demo step` 的 `3/12` 解析成 `n`、`total`，格式不对报「格式是 3/12」。`demo step` 返回 `stopped: true` 时输出 `# 演示已叫停`（同 Step 2 的文案）并以 0 退出。
 
-- [ ] **Step 2: `formatWait` 新增三种输出**：
+- [x] **Step 2: `formatWait` 新增三种输出**：
   - `# 演示 T12：<标题>`：脚本路径、脚本全文、演示规则（照 spec 5.6 逐条：先读准备和经验段；前台浏览器；不提问，出问题自己处理或跳过并记下；每步开始先 `ateam demo step --as <编号> <n>/<总数> "<说明>"`；停留时间照脚本；`{时间}` 替换成当前时间；造的数据用「演示-」前缀；全部跑完 `ateam demo end --as <编号> "<结果：哪些步顺利、哪些跳过及原因>"`）。
   - `# 演示已叫停 T12`：立刻停手、停在当前页面、不清理；接着按收尾第 2、3 步写经验并 `demo save`。
   - `# 演示收尾 T12`：outcome 为 done 时先执行「清理」段（只删「演示-」前缀且标了【清理】的数据）；然后把经验追加到「## 经验」段（只记怎么操作更稳、同类经验更新原条目、不改其他三段）；`ateam demo save --as <编号> "<记了哪些经验>"`，没有新经验加 `--no-changes`。
   - `waitingLines` 在 `waiting.frozen` 时加一行：`正在演示 <T12 标题>，演示结束后继续派发。`
-- [ ] **Step 3: `formatStatus` / `formatJob` / `formatJobs`**：演示需求标「[演示]」，不显示「已通过 x/y」，改为列出演示卡：`- T12 [待演示] 协议适配全流程（脚本 docs/demo/x.md，已演示 3 次，上次 10-24 15:02 跑完）`。状态中文：ready 待演示、queued 等待开始、demoing 演示中、wrapping 收尾中。`formatTask` 对演示卡显示脚本路径和最近 3 次演示记录。
-- [ ] **Step 4: 探测验证**：在 scratchpad 里 `import { formatWait, formatStatus } from '<仓库>/src/format.js'`，喂构造好的结果对象，确认三种标题和冻结提示出现、演示需求不出现「已通过」。
+- [x] **Step 3: `formatStatus` / `formatJob` / `formatJobs`**：演示需求标「[演示]」，不显示「已通过 x/y」，改为列出演示卡：`- T12 [待演示] 协议适配全流程（脚本 docs/demo/x.md，已演示 3 次，上次 10-24 15:02 跑完）`。状态中文：ready 待演示、queued 等待开始、demoing 演示中、wrapping 收尾中。`formatTask` 对演示卡显示脚本路径和最近 3 次演示记录。
+- [x] **Step 4: 探测验证**：在 scratchpad 里 `import { formatWait, formatStatus } from '<仓库>/src/format.js'`，喂构造好的结果对象，确认三种标题和冻结提示出现、演示需求不出现「已通过」。
   Run: `node --check bin/ateam.js src/format.js && node <scratchpad>/probe-demo-format.mjs`
   Expected: 断言通过；删除脚本。
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add bin/ateam.js src/format.js docs/superpowers/plans/2026-10-24-demo-cards.md

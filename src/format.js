@@ -9,7 +9,22 @@ const STATUS = {
   approved: '已通过',
   held: '已挂起',
   cancelled: '已作废',
+  // 演示卡
+  ready: '待演示',
+  queued: '等待开始',
+  demoing: '演示中',
+  wrapping: '收尾中',
 };
+
+const RUN_OUTCOME = { done: '跑完', stopped: '叫停', interrupted: '中断' };
+
+// 演示卡一行摘要：脚本、演示次数、上一次的结果
+function demoLine(t) {
+  const runs = t.runs ?? [];
+  const last = runs[runs.length - 1];
+  const lastText = last ? `，上次 ${formatTime(last.startedAt)} ${RUN_OUTCOME[last.outcome] ?? '进行中'}` : '';
+  return `- ${t.id} [${STATUS[t.status] ?? t.status}] ${t.title}（${t.role}，脚本 ${t.script}，已演示 ${runs.length} 次${lastText}）`;
+}
 
 const JOB_STATUS = {
   planning: '规划中',
@@ -41,6 +56,7 @@ function oneLine(text) {
 }
 
 export function formatTask(task) {
+  if (task.kind === 'demo') return formatDemoTask(task);
   const lines = [];
   lines.push(`- 状态：${statusLabel(task.status)}`);
   lines.push(`- 角色：${task.role}`);
@@ -86,6 +102,31 @@ export function formatTask(task) {
   return lines.join('\n');
 }
 
+function formatDemoTask(task) {
+  const lines = [
+    `- 类型：演示卡`,
+    `- 状态：${statusLabel(task.status)}`,
+    `- 角色：${task.role}`,
+    `- 处理人：${task.assignee ?? '无'}`,
+    `- 脚本：\`${task.script}\``,
+    '',
+    '## 最近的演示',
+    '',
+  ];
+  const runs = (task.runs ?? []).slice(-3).reverse();
+  if (!runs.length) lines.push('（还没演示过）');
+  for (const r of runs) {
+    const saved = r.saved ? `；经验${r.commit ? `已提交 ${r.commit}` : '：无新内容'}` : '';
+    lines.push(`- ${formatTime(r.startedAt)} ${r.by} ${RUN_OUTCOME[r.outcome] ?? '进行中'}${r.result ? `：${oneLine(r.result)}` : ''}${saved}`);
+  }
+  lines.push('', '## 历史', '');
+  for (const h of task.history) {
+    const commit = h.commit ? `（提交 ${h.commit}）` : '';
+    lines.push(`- ${formatTime(h.ts)} [${h.type}] ${h.actor}：${oneLine(h.text)}${commit}`);
+  }
+  return lines.join('\n');
+}
+
 const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复', note: 'leader 补充说明' };
 
 const CRITIQUE_STATUS = {
@@ -119,6 +160,7 @@ const HOLDING_REASON = {
 
 function waitingLines(waiting) {
   if (!waiting) return [];
+  if (waiting.frozen) return [`正在演示 ${waiting.frozen.taskId} ${waiting.frozen.title}，派发已暂停，演示结束后继续派发。`];
   if (waiting.holding) {
     const why = HOLDING_REASON[waiting.holding.status] ?? waiting.holding.status;
     const lines = [`你手上的任务 ${waiting.holding.id} ${why}。`];
@@ -157,6 +199,9 @@ export function formatWait(result, agentId, waiting, round = 0) {
   }
   if (result.kind === 'cancelled') {
     return `# 任务 ${result.task?.id ?? ''} 已作废\n\n${result.text}`;
+  }
+  if (result.kind === 'demo' || result.kind === 'demo_stopped' || result.kind === 'demo_wrap') {
+    return formatDemoWait(result, agentId);
   }
   if (result.kind === 'dismissed') {
     return [
@@ -205,6 +250,62 @@ export function formatWait(result, agentId, waiting, round = 0) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
   return out + footer(agentId);
+}
+
+// 演示卡的三种指令：开始演示、被叫停、收尾。标题文本 skill 里有引用
+function formatDemoWait(result, agentId) {
+  const { kind, task, script } = result;
+  const title = `${task.id}：${task.title}`;
+  const scriptBlock = script
+    ? (script.error ? `\n\n**${script.error}**。请通知用户。` : `\n\n## 脚本 \`${script.path}\`（共 ${script.steps} 步）\n\n${script.text.trim()}`)
+    : '';
+  const save = `ateam demo save --as ${agentId} "<记了哪些经验>"`;
+  const experience = [
+    `把这次的经验追加到脚本 \`${task.script}\` 的「## 经验」段：只记怎么操作更稳（等多久、先点哪里、哪个弹窗要先关）；已有的同类经验就更新那一条，不要重复记。`,
+    '**不要改「## 准备」「## 演示步骤」「## 清理」三段**，改了会被拒绝提交。',
+    `然后运行 ${save}，服务只提交这个脚本文件。没有新经验就加 --no-changes。`,
+    '提交后回到 ateam wait。',
+  ];
+  let out;
+  if (kind === 'demo') {
+    out = [
+      `# 演示 ${title}`,
+      '',
+      '用户正在给客户现场演示，你在用户前台的浏览器里按下面的脚本**从头到尾顺序操作**，用户在旁边讲解。',
+      '',
+      '## 演示规则',
+      '',
+      '1. 先读「## 经验」段，照着经验操作；再按「## 准备」段检查状态（有上次残留的「演示-」数据，按准备段处理）。',
+      '2. 浏览器必须在前台、用户看得见。遵守项目规则和用户的浏览器规则，不用 headless / 后台浏览器。',
+      `3. 每开始一步，先报告：ateam demo step --as ${agentId} <第几步>/<总步数> "<这一步做什么>"。看板会实时显示。`,
+      '4. 每步之间按脚本写的秒数停留，让客户看清楚。',
+      '5. 名称里的 {时间} 换成当前时间；演示造的数据都用「演示-」开头。',
+      '6. **不要提问，不要停下来等人。** 页面慢、弹窗挡住这类小问题自己处理后继续；真走不下去就跳过这一步，记下来，继续下一步。',
+      `7. 如果 demo step 的输出是「# 演示已叫停」：立刻停手，停在当前页面，按那条输出做。`,
+      `8. 全部跑完：ateam demo end --as ${agentId} "<结果：哪些步顺利，哪些跳过、为什么>"，然后按收到的「# 演示收尾」做。`,
+    ].join('\n') + scriptBlock;
+  } else if (kind === 'demo_stopped') {
+    out = [
+      `# 演示已叫停 ${title}`,
+      '',
+      '用户叫停了演示。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。',
+      '',
+      ...experience,
+    ].join('\n') + scriptBlock;
+  } else {
+    const done = result.outcome === 'done';
+    out = [
+      `# 演示收尾 ${title}`,
+      '',
+      done
+        ? '演示已经跑完，客户看完了。先执行脚本的「## 清理」段：只删名称以「演示-」开头、且标了【数据：清理】的数据，别的一概不动。'
+        : '这次演示被叫停了，**不要清理数据**，残留留给下次演示的「## 准备」段处理。',
+      '',
+      ...experience,
+    ].join('\n') + scriptBlock;
+  }
+  if (result.rules) out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
+  return `${out}\n\n---\n**现在就开始。** 不要先向用户汇报，也不要问用户要不要开始。整个过程中不要结束本轮回复，做完回到 ateam wait --as ${agentId}。`;
 }
 
 // 给审卡 worker 的待审清单
@@ -335,6 +436,10 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id);
     const live = tasks.filter((t) => t.status !== 'cancelled');
+    if (j.demo) {
+      lines.push(`### ${j.id} ${j.title} [演示] 演示卡 ${live.length} 张`, '', ...live.map(demoLine), '');
+      continue;
+    }
     const done = live.filter((t) => t.status === 'approved').length;
     lines.push(`### ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}] 已通过 ${done}/${live.length}`, '');
     for (const t of live) {
@@ -368,7 +473,9 @@ export function formatJobs(state, { filter = 'accepted', keyword = '' } = {}) {
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
     const when = j.status === 'accepted' && j.acceptedAt ? `，${formatTime(j.acceptedAt)} 验收` : '';
-    lines.push(`- ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}${when}] 任务 ${tasks.length} 个`);
+    lines.push(j.demo
+      ? `- ${j.id} ${j.title} [演示] 演示卡 ${tasks.length} 张`
+      : `- ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}${when}] 任务 ${tasks.length} 个`);
   }
   lines.push('', '看某个需求的说明、任务、提交和汇报：ateam job show J1');
   return lines.join('\n');
@@ -378,13 +485,14 @@ export function formatJobs(state, { filter = 'accepted', keyword = '' } = {}) {
 export function formatJob(state, job) {
   const tasks = state.tasks.filter((t) => t.jobId === job.id);
   const lines = [`# ${job.id} ${job.title}`, ''];
-  lines.push(`- 状态：${JOB_STATUS[job.status] ?? job.status}`);
+  lines.push(`- 状态：${job.demo ? '演示需求' : JOB_STATUS[job.status] ?? job.status}`);
   if (job.createdAt) lines.push(`- 创建：${formatTime(job.createdAt)}`);
   if (job.acceptedAt) lines.push(`- 验收：${formatTime(job.acceptedAt)}`);
   lines.push('', '## 用户原话', '', job.origin?.trim() || '（没有存）');
   lines.push('', '## 说明', '', job.description?.trim() || '（无）', '', '## 任务', '');
   if (!tasks.length) lines.push('（无）');
   for (const t of tasks) {
+    if (t.kind === 'demo') { lines.push(demoLine(t)); continue; }
     const commits = t.commits.length ? `，提交 ${t.commits.join('、')}` : '';
     lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}，路径 ${t.paths.join('、')}${commits}）`);
   }

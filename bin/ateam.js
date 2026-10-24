@@ -28,7 +28,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 
 const USAGE = `用法：ateam <命令> [参数]
@@ -42,9 +42,13 @@ worker
   ateam progress --as <ID> "<笔记>" [--expect <分钟>]
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
+  ateam demo step --as <ID> 3/12 "<这一步做什么>"
+  ateam demo end --as <ID> "<结果>"
+  ateam demo save --as <ID> "<经验总结>" [--no-changes]
 
 leader
-  ateam job new "<标题>" [--desc-file f.md] [--origin-file 用户原话.md]
+  ateam job new "<标题>" [--desc-file f.md] [--origin-file 用户原话.md] [--demo]
+  ateam demo add --job J1 --title "..." --script docs/demo/x.md [--role test]
   ateam job edit J1 [--title "..."] [--desc-file f.md] [--origin-file f.md（只能给没有原话的老需求补）]
   ateam job accept J1 [J2...]
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]... [--top]
@@ -293,7 +297,8 @@ const commands = {
     const title = requireArg(positional[0], '需求标题', 'ateam job new "用户登录"');
     const description = flags['desc-file'] ? readTextFile(flags['desc-file'], '--desc-file') : '';
     const origin = flags['origin-file'] ? readTextFile(flags['origin-file'], '--origin-file') : (flags.origin ?? '');
-    const { job } = await request('POST', '/api/jobs', { title, description, origin });
+    const { job } = await request('POST', '/api/jobs', { title, description, origin, demo: !!flags.demo });
+    if (job.demo) return `已创建演示需求 ${job.id}：${job.title}\n\n下一步：ateam demo add --job ${job.id} --title "..." --script docs/demo/<名字>.md（脚本先写好并提交）`;
     return `已创建需求 ${job.id}：${job.title}\n\n下一步：ateam task add --job ${job.id} --role <角色> --paths <路径> --title "..." --desc-file <文件> --accept "..."`;
   },
 
@@ -519,6 +524,38 @@ const commands = {
     return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatTask(task)}`;
   },
 
+  async 'demo add'({ flags }) {
+    const jobId = requireArg(flags.job, '--job', 'ateam demo add --job J5 --title "协议适配全流程" --script docs/demo/protocol.md');
+    const title = requireArg(flags.title, '--title', 'ateam demo add --job J5 --title "协议适配全流程" --script docs/demo/protocol.md');
+    const script = requireArg(flags.script, '--script', 'ateam demo add --job J5 --title "协议适配全流程" --script docs/demo/protocol.md');
+    const { task } = await request('POST', '/api/demo/add', { jobId, title, script, role: flags.role ?? 'test' });
+    return `已创建演示卡 ${task.id}：${task.title}（脚本 ${task.script}，角色 ${task.role}）。用户在看板上点「开始演示」后，空闲的 ${task.role} worker 会领走演示。`;
+  },
+
+  async 'demo step'({ flags, positional }) {
+    const as = requireAs(flags);
+    const m = String(positional[0] ?? '').match(/^(\d+)\/(\d+)$/);
+    if (!m) fail(`步数格式是「第几步/总步数」，比如：ateam demo step --as ${as} 3/12 "新建装备"`);
+    const text = requireArg(positional[1], '这一步的说明', `ateam demo step --as ${as} 3/12 "新建装备"`);
+    const data = await request('POST', '/api/demo/step', { as, n: Number(m[1]), total: Number(m[2]), text });
+    if (data.stopped) return formatWait({ kind: 'demo_stopped', task: data.task }, as);
+    return `已记录第 ${m[1]}/${m[2]} 步。继续演示；全部跑完后运行 ateam demo end --as ${as} "<结果>"。`;
+  },
+
+  async 'demo end'({ flags, positional }) {
+    const as = requireAs(flags);
+    const result = requireArg(positional[0], '演示结果', `ateam demo end --as ${as} "12 步全部顺利"`);
+    const { task } = await request('POST', '/api/demo/end', { as, result });
+    return `已记录演示 ${task.id} 跑完，派发已恢复。现在运行 ateam wait --as ${as}，按「# 演示收尾」清理并写经验。`;
+  },
+
+  async 'demo save'({ flags, positional }) {
+    const as = requireAs(flags);
+    const summary = requireArg(positional[0], '经验总结', `ateam demo save --as ${as} "记了首页加载要等 3 秒"`);
+    const { task, commit } = await request('POST', '/api/demo/save', { as, summary, noChanges: !!flags['no-changes'] });
+    return `演示卡 ${task.id} 收尾完成（${commit ? `经验已提交 ${commit}` : '没有新经验'}），已回到待演示。请运行：ateam wait --as ${as}`;
+  },
+
   async report({ flags }) {
     const jobId = requireArg(flags.job, '需求编号 --job', 'ateam report --job J1 --file report.md');
     const file = requireArg(flags.file, '汇报文件 --file', 'ateam report --job J1 --file report.md');
@@ -534,7 +571,7 @@ async function main() {
     console.log(USAGE);
     return 0;
   }
-  if (name === 'job' || name === 'task') name = `${name} ${positional.shift() ?? ''}`;
+  if (name === 'job' || name === 'task' || name === 'demo') name = `${name} ${positional.shift() ?? ''}`;
   const command = commands[name];
   if (!command) fail(`未知命令：${name.trim()}。\n\n${USAGE}`);
   const out = await command({ flags, positional });

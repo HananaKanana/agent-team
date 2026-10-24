@@ -237,6 +237,11 @@ input[type="checkbox"]:not(.switch):checked::after {
   border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); background: color-mix(in srgb, var(--working) 12%, var(--surface));
   color: var(--working); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .mode-pill[hidden] { display: none; }
+.vp-tip { display: grid; gap: 6px; margin-top: 10px; }
+.vp-tip .hint { margin: 0; }
+.vp-manual { display: grid; gap: 6px; margin: 2px 0 0; padding-left: 20px; }
+.linkish { appearance: none; border: 0; background: none; padding: 0; justify-self: start; color: var(--link, var(--working)); font: inherit; font-size: 12.5px; cursor: pointer; }
+.linkish:hover { text-decoration: underline; }
 .mode-pill:hover { background: color-mix(in srgb, var(--working) 20%, var(--surface)); }
 .mode-pill .sub { font-weight: 400; opacity: .85; }
 .banner.demo .step { color: var(--muted); flex: 1 1 240px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1849,8 +1854,29 @@ function demoRow(t) {
         t.rehearsedAt && opsCache.get(t.id)?.viewport ? el('span', { title: '坐标按这个视口录的，演播前把浏览器窗口调成一样大' }, `浏览器视口 ${opsCache.get(t.id).viewport}`) : null,
         t.assignTo && t.status === 'ready' ? el('span', null, `指派 ${agentName(t.assignTo)}`) : null)),
     el('div', { class: 'demo-acts' }, demoButton(t)),
+    t.status === 'ready' && t.rehearsedAt && opsCache.get(t.id)?.viewport ? viewportTip(t) : null,
     t.status === 'demoing' ? prompter(t) : progress ? el('div', { class: 'step' }, progress) : null,
     demoError?.id === t.id ? el('div', { class: 'step hint' }, demoError.message) : null);
+}
+
+// 演播前把 Chrome 窗口调到预演时的视口：在项目目录的终端里运行这条命令
+let showVpManual = false;
+function viewportTip(t) {
+  const vp = opsCache.get(t.id).viewport;
+  const [w, h] = vp.split('x');
+  return el('div', { class: 'vp-tip' },
+    el('div', { class: 'hint' }, `演播前浏览器视口要和预演时一样（${vp}），否则点击位置会偏。在项目目录的终端里运行：`),
+    promptBlock(`ateam demo viewport ${t.id}`, render),
+    el('button', { class: 'linkish', onclick: (e) => { e.stopPropagation(); showVpManual = !showVpManual; render(); } },
+      showVpManual ? '收起手动调整方法' : '命令读不到当前视口？手动调整方法'),
+    showVpManual ? el('ol', { class: 'hint vp-manual' },
+      el('li', null, '先按 Cmd+0 把网页缩放恢复到 100%，演播用的 Chrome 窗口放在最前面。'),
+      el('li', null, `在演播页面按 Cmd+Option+J 打开控制台，输入 innerWidth+'x'+innerHeight 回车，得到现在的视口（比如 1600x760），关掉控制台后运行（把 1600x760 换成你看到的）：`,
+        promptBlock(`ateam demo viewport ${t.id} --now 1600x760`, render)),
+      el('li', null, `或者完全手动：先读出窗口位置（左, 上, 右, 下），再把「右」加上 ${w} 减现在的宽、「下」加上 ${h} 减现在的高，填进第二条命令的花括号里：`,
+        promptBlock(`osascript -e 'tell application "Google Chrome" to get bounds of front window'`, render),
+        promptBlock(`osascript -e 'tell application "Google Chrome" to set bounds of front window to {左, 上, 右, 下}'`, render)),
+      el('li', null, '想让命令自动读取当前视口：Chrome 菜单「查看 > 开发者 > 允许 Apple 事件中的 JavaScript」打勾一次。')) : null);
 }
 
 function renderDemoBanner() {

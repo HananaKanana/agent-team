@@ -2387,7 +2387,8 @@ function rolesNeedingWorkers() {
 
 function renderNeeds() {
   const box = document.getElementById('needs');
-  const byRole = rolesNeedingWorkers();
+  // 预演 / 演播期间派发暂停，没人领也正常，不打扰
+  const byRole = frozenDemo() ? new Map() : rolesNeedingWorkers();
   if (byRole.size === 0) { box.hidden = true; box.replaceChildren(); return; }
   const summary = [...byRole].map(([role, ts]) => `${role}（${ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、')}）`).join('，');
   fill(box,

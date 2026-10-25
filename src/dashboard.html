@@ -199,21 +199,41 @@ input[type="checkbox"]:not(.switch):checked::after {
 .switch:checked { background: var(--brand); }
 .switch:checked::after { transform: translateX(16px); }
 .setting-num { width: 72px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
+.rules-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--sunken); }
+.seg button { border: 0; background: none; padding: 4px 12px; border-radius: 4px; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; }
+.seg button:hover { color: var(--ink); }
+.seg button.on { background: var(--raised); color: var(--ink); box-shadow: var(--shadow-card); }
+.rules-counts { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.rules-count, .role-pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 11px;
+  background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--muted); font-size: 12px; white-space: nowrap;
+}
+.rules-count b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.role-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--faint); }
+.role-pill { border: 0; font: inherit; font-size: 12.5px; height: 26px; padding: 0 11px; border-radius: 13px; cursor: pointer; }
+.role-pill:hover { color: var(--ink); }
+.role-pill.on { background: var(--brand-soft); box-shadow: inset 0 0 0 1px var(--brand); color: var(--brand-ink); font-weight: 600; }
+.role-pills .got { margin-left: auto; }
 .rules-editor {
-  display: block; width: 100%; margin-top: 8px; padding: 10px 12px; resize: vertical;
-  border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink);
-  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  display: block; width: 100%; min-height: 360px; margin-top: 10px; padding: 12px 14px; resize: vertical;
+  border: 0; border-radius: 6px; background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line);
+  font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-.rules-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.rules-preview-head { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--muted); }
-.rules-preview-head select { height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
-.rules-preview {
-  margin: 6px 0 0; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
-  border-radius: 4px; background: var(--sunken); color: var(--ink);
-  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.rules-preview.empty { color: var(--faint); font-family: inherit; }
-.rules-warn { margin: 6px 0 0; font-size: 12.5px; color: var(--rework); }
+.rules-editor:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--focus); }
+.rules-view { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-height: 460px; overflow: auto; }
+.rules-sec { padding: 10px 14px 8px; border-radius: 6px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.rules-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: var(--faint); }
+.rules-tag { padding: 1px 7px; border-radius: 4px; background: var(--brand-soft); color: var(--brand-ink); font: 600 11.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.rules-tag.all { background: var(--sunken); color: var(--muted); }
+.rules-sec .md { font-size: 13px; line-height: 1.65; }
+.rules-sec .md ul { margin: 0; padding-left: 18px; }
+.rules-sec .md li + li { margin-top: 4px; }
+.rules-empty { margin-top: 10px; padding: 28px 0; text-align: center; border-radius: 6px; background: var(--surface); color: var(--faint); font-size: 13px; }
+.rules-warn { margin: 10px 0 0; padding: 6px 10px; border-radius: 4px; background: color-mix(in srgb, var(--rework) 10%, transparent); color: var(--rework); font-size: 12.5px; }
+.rules-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.rules-foot .path { margin-left: auto; font-size: 12px; color: var(--faint); }
+.tab-hint code { padding: 0 4px; border-radius: 3px; background: var(--surface); color: var(--ink); font-size: 12px; }
 .btn:disabled { opacity: .45; cursor: default; }
 .helper-head { display: flex; align-items: center; gap: 6px; }
 .helper-head b { font-size: 17px; font-weight: 650; margin-right: auto; }
@@ -1572,16 +1592,6 @@ function parseRules(text) {
   return out.map((x) => ({ heading: x.heading, roles: x.roles, body: x.lines.join('\n') }));
 }
 
-function rulesFor(text, role) {
-  const list = parseRules(text);
-  if (!list.some((x) => x.heading !== null)) return String(text || '').trim();
-  const r = String(role || '').trim().toLowerCase();
-  return list
-    .filter((x) => (x.roles === 'all' || x.roles.includes(r)) && x.body.trim())
-    .map((x) => (x.heading === null ? x.body.trim() : `## ${x.heading}\n${x.body.trim()}`))
-    .join('\n\n');
-}
-
 function unreceivedRoles(text, known) {
   const set = new Set(known.map((r) => r.toLowerCase()));
   const out = [];
@@ -1618,58 +1628,92 @@ async function saveRules() {
   renderHelper(true);
 }
 
+// 规则每段的条数（- 开头的行），ALL 和开头无标题段合并，顺序同文件
+function ruleCounts(text) {
+  const counts = new Map();
+  for (const x of parseRules(text)) {
+    const name = x.roles === 'all' ? 'ALL' : x.roles.join(', ');
+    counts.set(name, (counts.get(name) || 0) + x.body.split('\n').filter((l) => /^- /.test(l.trim())).length);
+  }
+  return [...counts].filter(([, n]) => n > 0);
+}
+
 function rulesEditor() {
   if (!rules.loaded) return el('p', { class: 'hint' }, '读取中……');
+  const mode = rules.mode === 'view' ? 'view' : 'edit';
   const dirty = rules.draft !== rules.saved;
-  const area = el('textarea', {
-    class: 'rules-editor', rows: '14', spellcheck: 'false',
-    placeholder: '比如：\n- 不写新的测试代码\n- 提交前先跑一遍编译，编译通过再提交\n- 新文件沿用旁边文件的代码风格',
-  });
-  area.value = rules.draft;
-  // 预览：选一个角色，看它领卡时会收到哪些规则（用编辑框里当前的内容，含没保存的修改）
-  const previewRoles = () => [...new Set([...rules.roles, ...parseRules(rules.draft).flatMap((x) => (x.roles === 'all' ? [] : x.roles))])].sort();
-  const roleSelect = el('select', { onchange: (e) => { rules.previewRole = e.target.value; refreshPreview(); } });
-  const preview = el('pre', { class: 'rules-preview' });
+  const setMode = (m) => (e) => { e.stopPropagation(); rules.mode = m; renderHelper(true); };
+  const counts = el('div', { class: 'rules-counts' });
   const warn = el('p', { class: 'rules-warn' });
-  function refreshPreview() {
-    const roles = previewRoles();
-    if (!roles.includes(rules.previewRole)) rules.previewRole = roles[0] || '';
-    fill(roleSelect, roles.map((r) => el('option', { value: r }, r)));
-    roleSelect.value = rules.previewRole;
-    roleSelect.disabled = !roles.length;
-    const text = roles.length ? rulesFor(rules.draft, rules.previewRole) : rulesFor(rules.draft, '');
-    preview.textContent = text || '这个角色收不到任何规则';
-    preview.classList.toggle('empty', !text);
+  function refreshMeta() {
+    fill(counts, ruleCounts(rules.draft).map(([name, n]) => el('span', { class: 'rules-count' }, name, el('b', {}, String(n)))));
     const lost = unreceivedRoles(rules.draft, rules.roles);
     warn.textContent = lost.length ? `这些段目前没有角色会收到：${lost.join('、')}。全员段的小标题只认 ## ALL。` : '';
     warn.hidden = !lost.length;
   }
-  refreshPreview();
-  area.addEventListener('input', () => {
-    rules.draft = area.value;
-    const changed = rules.draft !== rules.saved;
-    saveBtn.disabled = !changed;
-    resetBtn.disabled = !changed;
-    refreshPreview();
-  });
+  refreshMeta();
+
+  let body;
+  if (mode === 'edit') {
+    const area = el('textarea', {
+      class: 'rules-editor', spellcheck: 'false',
+      placeholder: '比如：\n- 不写新的测试代码\n\n## backend\n- 提交前先跑一遍编译\n\n## frontend, test\n- 页面文字不出现接口路径',
+    });
+    area.value = rules.draft;
+    area.addEventListener('input', () => {
+      rules.draft = area.value;
+      const changed = rules.draft !== rules.saved;
+      saveBtn.disabled = !changed;
+      resetBtn.disabled = !changed;
+      refreshMeta();
+    });
+    body = area;
+  } else {
+    // 按角色查看：这个角色领卡时收到哪些段（用当前内容，含没保存的修改）
+    const roles = [...new Set([...rules.roles, ...parseRules(rules.draft).flatMap((x) => (x.roles === 'all' ? [] : x.roles))])].sort();
+    if (!roles.includes(rules.previewRole)) rules.previewRole = roles[0] || '';
+    const role = rules.previewRole;
+    const list = parseRules(rules.draft);
+    const split = list.some((x) => x.heading !== null);
+    const secs = list.filter((x) => (!split || x.roles === 'all' || x.roles.includes(role)) && x.body.trim());
+    const total = secs.reduce((n, x) => n + x.body.split('\n').filter((l) => /^- /.test(l.trim())).length, 0);
+    const md = (text) => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(text); return d; }; // renderMarkdown 先转义了 HTML
+    body = [
+      el('div', { class: 'role-pills' }, '角色',
+        roles.map((r) => el('button', { class: `role-pill${r === role ? ' on' : ''}`, onclick: (e) => { e.stopPropagation(); rules.previewRole = r; renderHelper(true); } }, r)),
+        roles.length ? el('span', { class: 'got' }, `领卡时收到 ${total} 条`) : null),
+      secs.length
+        ? el('div', { class: 'rules-view' }, secs.map((x) => el('section', { class: 'rules-sec' },
+          el('div', { class: 'rules-sec-head' },
+            el('span', { class: `rules-tag${x.roles === 'all' ? ' all' : ''}` }, x.heading ?? 'ALL'),
+            x.heading === null ? (split ? '第一个小标题之前' : '还没分段，所有角色都收到') : x.roles === 'all' ? '所有角色' : null),
+          md(x.body.trim()))))
+        : el('div', { class: 'rules-empty' }, role ? `${role} 收不到任何规则` : '还没有项目规则'),
+    ];
+  }
+
   const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); saveRules(); } }, '保存');
   const resetBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); rules = { ...rules, draft: rules.saved, status: '' }; renderHelper(true); } }, '还原');
-  return [
-    el('p', { class: 'tab-hint' }, '每个任务都要遵守的约定，worker 领任务时自动附上。用 ## backend、## frontend, test 分段，只发给这些角色；## ALL 段和第一个小标题之前的内容发给所有人。一行一条，支持 markdown。'),
-    area,
-    el('div', { class: 'rules-actions' }, saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null),
-    el('div', { class: 'rules-preview-head' }, '预览', roleSelect, '会收到'),
+  const code = (t) => el('code', {}, t);
+  return el('div', { class: 'rules-page' },
+    el('p', { class: 'tab-hint' }, '每个任务都要遵守的约定，worker 领卡时自动附上。用 ', code('## backend'), '、', code('## frontend, test'),
+      ' 分段，只发给这些角色；', code('## ALL'), ' 段和第一个小标题之前的内容发给所有人。一行一条，支持 markdown。'),
+    el('div', { class: 'rules-bar' },
+      el('div', { class: 'seg' },
+        el('button', { class: mode === 'edit' ? 'on' : '', onclick: setMode('edit') }, '编辑'),
+        el('button', { class: mode === 'view' ? 'on' : '', onclick: setMode('view') }, '按角色查看')),
+      counts),
     warn,
-    preview,
-    el('p', { class: 'hint' }, '保存在项目的 .ateam/rules.md。leader 用命令行改规则需要你同意。'),
-  ];
+    body,
+    el('div', { class: 'rules-foot' }, saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null,
+      el('span', { class: 'path' }, '保存在 .ateam/rules.md · leader 用命令行改需要你同意')));
 }
 
 function renderHelper(force = false) {
   const panel = document.getElementById('helper');
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
-  if (!force && helper.tab === 'rules' && panel.querySelector('.rules-editor')) return;
+  if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
   if (!force && helper.tab === 'settings' && document.activeElement?.classList?.contains('setting-num') && panel.contains(document.activeElement)) return;
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;

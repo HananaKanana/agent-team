@@ -1712,7 +1712,10 @@ function rulesEditor() {
       counts),
     warn,
     body,
-    el('div', { class: 'rules-foot' }, saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null,
+    // 按角色查看是只读的：不放保存 / 还原；有没保存的修改时提示回到编辑里保存
+    el('div', { class: 'rules-foot' },
+      mode === 'edit' ? [saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null]
+        : el('span', { class: 'hint' }, dirty ? '只读预览，含还没保存的修改；回到「编辑」里保存' : '只读预览，要改请切到「编辑」'),
       el('span', { class: 'path' }, '保存在 .ateam/rules.md · leader 用命令行改需要你同意')));
 }
 

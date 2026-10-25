@@ -1979,6 +1979,8 @@ function renderShowDialog() {
         el('input', { type: 'checkbox', checked: d.some.has(st.n), onchange: (e) => { const some = new Set(d.some); e.target.checked ? some.add(st.n) : some.delete(st.n); set({ some }); } }),
         el('span', { class: 'no' }, st.n), el('span', null, st.text)))));
   }
+  // 重画会换掉整个弹窗：先记下步骤列表和正文的滚动位置，画完放回去，勾选时不跳回顶部
+  const keep = ['.pick-list', '.modal-body'].map((sel) => [sel, box.querySelector(sel)?.scrollTop ?? 0]);
   box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   box.onclick = (e) => { if (e.target === box) closeShowDialog(); };
   fill(box, el('div', { class: 'modal show-modal', onclick: (e) => e.stopPropagation() },
@@ -1997,6 +1999,7 @@ function renderShowDialog() {
       el('button', { class: 'btn', onclick: stop(closeShowDialog) }, '取消'),
       el('button', { class: 'btn primary', disabled: !sc || blockers.length > 0 || (picked && !picked.length), onclick: stop(go) }, label))));
   box.hidden = false;
+  for (const [sel, top] of keep) { const n = box.querySelector(sel); if (n) n.scrollTop = top; }
 }
 
 const runMode = (t) => t.runs?.[t.runs.length - 1]?.mode ?? 'show';

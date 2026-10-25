@@ -276,6 +276,21 @@ input[type="checkbox"]:not(.switch):checked::after {
 .outline li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 7px 14px; font-size: 13px; line-height: 1.5; color: var(--ink); }
 .outline li .no { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--sunken); }
 .outline li.done { color: var(--faint); }
+.outline li.skip { opacity: .45; }
+.outline .skip-tag { margin-left: 6px; font-size: 11px; font-weight: 500; color: var(--faint); white-space: nowrap; }
+.prompter-strip .head .scene { flex: none; color: #8c9bab; font-variant-numeric: tabular-nums; }
+.demo-runs td.note .only { display: inline-block; margin-right: 8px; padding: 0 6px; border-radius: 3px; font-size: 12px; color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
+/* 开始演播弹窗 */
+.show-modal .warn-line { color: var(--asking); }
+.show-modal .step-select { width: 100%; margin-top: 12px; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink); font: inherit; font-size: 13.5px; }
+.step-pick { margin-top: 12px; }
+.step-pick .pick-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.step-pick .pick-tools .hint { margin-left: auto; }
+.step-pick .pick-list { max-height: 280px; overflow-y: auto; border: 1px solid var(--line-soft); border-radius: 6px; }
+.step-pick label { display: flex; align-items: center; gap: 10px; padding: 7px 12px; font-size: 13px; line-height: 1.45; cursor: pointer; border-top: 1px solid var(--line-soft); }
+.step-pick label:first-child { border-top: none; }
+.step-pick label.on { background: color-mix(in srgb, var(--brand-soft) 45%, transparent); }
+.step-pick label .no { flex: none; width: 22px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .outline li.done .no { color: var(--on-color); background: color-mix(in srgb, var(--working) 55%, var(--surface)); }
 .outline li.slow .no { color: var(--on-color); background: var(--rework); }
 .outline li.now { background: color-mix(in srgb, var(--working) 9%, var(--raised)); box-shadow: inset 3px 0 0 var(--working); }
@@ -317,6 +332,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 /* 步骤进度：每步一格，走过的实色，当前步闪 */
 .steps-bar { display: flex; gap: 3px; margin-top: 10px; }
 .steps-bar span { flex: 1; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--faint) 22%, transparent); }
+/* 本场跳过的步骤：虚线空格 */
+.steps-bar span.skip { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--faint) 35%, transparent); }
 .steps-bar span.done { background: var(--working); }
 .steps-bar span.now { background: color-mix(in srgb, var(--working) 55%, transparent); animation: sheen 1.6s linear infinite; background-image: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); background-size: 200% 100%; }
 .steps-bar span.slow { background: var(--rework); }
@@ -925,6 +942,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 <div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
+<div class="modal-back" id="show-dialog" hidden role="dialog" aria-modal="true" aria-label="开始演播"></div>
 <div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
 
 <script>
@@ -1887,14 +1905,98 @@ const isDemoTask = (t) => t.kind === 'demo';
 const frozenDemo = () => data.state.tasks.find((t) => isDemoTask(t) && (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)));
 let demoError = null; // { id, message }
 
-async function demoAction(kind, t, mode) {
+async function demoAction(kind, t, mode, steps) {
   try {
-    const res = await fetch(`/api/demo/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, mode }) });
+    const res = await fetch(`/api/demo/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, mode, ...(steps ? { steps } : {}) }) });
     const out = await res.json();
     demoError = out.ok ? null : { id: t.id, message: out.message };
   } catch { demoError = { id: t.id, message: '连不上 ateam 服务。' }; }
   await poll();
   render();
+  return !demoError;
+}
+
+// 一场演播选中的步骤（没有 = 完整演播），和服务端 stepsLabel 同一种写法
+const runSteps = (t) => t.runs?.[t.runs.length - 1]?.steps || null;
+function stepsLabel(steps) {
+  if (!steps?.length) return '';
+  const contiguous = steps.every((n, i) => i === 0 || n === steps[i - 1] + 1);
+  return contiguous && steps.length > 1 ? `第 ${steps[0]}–${steps[steps.length - 1]} 步` : `第 ${steps.join('、')} 步`;
+}
+// 部分演播时当前步在本场里是第几步：「本场 2/10」
+function sceneOf(t) {
+  const steps = runSteps(t);
+  const n = t.demoStep?.n;
+  if (!steps || !n) return '';
+  return `本场 ${steps.indexOf(n) + 1}/${steps.length}`;
+}
+
+// 「开始演播」弹窗：从头完整演播 / 从第 N 步开始 / 只演选中的几步。预演不弹（预演总是完整走）
+let showDlg = null; // { id, pick: 'all' | 'from' | 'some', from, some: Set, error, resume }
+function openShowDialog(t) {
+  const last = t.runs?.[t.runs.length - 1];
+  const resume = last && (last.outcome === 'interrupted' || last.outcome === 'stopped') && last.lastStep ? last.lastStep : null;
+  showDlg = { id: t.id, pick: resume ? 'from' : 'all', from: resume || 1, some: new Set(), error: null, resume };
+  renderShowDialog();
+}
+function closeShowDialog() { showDlg = null; renderShowDialog(); }
+function renderShowDialog() {
+  const box = document.getElementById('show-dialog');
+  const t = showDlg && data?.state.tasks.find((x) => x.id === showDlg.id);
+  if (!t || t.status !== 'ready') { showDlg = null; box.hidden = true; box.replaceChildren(); return; }
+  const sc = loadScript(t);
+  const steps = sc?.steps || [];
+  const total = steps.length;
+  const d = showDlg;
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(e); };
+  const set = (patch) => { Object.assign(d, patch, { error: null }); renderShowDialog(); };
+  const choice = (key, title, desc) => el('button', { class: `choice${d.pick === key ? ' on' : ''}`, onclick: stop(() => set({ pick: key })) },
+    el('span', { class: 'radio' }), el('span', null, el('b', null, title), el('span', { class: 'd' }, desc)));
+  const picked = d.pick === 'all' ? null
+    : d.pick === 'from' ? steps.filter((st) => st.n >= d.from).map((st) => st.n)
+    : [...d.some].sort((a, b) => a - b);
+  const label = d.pick === 'all' ? '开始演播'
+    : d.pick === 'from' ? `从第 ${d.from} 步开始演播（${d.from}–${total}）`
+    : `演播选中的 ${picked.length} 步`;
+  const blockers = data.demoBlockers?.[t.id] ?? [];
+  const go = async () => {
+    const ok = await demoAction('start', t, 'show', picked && picked.length < total ? picked : null);
+    if (ok) closeShowDialog();
+    else if (showDlg) { showDlg.error = demoError?.message || '开始失败'; renderShowDialog(); }
+  };
+  let detail = null;
+  if (!sc) detail = el('p', { class: 'hint' }, '正在读取脚本步骤…');
+  else if (d.pick === 'from') {
+    detail = el('select', { class: 'step-select', onchange: (e) => set({ from: Number(e.target.value) }) },
+      steps.map((st) => el('option', { value: st.n, selected: st.n === d.from }, `${st.n}. ${st.text}`)));
+  } else if (d.pick === 'some') {
+    detail = el('div', { class: 'step-pick' },
+      el('div', { class: 'pick-tools' },
+        el('button', { class: 'btn ghost sm', onclick: stop(() => set({ some: new Set(steps.map((st) => st.n)) })) }, '全选'),
+        el('button', { class: 'btn ghost sm', onclick: stop(() => set({ some: new Set() })) }, '全不选'),
+        el('span', { class: 'hint' }, `已选 ${d.some.size} / ${total} 步`)),
+      el('div', { class: 'pick-list' }, steps.map((st) => el('label', { class: d.some.has(st.n) ? 'on' : '' },
+        el('input', { type: 'checkbox', checked: d.some.has(st.n), onchange: (e) => { const some = new Set(d.some); e.target.checked ? some.add(st.n) : some.delete(st.n); set({ some }); } }),
+        el('span', { class: 'no' }, st.n), el('span', null, st.text)))));
+  }
+  box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
+  box.onclick = (e) => { if (e.target === box) closeShowDialog(); };
+  fill(box, el('div', { class: 'modal show-modal', onclick: (e) => e.stopPropagation() },
+    modalHead(`开始演播：${t.title}`, closeShowDialog),
+    el('div', { class: 'modal-body' },
+      t.mayChange ? el('p', { class: 'lead warn-line' }, '页面可能有变动，建议先重新预演。') : null,
+      el('div', { class: 'choices' },
+        choice('all', '从头完整演播', `从第 1 步演到第 ${total || '…'} 步。`),
+        choice('from', d.resume ? `从第 ${d.resume} 步继续` : '从第 N 步开始', d.resume ? '上一场停在这里，从这一步演到最后。' : '从选中的那一步演到最后一步。'),
+        choice('some', '只演选中的几步', '只演勾选的步骤，其余跳过。')),
+      detail,
+      d.pick !== 'all' ? el('p', { class: 'hint' }, '跳过的步骤不会补跑，它们留下的数据和页面要已经在（比如上一场留下的）。没跑到最后一步的话，演完不清理数据。') : null,
+      d.error ? el('p', { class: 'hint', style: 'color: var(--rework)' }, d.error) : null),
+    el('div', { class: 'modal-foot' },
+      blockers.length ? el('span', { class: 'hint' }, `现在不能开始：${blockers.join('；')}`) : null,
+      el('button', { class: 'btn', onclick: stop(closeShowDialog) }, '取消'),
+      el('button', { class: 'btn primary', disabled: !sc || blockers.length > 0 || (picked && !picked.length), onclick: stop(go) }, label))));
+  box.hidden = false;
 }
 
 const runMode = (t) => t.runs?.[t.runs.length - 1]?.mode ?? 'show';
@@ -1912,7 +2014,7 @@ function demoButton(t) {
     const why = blockers.join('；');
     const start = (mode, label, primary, tip) => el('button', {
       class: `btn${primary ? ' primary' : ''}`, disabled: blockers.length > 0, title: why || tip,
-      onclick: (e) => { stop(e); demoAction('start', t, mode); },
+      onclick: (e) => { stop(e); if (mode === 'show') openShowDialog(t); else demoAction('start', t, mode); },
     }, label);
     if (!t.rehearsedAt) return start('rehearsal', '开始预演', true, '慢慢走一遍，写出逐步的操作记录；开始后派发暂停');
     return [
@@ -1946,7 +2048,8 @@ function demoProgress(t) {
 function cueOf(t) {
   const s = t.demoStep;
   if (!s) return { head: '准备中', say: '马上开始第 1 步', next: '' };
-  return { head: `第 ${s.n}/${s.total} 步 · ${s.text}`, say: s.cue?.narration || s.text, next: s.cue?.next || '' };
+  const scene = sceneOf(t);
+  return { head: `第 ${s.n}/${s.total} 步${scene ? `（${scene}）` : ''} · ${s.text}`, say: s.cue?.narration || s.text, next: s.cue?.next || '' };
 }
 function runSince(t) {
   const run = t.runs?.[t.runs.length - 1];
@@ -1986,8 +2089,11 @@ function stepsBar(t) {
   const s = t.demoStep;
   if (!s?.total) return null;
   const slow = new Set(t.runs?.[t.runs.length - 1]?.slowSteps || []);
-  return el('div', { class: 'steps-bar', title: `第 ${s.n}/${s.total} 步` }, Array.from({ length: s.total }, (_, i) => {
+  const only = runSteps(t);
+  const scene = sceneOf(t);
+  return el('div', { class: 'steps-bar', title: `第 ${s.n}/${s.total} 步${scene ? `，${scene}（虚格是本场跳过的步骤）` : ''}` }, Array.from({ length: s.total }, (_, i) => {
     const n = i + 1;
+    if (only && !only.includes(n)) return el('span', { class: 'skip' });
     return el('span', { class: slow.has(n) && n <= s.n ? 'slow' : n < s.n ? 'done' : n === s.n ? 'now' : '' });
   }));
 }
@@ -2051,9 +2157,10 @@ function renderPrompterStrip() {
   const changed = stepKey !== lastStripStep;
   lastStripStep = stepKey;
   fill(box,
-    s?.total ? el('div', { class: 'bar' }, el('i', { style: `width:${Math.round((s.n / s.total) * 100)}%` })) : null,
+    s?.total ? el('div', { class: 'bar' }, el('i', { style: `width:${Math.round((runSteps(t) ? (runSteps(t).indexOf(s.n) + 1) / runSteps(t).length : s.n / s.total) * 100)}%` })) : null,
     el('div', { class: 'head' },
       s ? el('span', { class: 'count' }, String(s.n), el('small', null, `/${s.total}`)) : null,
+      sceneOf(t) ? el('span', { class: 'scene' }, sceneOf(t)) : null,
       el('b', null, s ? s.text : c.head), runSince(t),
       s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
     el('div', { class: `say${changed ? ' enter' : ''}` }, c.say),
@@ -2211,7 +2318,7 @@ function stagePanels(t) {
         el('td', null, RUN_MODE[r.mode] || '演播'),
         el('td', null, agentName(r.by)),
         el('td', { class: r.outcome ? `r-${r.outcome}` : '' }, RUN_OUTCOME[r.outcome] || '进行中'),
-        el('td', { class: 'note' }, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null))))) : el('div', { class: 'empty' }, '还没运行过'));
+        el('td', { class: 'note' }, r.steps?.length ? el('span', { class: 'only' }, r.steps.length > 1 && r.steps.every((n, i) => i === 0 || n === r.steps[i - 1] + 1) ? stepsLabel(r.steps) : `选 ${r.steps.length} 步：${r.steps.join('、')}`) : null, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null))))) : el('div', { class: 'empty' }, '还没运行过'));
   return [top, history];
 }
 // 缓存键：提交、运行次数，以及当前步（预演中 worker 边走边写操作记录，每走一步重读一次脚本）
@@ -2231,6 +2338,7 @@ function stepOutline(t) {
   const run = t.runs?.[t.runs.length - 1];
   const slow = new Set(run?.slowSteps || []);
   const cur = s?.n ?? 0;
+  const only = t.status === 'demoing' ? runSteps(t) : null;
   const recCount = sc ? sc.steps.filter((st) => sc.recorded?.has(st.n)).length : 0;
   const head = el('h4', null, '脚本步骤', el('span', { class: 'hint', title: '已录：操作记录里有合法的动作块，演播时能直接回放' }, sc ? `共 ${sc.steps.length} 步 · 已录 ${recCount}` : ''),
     sc && recCount < sc.steps.length ? el('span', { class: 'hint legend', title: '编号是红色虚线圈的步骤还没录动作块' }, el('i'), '未录') : null);
@@ -2239,10 +2347,11 @@ function stepOutline(t) {
   if (!sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '脚本里没有找到「## 演示步骤」'));
   return el('aside', { class: 'outline' }, head, el('ol', null, sc.steps.map((st) => {
     const rec = sc.recorded?.has(st.n);
-    const cls = [st.n < cur ? 'done' : '', st.n === cur ? 'now' : '', slow.has(st.n) && (cur ? st.n <= cur : true) ? 'slow' : '', rec ? '' : 'unrec'].filter(Boolean).join(' ');
+    const skip = only && !only.includes(st.n);
+    const cls = [skip ? 'skip' : '', !skip && st.n < cur ? 'done' : '', st.n === cur ? 'now' : '', slow.has(st.n) && (cur ? st.n <= cur : true) ? 'slow' : '', rec ? '' : 'unrec'].filter(Boolean).join(' ');
     return el('li', { class: cls, 'data-n': st.n, title: rec ? '已录动作块，演播时直接回放' : '还没录动作块，演播到这一步会变慢' },
-      el('span', { class: 'no' }, st.n < cur && !slow.has(st.n) ? '✓' : st.n),
-      el('div', null, el('div', { class: 'what' }, st.text),
+      el('span', { class: 'no' }, st.n < cur && !slow.has(st.n) && !skip ? '✓' : st.n),
+      el('div', null, el('div', { class: 'what' }, st.text, skip ? el('span', { class: 'skip-tag' }, '本场跳过') : null),
         st.narration && (st.n === cur || !cur) ? el('div', { class: 'say' }, st.narration) : null));
   })));
 }
@@ -2255,7 +2364,7 @@ function refetchOps(t, prev) {
     fetch(`/api/demo/ops?id=${encodeURIComponent(t.id)}`).then((r) => r.json()).then((out) => {
       const ops = (out.ops || '').replace(/<!--[\s\S]*?-->/g, '').trim();
       opsCache.set(t.id, { key, raw: ops, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], recorded: new Set(out.recorded || []), viewport: out.viewport || null, error: out.ok ? out.error : out.message });
-    }).catch(() => opsCache.set(t.id, { ...(prev || {}), key, steps: prev?.steps || [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); });
+    }).catch(() => opsCache.set(t.id, { ...(prev || {}), key, steps: prev?.steps || [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); if (showDlg?.id === t.id) renderShowDialog(); });
   }
 }
 
@@ -2781,6 +2890,8 @@ function render() {
   if (PROMPTER_ONLY) { renderPrompterStrip(); return; }
   renderDemoBanner();
   renderModePill();
+  // 演播开始弹窗：卡已经不是待演播（被别处开始了、作废了）就关掉；其余时候不随轮询重画，免得下拉框被收起
+  if (showDlg && data.state.tasks.find((x) => x.id === showDlg.id)?.status !== 'ready') renderShowDialog();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
   renderWorkers();
   renderJobs();
@@ -3013,6 +3124,7 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (showDlg) { closeShowDialog(); return; }
   if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
@@ -3025,7 +3137,7 @@ document.addEventListener('click', (e) => {
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
   if (!view.task) return;
-  if (e.target.closest('#drawer, .card, .cancelled-row, .demo-row, #demo-banner, #stale-dialog, #decide-dialog')) return;
+  if (e.target.closest('#drawer, .card, .cancelled-row, .demo-row, #demo-banner, #stale-dialog, #decide-dialog, #show-dialog')) return;
   closeDrawer();
 });
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });

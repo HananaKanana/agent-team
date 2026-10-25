@@ -75,9 +75,9 @@
 - 进行中（取最后一场 `run.steps`）：`stepsBar` 没选中的格子加类 `skip`（浅色虚线样式）；提词区、提词小窗、悬浮窗的步骤头在部分演播时追加「本场 i/k」（i = 当前步在 `run.steps` 中的序号）；`stepOutline` 没选中的步骤加类 `skip` 变灰并标「本场跳过」。
 - 运行记录表（`stagePanels` 的 `.demo-runs`）：run 有 `steps` 时说明列前加 `第 12–21 步` / `选 4 步：3、5、7、8`（看板内自写一个同规则的 `stepsLabel`）。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** 语法检查 `node -e "…new Function(…)"` → `syntax ok`；代码审阅：未预演卡不出弹窗，预演按钮路径不变，提词窗（`PROMPTER_ONLY`）无报错。
-- [ ] **Step 3: Commit** `dashboard: start-show dialog (from step N / selected steps), skipped steps dimmed in bar and outline, 本场 progress`
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** 语法检查 `node -e "…new Function(…)"` → `syntax ok`；代码审阅：未预演卡不出弹窗，预演按钮路径不变，提词窗（`PROMPTER_ONLY`）无报错。
+- [x] **Step 3: Commit** `dashboard: start-show dialog (from step N / selected steps), skipped steps dimmed in bar and outline, 本场 progress`
 
 ### Task 4: skill 与核对清单
 

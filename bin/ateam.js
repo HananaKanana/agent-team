@@ -54,6 +54,7 @@ leader
   ateam demo add --job J1 --title "..." --script docs/demo/x.md [--role test]
   ateam job edit J1 [--title "..."] [--desc-file f.md] [--origin-file f.md（只能给没有原话的老需求补）]
   ateam job accept J1 [J2...]
+  ateam job cancel J1 ["<原因>"] [--user-approved]（作废整个需求，必须用户明确同意）
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]... [--top]
   ateam task top T3 [--off]
   ateam task edit T3 [--title "..."] [--role <角色>] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
@@ -310,6 +311,13 @@ const commands = {
     if (positional.length === 0) fail('请指定需求编号。示例：ateam job accept J1 J2');
     const { jobs } = await request('POST', '/api/jobs/accept', { ids: positional });
     return `已验收通过：${jobs.map((j) => `${j.id} ${j.title}`).join('、')}。`;
+  },
+
+  // 作废整个需求：只有用户明确要求时运行；先不带 --user-approved 看会作废哪些卡，用户同意后再带上
+  async 'job cancel'({ flags, positional }) {
+    const id = requireArg(positional[0], '需求编号', 'ateam job cancel J1 "方向变了，不做了" --user-approved');
+    const { job, cancelled } = await request('POST', '/api/jobs/cancel', { id, text: positional[1] ?? '', userApproved: !!flags['user-approved'] });
+    return `已作废需求 ${job.id}：${job.title}。连带作废 ${cancelled.length} 张卡${cancelled.length ? `：${cancelled.map((t) => t.id).join('、')}` : ''}；已通过的卡和代码保留。正在做这些卡的 worker 下次调用 ateam 时会收到停手通知。`;
   },
 
   async 'job edit'({ flags, positional }) {

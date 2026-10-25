@@ -40,6 +40,7 @@ const JOB_STATUS = {
   active: '进行中',
   awaiting_acceptance: '待用户验收',
   accepted: '已验收',
+  cancelled: '已作废',
 };
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -469,7 +470,8 @@ const PENDING_HINT = {
 export function formatStatus(state, pending, jobId, root, repos, showAll = false) {
   const now = Date.now();
   const accepted = jobId || showAll ? [] : state.jobs.filter((j) => j.status === 'accepted');
-  const jobs = jobId ? state.jobs.filter((j) => j.id === jobId) : state.jobs.filter((j) => !accepted.includes(j));
+  const cancelledJobs = jobId || showAll ? [] : state.jobs.filter((j) => j.status === 'cancelled');
+  const jobs = jobId ? state.jobs.filter((j) => j.id === jobId) : state.jobs.filter((j) => !accepted.includes(j) && !cancelledJobs.includes(j));
   const jobIds = new Set(jobs.map((j) => j.id));
   const lines = ['# ateam 状态', ''];
   if (root) lines.push(`项目目录：${root}`, '');
@@ -516,7 +518,8 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
 
   lines.push('', '## 需求', '');
   if (accepted.length) lines.push(`已验收 ${accepted.length} 个，不再列出：${accepted.map((j) => j.id).join('、')}（翻看历史：ateam jobs，单个需求：ateam job show J1）`, '');
-  if (!jobs.length) lines.push(jobId ? `（找不到需求 ${jobId}）` : (accepted.length ? '（没有未验收的需求）' : '（还没有需求）'));
+  if (cancelledJobs.length) lines.push(`已作废 ${cancelledJobs.length} 个，不再列出：${cancelledJobs.map((j) => j.id).join('、')}`, '');
+  if (!jobs.length) lines.push(jobId ? `（找不到需求 ${jobId}）` : (accepted.length || cancelledJobs.length ? '（没有进行中的需求）' : '（还没有需求）'));
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id);
     const live = tasks.filter((t) => t.status !== 'cancelled');
@@ -540,23 +543,24 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
 }
 
 // 需求列表：每个需求一行，用来翻看历史（status 默认不列已验收的需求）。
-// filter：'accepted' 只看已验收，'all' 全部；keyword 在标题、说明、汇报、任务标题里查找。
+// filter：'accepted' 只看已结束的（已验收、已作废），'all' 全部；keyword 在标题、说明、汇报、任务标题里查找。
 export function formatJobs(state, { filter = 'accepted', keyword = '' } = {}) {
   let jobs = state.jobs.slice().reverse();
-  if (filter === 'accepted') jobs = jobs.filter((j) => j.status === 'accepted');
+  if (filter === 'accepted') jobs = jobs.filter((j) => j.status === 'accepted' || j.status === 'cancelled');
   const kw = keyword.trim().toLowerCase();
   if (kw) {
     jobs = jobs.filter((j) => [j.title, j.description, j.report,
       ...state.tasks.filter((t) => t.jobId === j.id).map((t) => t.title)]
       .some((text) => String(text ?? '').toLowerCase().includes(kw)));
   }
-  const what = filter === 'accepted' ? '已验收的需求' : '需求';
+  const what = filter === 'accepted' ? '已结束的需求（已验收、已作废）' : '需求';
   const head = `# ${what}（${jobs.length}）${kw ? `，包含「${keyword.trim()}」` : ''}`;
   if (!jobs.length) return `${head}\n\n（没有）`;
   const lines = [head, ''];
   for (const j of jobs) {
     const tasks = state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
-    const when = j.status === 'accepted' && j.acceptedAt ? `，${formatTime(j.acceptedAt)} 验收` : '';
+    const when = j.status === 'accepted' && j.acceptedAt ? `，${formatTime(j.acceptedAt)} 验收`
+      : j.status === 'cancelled' && j.cancelledAt ? `，${formatTime(j.cancelledAt)} 作废${j.cancelReason ? `：${j.cancelReason}` : ''}` : '';
     lines.push(j.demo
       ? `- ${j.id} ${j.title} [演播] 演播卡 ${tasks.length} 张`
       : `- ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}${when}] 任务 ${tasks.length} 个`);
@@ -572,6 +576,7 @@ export function formatJob(state, job) {
   lines.push(`- 状态：${job.demo ? '演播需求' : JOB_STATUS[job.status] ?? job.status}`);
   if (job.createdAt) lines.push(`- 创建：${formatTime(job.createdAt)}`);
   if (job.acceptedAt) lines.push(`- 验收：${formatTime(job.acceptedAt)}`);
+  if (job.cancelledAt) lines.push(`- 作废：${formatTime(job.cancelledAt)}${job.cancelReason ? `，原因：${job.cancelReason}` : ''}`);
   lines.push('', '## 用户原话', '', job.origin?.trim() || '（没有存）');
   lines.push('', '## 说明', '', job.description?.trim() || '（无）', '', '## 任务', '');
   if (!tasks.length) lines.push('（无）');

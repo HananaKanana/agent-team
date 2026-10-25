@@ -40,10 +40,10 @@
 - 命令 `ateam job cancel J1 ["<原因>"] [--user-approved]`；USAGE 加在 leader 段 `job accept` 之后。输出：`已作废需求 J1：<标题>。连带作废 n 张卡：T3、T4；已通过的卡和代码保留。正在做这些卡的 worker 下次调用 ateam 时会收到停手通知。`
 - format.js：`JOB_STATUS` 加 `cancelled: '已作废'`；`formatStatus` 默认收起的需求从「已验收」扩为「已验收或已作废」（`--job` / `--all` 照常列出）；`formatJobs` 的 `filter === 'accepted'` 改为列出已验收**和**已作废，作废的行写「，<时间> 作废：<原因>」。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测（`createStore` 驱动）：J1 有 T1（approved）、T2（pending）、T3（pending，依赖 T2）、T4（worker 正在做）；不带授权 `cancelJob('J1','x')` 抛 `NEEDS_USER` 且信息含 T2、T3、T4，不含 T1，状态都没变；J2 的 T5 依赖 T2 时带授权也抛 `BAD_STATE` 含 T5；去掉 T5 依赖后带授权成功：T1 仍 approved，T2–T4 cancelled、`cancelReason === '需求作废：x'`，J1 `status === 'cancelled'`；做 T4 的 worker 下一次 `nextFor` 返回 `kind === 'cancelled'`；之后 `addTask`、`editJob`、`report`、`acceptJobs` 对 J1 都抛 `BAD_STATE`；再 `cancelJob` 抛 `BAD_STATE`；演播需求里 demoing 的卡作废后 `demoFrozen()` 为假、最后一场 `outcome === 'stopped'`。
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测（`createStore` 驱动）：J1 有 T1（approved）、T2（pending）、T3（pending，依赖 T2）、T4（worker 正在做）；不带授权 `cancelJob('J1','x')` 抛 `NEEDS_USER` 且信息含 T2、T3、T4，不含 T1，状态都没变；J2 的 T5 依赖 T2 时带授权也抛 `BAD_STATE` 含 T5；去掉 T5 依赖后带授权成功：T1 仍 approved，T2–T4 cancelled、`cancelReason === '需求作废：x'`，J1 `status === 'cancelled'`；做 T4 的 worker 下一次 `nextFor` 返回 `kind === 'cancelled'`；之后 `addTask`、`editJob`、`report`、`acceptJobs` 对 J1 都抛 `BAD_STATE`；再 `cancelJob` 抛 `BAD_STATE`；演播需求里 demoing 的卡作废后 `demoFrozen()` 为假、最后一场 `outcome === 'stopped'`。
   Run: `node --check src/store.js src/server.js src/format.js bin/ateam.js && node <scratchpad>/probe-job-cancel.mjs` → `ALL PASS`，删除脚本。
-- [ ] **Step 3: Commit** `store/server/cli: cancel a whole job (ateam job cancel, user-approved)`
+- [x] **Step 3: Commit** `store/server/cli: cancel a whole job (ateam job cancel, user-approved)`
 
 ### Task 2: 看板
 

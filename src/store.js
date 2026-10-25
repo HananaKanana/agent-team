@@ -164,8 +164,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 修改需求的标题或说明，任何状态都可以改（只是文字，不影响派发）
-  function editJob(jobId, patch = {}) {
+  // 已作废的需求：不能再加卡、改、汇报、验收
+  function liveJob(jobId) {
     const job = getJob(jobId);
+    if (job.status === 'cancelled') throw new AteamError('BAD_STATE', `需求 ${job.id} 已作废，不能再修改、加卡、汇报或验收。`);
+    return job;
+  }
+
+  function editJob(jobId, patch = {}) {
+    const job = liveJob(jobId);
     let touched = false;
     if (patch.title !== undefined) { job.title = requireText(patch.title, '需求标题'); touched = true; }
     if (patch.description !== undefined) { job.description = String(patch.description ?? ''); touched = true; }
@@ -182,7 +189,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   function addTask({ jobId, title, role, paths, description = '', acceptance = [], dependsOn = [], top = false } = {}) {
-    const job = getJob(jobId);
+    const job = liveJob(jobId);
     if (job.demo) throw new AteamError('INVALID', `需求 ${job.id} 是演播需求，里面只能放演播卡。请用 ateam demo add --job ${job.id} ...`);
     title = requireText(title, '任务标题');
     role = requireText(role, '角色（--role）');
@@ -803,7 +810,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 能审的卡：没作废，所属需求还没验收
   function critiquable(t) {
     if (!(t.status in CRITIQUE_RANK)) return false;
-    return state.jobs.find((j) => j.id === t.jobId)?.status !== 'accepted';
+    const st = state.jobs.find((j) => j.id === t.jobId)?.status;
+    return st !== 'accepted' && st !== 'cancelled';
   }
 
   function reviewed(t) {
@@ -1062,6 +1070,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       const ids = dependents.map((t) => t.id).join('、');
       throw new AteamError('BAD_STATE', `任务 ${ids} 依赖 ${task.id}，不能直接作废。请先把它们也作废（ateam cancel），或用 ateam task edit <编号> --after ... 去掉这个依赖。`);
     }
+    cancelOne(task, reason);
+    changed();
+    return task;
+  }
+
+  // 作废一张卡的主体（不做状态和依赖检查）：拿着它的 worker 记作废通知，演播中的卡记为叫停
+  function cancelOne(task, reason) {
     const agent = task.assignee && findAgent(task.assignee);
     if (isDemo(task) && task.status === 'demoing') closeRun(task, 'stopped', '演播卡被作废');
     task.cancelledWhileHeld = !!(agent && agent.currentTask === task.id);
@@ -1076,13 +1091,38 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.pendingDelivery = null;
     task.cancelReason = String(reason ?? '').trim();
     addHistory(task, 'cancelled', 'lead', task.cancelReason || '作废');
+  }
+
+  // 作废整个需求：没做完的卡全部作废，已通过的卡和代码不动。必须用户同意（userApproved）
+  function cancelJob(jobId, reason = '', userApproved = false) {
+    const job = getJob(jobId);
+    if (job.status === 'accepted' || job.status === 'cancelled') {
+      throw new AteamError('BAD_STATE', `需求 ${job.id} 当前状态是 ${job.status === 'accepted' ? '已验收' : '已作废'}，不能作废。`);
+    }
+    reason = String(reason ?? '').trim();
+    const targets = state.tasks.filter((t) => t.jobId === job.id && t.status !== 'approved' && t.status !== 'cancelled');
+    const ids = new Set(targets.map((t) => t.id));
+    const outside = state.tasks.filter((t) => t.jobId !== job.id && t.status !== 'cancelled' && t.dependsOn.some((d) => ids.has(d)));
+    if (outside.length) {
+      throw new AteamError('BAD_STATE', `别的需求里的任务 ${outside.map((t) => `${t.id}（需求 ${t.jobId}，依赖 ${t.dependsOn.filter((d) => ids.has(d)).join('、')}）`).join('、')} 依赖这个需求里没做完的卡。请先处理那边的依赖（ateam task edit <编号> --after ...，或作废那些卡），再作废需求 ${job.id}。`);
+    }
+    if (!userApproved) {
+      const list = targets.length ? targets.map((t) => `- ${t.id} ${t.title}（${t.status}）`).join('\n') : '没有未完成的卡，只会把需求标为已作废。';
+      throw new AteamError('NEEDS_USER', `作废整个需求必须用户明确同意。作废需求 ${job.id}「${job.title}」会连带作废这些没做完的卡（已通过的卡和代码保留）：\n${list}\n请把这些列给用户，用户明确同意作废整个需求后加 --user-approved 重新运行。`);
+    }
+    for (const t of targets) cancelOne(t, reason ? `需求作废：${reason}` : '需求作废');
+    job.status = 'cancelled';
+    job.cancelledAt = now();
+    job.cancelReason = reason;
+    job.updatedAt = job.cancelledAt;
+    emit('job_cancelled', { jobId: job.id, text: `需求 ${job.id} ${job.title} 已作废${reason ? `：${reason}` : ''}，连带作废 ${targets.length} 张卡` });
     changed();
-    return task;
+    return { job, cancelled: targets };
   }
 
   function report(jobId, markdown) {
     markdown = requireText(markdown, '汇报内容');
-    const job = getJob(jobId);
+    const job = liveJob(jobId);
     if (job.demo) throw new AteamError('BAD_STATE', `需求 ${job.id} 是演播需求，没有汇报和验收。`);
     const tasks = state.tasks.filter((t) => t.jobId === job.id && t.status !== 'cancelled');
     if (tasks.length === 0) {
@@ -1103,7 +1143,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function acceptJobs(ids) {
     const list = Array.isArray(ids) ? ids : [];
     if (list.length === 0) throw new AteamError('INVALID', '请指定要验收通过的需求编号，例如 J1。');
-    const jobs = list.map((id) => getJob(id));
+    const jobs = list.map((id) => liveJob(id));
     for (const job of jobs) {
       if (job.status !== 'awaiting_acceptance') {
         throw new AteamError('BAD_STATE', `需求 ${job.id} 当前状态是 ${job.status}，只有待用户验收的需求可以验收通过。`);
@@ -1248,7 +1288,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   const lastRun = (task) => task.runs?.[task.runs.length - 1] ?? null;
 
   function addDemo({ jobId, title, script, role = 'test' } = {}) {
-    const job = getJob(jobId);
+    const job = liveJob(jobId);
     if (!job.demo) throw new AteamError('INVALID', `需求 ${job.id} 不是演播需求，不能放演播卡。请先用 ateam job new "<标题>" --demo 建演播需求。`);
     title = requireText(title, '演播卡标题');
     script = requireText(script, '脚本路径（--script）');
@@ -1600,7 +1640,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     addDemo, demoBlockers, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

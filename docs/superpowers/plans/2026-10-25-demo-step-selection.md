@@ -86,5 +86,5 @@
 - worker：主循环表 `# 演播` 一行补「部分演播（指令里列了这一场的步骤）只做列出的步骤，不执行「## 准备」段」。
 - leader：演播卡一节补「演播可以从某一步开始或只演几步，在看板点『开始演播』的弹窗里选；预演总是完整跑」。
 - 核对清单：追加 spec 第 7 节 7 条，接在现有编号后。
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2: Commit** `skills: demo step selection; checklist`
+- [x] **Step 1:** 实现。
+- [x] **Step 2: Commit** `skills: demo step selection; checklist`

@@ -124,6 +124,12 @@ button.worker:hover { background: var(--sunken); }
 .btn.icon { width: 32px; padding: 0; }
 .btn.icon svg { width: 16px; height: 16px; }
 .btn.attention[hidden] { display: none; }
+/* 按钮里的数字：圆角小徽标，不和文字挤在一起 */
+.cnt { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+  font-size: 12px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.btn.attention { gap: 8px; }
+.btn.attention .cnt { background: var(--on-color); color: var(--rework); }
+.needs-pill .cnt { background: var(--asking); color: var(--on-color); margin-left: 1px; }
 .att-modal { width: min(640px, 100%); }
 /* 「需要你处理」：从页头按钮下面弹出的气泡，不盖暗整个页面 */
 .att-pop { position: fixed; z-index: 30; top: 60px; right: 20px; }
@@ -2898,7 +2904,7 @@ function renderNeeds() {
   if (byRole.size === 0) { box.hidden = true; box.replaceChildren(); pill.hidden = true; needsOpen = false; return; }
   const summary = [...byRole].map(([role, ts]) => `${role}（${ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、')}）`).join('，');
   const count = [...byRole.values()].reduce((n, ts) => n + ts.length, 0);
-  fill(pill, el('span', { class: 'ic' }, '!'), `有任务没人做 ${count}`);
+  fill(pill, el('span', { class: 'ic' }, '!'), '有任务没人做', el('span', { class: 'cnt' }, String(count)));
   pill.title = `缺少这些角色的在线 worker：${summary}`;
   pill.setAttribute('aria-expanded', needsOpen ? 'true' : 'false');
   pill.hidden = false;
@@ -3207,7 +3213,7 @@ function renderAttention() {
   const btn = document.getElementById('attention');
   if (!items.length) { btn.hidden = true; return; }
   btn.hidden = false;
-  btn.textContent = `需要你处理 ${items.length}`;
+  fill(btn, '需要你处理', el('span', { class: 'cnt' }, String(items.length)));
   btn.title = items.map((i) => i.text).join('\n');
 }
 

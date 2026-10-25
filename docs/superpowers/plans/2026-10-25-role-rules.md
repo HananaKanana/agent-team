@@ -82,9 +82,9 @@
   - 底部说明改为「保存在项目的 .ateam/rules.md。leader 用命令行改规则需要你同意。」
 - 样式：`.rules-preview` 沿用编辑框字体、浅底、`max-height` 内滚动。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** 语法检查 `node -e "…new Function(…)"` → `syntax ok`；代码审阅：没有小标题时预览等于全文；保存仍可用。
-- [ ] **Step 3: Commit** `dashboard: rules preview per role; save sends userApproved`
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** 语法检查 `node -e "…new Function(…)"` → `syntax ok`；代码审阅：没有小标题时预览等于全文；保存仍可用。
+- [x] **Step 3: Commit** `dashboard: rules preview per role; save sends userApproved`
 
 ### Task 4: skill 与核对清单
 

@@ -205,6 +205,15 @@ input[type="checkbox"]:not(.switch):checked::after {
   font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .rules-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.rules-preview-head { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+.rules-preview-head select { height: 28px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
+.rules-preview {
+  margin: 6px 0 0; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+  border-radius: 4px; background: var(--sunken); color: var(--ink);
+  font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.rules-preview.empty { color: var(--faint); font-family: inherit; }
+.rules-warn { margin: 6px 0 0; font-size: 12.5px; color: var(--rework); }
 .btn:disabled { opacity: .45; cursor: default; }
 .helper-head { display: flex; align-items: center; gap: 6px; }
 .helper-head b { font-size: 17px; font-weight: 650; margin-right: auto; }
@@ -1545,7 +1554,43 @@ function renderOfflinePanel(panel) {
 }
 
 // 项目规则编辑器的状态。规则不在 /api/state 里，进入「项目规则」页时单独读取
-let rules = { loaded: false, saved: '', draft: '', status: '' };
+let rules = { loaded: false, saved: '', draft: '', status: '', roles: [], previewRole: '' };
+
+// 规则分段，和 src/rules.js 同一套规则（改动两边保持一致）：
+// 第一个 `## ` 之前和 `## ALL` 段发给所有人，`## backend`、`## frontend, test` 只发给这些角色
+function parseRules(text) {
+  const out = [];
+  let cur = { heading: null, roles: 'all', lines: [] };
+  for (const line of String(text || '').split('\n')) {
+    const m = line.match(/^## (.*)$/);
+    if (!m) { cur.lines.push(line); continue; }
+    out.push(cur);
+    const heading = m[1].trim();
+    cur = { heading, roles: heading.toLowerCase() === 'all' ? 'all' : heading.split(/[,，、\s]+/).map((r) => r.trim().toLowerCase()).filter(Boolean), lines: [] };
+  }
+  out.push(cur);
+  return out.map((x) => ({ heading: x.heading, roles: x.roles, body: x.lines.join('\n') }));
+}
+
+function rulesFor(text, role) {
+  const list = parseRules(text);
+  if (!list.some((x) => x.heading !== null)) return String(text || '').trim();
+  const r = String(role || '').trim().toLowerCase();
+  return list
+    .filter((x) => (x.roles === 'all' || x.roles.includes(r)) && x.body.trim())
+    .map((x) => (x.heading === null ? x.body.trim() : `## ${x.heading}\n${x.body.trim()}`))
+    .join('\n\n');
+}
+
+function unreceivedRoles(text, known) {
+  const set = new Set(known.map((r) => r.toLowerCase()));
+  const out = [];
+  for (const x of parseRules(text)) {
+    if (x.roles === 'all') continue;
+    for (const r of x.roles) if (!set.has(r) && !out.includes(r)) out.push(r);
+  }
+  return out;
+}
 
 async function loadRules() {
   try {
@@ -1554,7 +1599,7 @@ async function loadRules() {
     const saved = json.rules || '';
     // 上次没保存的草稿保留着（比如按 Esc 关了面板）
     const keepDraft = rules.loaded && rules.draft !== rules.saved;
-    rules = { loaded: true, saved, draft: keepDraft ? rules.draft : saved, status: keepDraft ? '有未保存的修改。' : '' };
+    rules = { ...rules, loaded: true, saved, draft: keepDraft ? rules.draft : saved, status: keepDraft ? '有未保存的修改。' : '', roles: json.roles || [] };
   } catch {
     rules = { ...rules, loaded: true, status: '读取失败，请确认服务在运行（规则功能需要新版服务）。' };
   }
@@ -1563,10 +1608,10 @@ async function loadRules() {
 
 async function saveRules() {
   try {
-    const res = await fetch('/api/rules', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: rules.draft }) });
+    const res = await fetch('/api/rules', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: rules.draft, userApproved: true }) });
     const json = await res.json();
     if (!json.ok) throw new Error(json.message);
-    rules = { loaded: true, saved: json.rules, draft: json.rules, status: '已保存。之后派发的任务都会带上。' };
+    rules = { ...rules, loaded: true, saved: json.rules, draft: json.rules, status: '已保存。之后派发的任务按角色带上。' };
   } catch (err) {
     rules = { ...rules, status: `保存失败：${err.message}` };
   }
@@ -1581,19 +1626,42 @@ function rulesEditor() {
     placeholder: '比如：\n- 不写新的测试代码\n- 提交前先跑一遍编译，编译通过再提交\n- 新文件沿用旁边文件的代码风格',
   });
   area.value = rules.draft;
+  // 预览：选一个角色，看它领卡时会收到哪些规则（用编辑框里当前的内容，含没保存的修改）
+  const previewRoles = () => [...new Set([...rules.roles, ...parseRules(rules.draft).flatMap((x) => (x.roles === 'all' ? [] : x.roles))])].sort();
+  const roleSelect = el('select', { onchange: (e) => { rules.previewRole = e.target.value; refreshPreview(); } });
+  const preview = el('pre', { class: 'rules-preview' });
+  const warn = el('p', { class: 'rules-warn' });
+  function refreshPreview() {
+    const roles = previewRoles();
+    if (!roles.includes(rules.previewRole)) rules.previewRole = roles[0] || '';
+    fill(roleSelect, roles.map((r) => el('option', { value: r }, r)));
+    roleSelect.value = rules.previewRole;
+    roleSelect.disabled = !roles.length;
+    const text = roles.length ? rulesFor(rules.draft, rules.previewRole) : rulesFor(rules.draft, '');
+    preview.textContent = text || '这个角色收不到任何规则';
+    preview.classList.toggle('empty', !text);
+    const lost = unreceivedRoles(rules.draft, rules.roles);
+    warn.textContent = lost.length ? `这些段目前没有角色会收到：${lost.join('、')}。全员段的小标题只认 ## ALL。` : '';
+    warn.hidden = !lost.length;
+  }
+  refreshPreview();
   area.addEventListener('input', () => {
     rules.draft = area.value;
     const changed = rules.draft !== rules.saved;
     saveBtn.disabled = !changed;
     resetBtn.disabled = !changed;
+    refreshPreview();
   });
   const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); saveRules(); } }, '保存');
   const resetBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); rules = { ...rules, draft: rules.saved, status: '' }; renderHelper(true); } }, '还原');
   return [
-    el('p', { class: 'tab-hint' }, '每个任务都要遵守的约定。worker 领到任务时，这里的内容会自动附在任务后面，leader 不用在每个任务里重复写。一行一条，支持 markdown。'),
+    el('p', { class: 'tab-hint' }, '每个任务都要遵守的约定，worker 领任务时自动附上。用 ## backend、## frontend, test 分段，只发给这些角色；## ALL 段和第一个小标题之前的内容发给所有人。一行一条，支持 markdown。'),
     area,
     el('div', { class: 'rules-actions' }, saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null),
-    el('p', { class: 'hint' }, '保存在项目的 .ateam/rules.md。leader 也可以用 ateam rules add "<一条规则>" 添加。'),
+    el('div', { class: 'rules-preview-head' }, '预览', roleSelect, '会收到'),
+    warn,
+    preview,
+    el('p', { class: 'hint' }, '保存在项目的 .ateam/rules.md。leader 用命令行改规则需要你同意。'),
   ];
 }
 

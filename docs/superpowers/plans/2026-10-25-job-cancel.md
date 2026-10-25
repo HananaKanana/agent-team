@@ -55,9 +55,9 @@
 - `attentionItems` 等「需要你处理」的来源：跳过 `cancelled` 需求的事项（检查现有对 `accepted` 的排除处，同样排除 `cancelled`）。
 - 概览卡的耗时：`cancelled` 时按 `cancelledAt` 截止，标签「到作废」。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** 语法检查 `node -e "…new Function(…)"` → `syntax ok`；代码审阅：没有 `cancelled` 需求时页面不变。
-- [ ] **Step 3: Commit** `dashboard: cancelled jobs — own collapsed group, notice on the job page`
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** 语法检查 `node -e "…new Function(…)"` → `syntax ok`；代码审阅：没有 `cancelled` 需求时页面不变。
+- [x] **Step 3: Commit** `dashboard: cancelled jobs — own collapsed group, notice on the job page`
 
 ### Task 3: skill 与核对清单
 

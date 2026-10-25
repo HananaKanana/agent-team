@@ -458,6 +458,9 @@ nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); m
   color: var(--muted); font-size: 13px; font-weight: 600; text-align: left;
 }
 .accepted-toggle:hover { color: var(--ink); }
+/* 已作废需求的提示条 */
+.job-cancelled { padding: 8px 12px; border-radius: 6px; font-size: 13px; line-height: 1.6; color: var(--muted);
+  background: color-mix(in srgb, var(--faint) 10%, var(--surface)); box-shadow: inset 3px 0 0 var(--faint); }
 .report-bar .hint { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
 .job .sub { color: var(--faint); font-size: 12px; display: flex; justify-content: space-between; margin-top: 5px; }
 
@@ -958,8 +961,8 @@ const LANES = [
   { key: 'held', label: '已挂起' },
 ];
 const LANE_LABEL = { ...Object.fromEntries(LANES.map((l) => [l.key, l.label])), cancelled: '已作废' };
-const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收', accepted: '已验收' };
-const JOB_LOZENGE = { planning: 'pending', active: 'working', awaiting_acceptance: 'asking', accepted: 'approved' };
+const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收', accepted: '已验收', cancelled: '已作废' };
+const JOB_LOZENGE = { planning: 'pending', active: 'working', awaiting_acceptance: 'asking', accepted: 'approved', cancelled: 'cancelled' };
 let descOpenJob = null; // 展开了说明的需求
 let acceptArm = null; // 「验收通过」两步确认：记需求编号
 
@@ -1639,6 +1642,9 @@ function renderHelper(force = false) {
 // 已验收的需求收进左侧底部一个可展开的分组，默认收起
 let acceptedOpen = false;
 try { acceptedOpen = localStorage.getItem('ateam.acceptedOpen') === '1'; } catch {}
+// 已作废的需求：单独一组，默认收起
+let cancelledJobsOpen = false;
+try { cancelledJobsOpen = localStorage.getItem('ateam.cancelledJobsOpen') === '1'; } catch {}
 
 function renderJobs() {
   const nav = document.getElementById('jobs');
@@ -1664,8 +1670,20 @@ function renderJobs() {
     jt.length ? strip(jt, false) : null);
   };
   const newest = jobs.slice().reverse();
-  const open = newest.filter((j) => j.status !== 'accepted');
+  const open = newest.filter((j) => j.status !== 'accepted' && j.status !== 'cancelled');
   const done = newest.filter((j) => j.status === 'accepted');
+  const dropped = newest.filter((j) => j.status === 'cancelled');
+  const droppedGroup = dropped.length ? [
+    el('button', {
+      class: 'accepted-toggle', 'aria-expanded': cancelledJobsOpen ? 'true' : 'false',
+      onclick: () => {
+        cancelledJobsOpen = !cancelledJobsOpen;
+        try { localStorage.setItem('ateam.cancelledJobsOpen', cancelledJobsOpen ? '1' : '0'); } catch {}
+        renderJobs();
+      },
+    }, el('span', null, cancelledJobsOpen ? '▾' : '▸'), `已作废（${dropped.length}）`),
+    cancelledJobsOpen ? dropped.map(jobItem) : null,
+  ] : [];
   const doneGroup = done.length ? [
     el('button', {
       class: 'accepted-toggle', 'aria-expanded': acceptedOpen ? 'true' : 'false',
@@ -1679,7 +1697,7 @@ function renderJobs() {
   ] : [];
   const empty = jobs.length ? (open.length ? [] : [emptyState('done', '需求都验收完了', '有新需求时直接跟 leader 说。')])
     : [emptyState('inbox', '还没有需求', '对 leader 说出你的需求，它会在这里建立任务。')];
-  fill(nav, el('h2', null, '需求'), open.map(jobItem), empty, doneGroup);
+  fill(nav, el('h2', null, '需求'), open.map(jobItem), empty, doneGroup, droppedGroup);
 }
 
 function renderMain() {
@@ -1705,6 +1723,8 @@ function renderMain() {
       job.demo ? null : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
     el('h2', { class: 'job-title' }, job.title),
     job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
+    job.status === 'cancelled' ? el('div', { class: 'job-cancelled' },
+      `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的卡和代码保留，没做完的卡已作废。`) : null,
     job.description ? (() => {
       const box = el('div', { class: `desc md${longDesc && !descOpen ? ' clamped' : ''}` });
       box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
@@ -1779,7 +1799,8 @@ function renderMain() {
 const ACTIVITY_TYPES = new Set(['claimed', 'asked', 'answered', 'submitted', 'approved', 'rejected', 'handoff', 'cancelled', 'critique']);
 function jobSide(job, tasks, collapsed) {
   const st = reviewStats(tasks);
-  const end = job.acceptedAt ? new Date(job.acceptedAt) : Date.now();
+  const endAt = job.acceptedAt || job.cancelledAt;
+  const end = endAt ? new Date(endAt) : Date.now();
   const took = dur(end - new Date(job.createdAt));
   const roles = new Map();
   for (const t of tasks) {
@@ -1802,7 +1823,7 @@ function jobSide(job, tasks, collapsed) {
         kpi(`${st.reviews}`, 'review'),
         kpi(st.rate, '一次通过'),
         kpi(`${st.rejects}`, '打回', st.rejects ? 'warn' : ''),
-        kpi(took, job.acceptedAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : '从建需求到现在')),
+        kpi(took, endAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : job.cancelledAt ? '从建需求到作废' : '从建需求到现在')),
       roles.size ? el('div', { class: 'roles' },
         [...roles].map(([role, r]) => el('div', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` },
           el('div', { class: 'rl' }, el('span', null, role), el('b', null, `${r.done}/${r.all}`)),

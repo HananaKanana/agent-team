@@ -485,6 +485,18 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
   } else {
     lines.push('（无）');
   }
+  // 依赖已作废的卡：永远等不到依赖完成，不会被派发（老数据才会出现），要 leader 去掉这个依赖
+  const byId = new Map(state.tasks.map((t) => [t.id, t]));
+  const deadDeps = state.tasks.filter((t) => jobIds.has(t.jobId) && (t.status === 'pending' || t.status === 'held')
+    && t.dependsOn.some((d) => byId.get(d)?.status === 'cancelled'));
+  if (deadDeps.length) {
+    lines.push('', `## 依赖已作废的卡（${deadDeps.length}），永远不会被派发`, '');
+    for (const t of deadDeps) {
+      const dead = t.dependsOn.filter((d) => byId.get(d)?.status === 'cancelled');
+      const keep = t.dependsOn.filter((d) => !dead.includes(d));
+      lines.push(`- ${t.id} [${t.status}] ${t.title}：依赖的 ${dead.join('、')} 已作废 —— 去掉这个依赖：ateam task edit ${t.id} --after "${keep.join(',')}"（这张卡也不要了就 ateam cancel ${t.id}）`);
+    }
+  }
   const critiqued = state.tasks.filter((t) => (t.critiques ?? []).some((c) => c.status === 'open' || c.status === 'redo'));
   if (critiqued.length) {
     lines.push('', `## 审卡意见待你处理（${critiqued.length}）`, '');

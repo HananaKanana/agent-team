@@ -453,6 +453,7 @@ nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); m
 .job .title .jid, .job-head .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }
 .job .sub .accepted { color: var(--approved); font-weight: 600; }
 /* 已作废的需求：和作废的卡一样置灰，标题划掉 */
+.since.dead-dep { color: var(--rework); font-weight: 600; }
 .job.dropped .title { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
 .job.dropped .strip { opacity: .35; filter: grayscale(1); }
 .accepted-toggle {
@@ -1112,6 +1113,11 @@ function laneTime(t, lane) {
   if (lane === 'approved') {
     const ms = spent(t);
     return ms == null ? null : el('span', { class: 'since', title: '总耗时' }, icon('clock'), dur(ms));
+  }
+  // 依赖的卡已作废：永远等不到，标红让人去改依赖（正常流程不会出现，老数据才有）
+  const deadDeps = t.status === 'pending' || t.status === 'held' ? t.dependsOn.filter((id) => data.state.tasks.find((x) => x.id === id)?.status === 'cancelled') : [];
+  if (deadDeps.length) {
+    return el('span', { class: 'since dead-dep', title: `依赖的 ${deadDeps.join('、')} 已作废，这张卡永远等不到依赖完成，不会被派发。请让 leader 用 ateam task edit ${t.id} --after ... 去掉这个依赖` }, icon('clock'), `依赖 ${deadDeps.join('、')} 已作废`);
   }
   if (lane === 'pending' && t.dependsOn.some((id) => data.state.tasks.find((x) => x.id === id)?.status !== 'approved')) {
     return el('span', { class: 'since', title: `等待依赖任务通过：${t.dependsOn.join('、')}` }, icon('clock'), '等依赖');

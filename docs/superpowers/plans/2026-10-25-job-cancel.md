@@ -65,5 +65,5 @@
 
 - leader skill：命令表 / 相关章节加 `ateam job cancel`：只有用户明确要求作废某个需求时才用，不要自己提出；先不带 `--user-approved` 运行一次，把输出列出的卡给用户看，用户同意后加 `--user-approved` 再运行；已通过的卡和代码会保留。
 - 核对清单追加：不带授权被拒并列出卡；带授权后需求进「已作废」分组、页面有作废提示；正在做的 worker 收到停手通知；已通过的卡仍在；作废后 `ateam task add --job` 被拒。
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2: Commit** `skills: job cancel; checklist`
+- [x] **Step 1:** 实现。
+- [x] **Step 2: Commit** `skills: job cancel; checklist`

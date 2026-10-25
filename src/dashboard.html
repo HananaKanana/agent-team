@@ -886,12 +886,12 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline li { position: relative; padding: 0 0 14px 26px; }
 .timeline li::before {
   /* 空心圆用渐变画，不用 border：Safari 在抽屉滑入（transform）后，小圆的 border 会出现一道缺口 */
-  content: ""; position: absolute; z-index: 1; left: 6px; top: 5px; width: 10px; height: 10px; border-radius: 50%;
+  content: ""; position: absolute; z-index: 1; left: 6px; top: 7px; width: 10px; height: 10px; border-radius: 50%;
   background: radial-gradient(circle closest-side, var(--surface) 55%, var(--c, var(--pending)) 60%);
 }
-.timeline li::after { content: ""; position: absolute; left: 10px; top: 17px; bottom: 0; width: 2px; background: var(--line-soft); }
+.timeline li::after { content: ""; position: absolute; left: 10px; top: 19px; bottom: 0; width: 2px; background: var(--line-soft); }
 .timeline li:last-child::after { display: none; }
-.timeline li > div:first-child { line-height: 20px; } /* 第一行固定行高，圆点（top 5 + 高 10）中心正对这一行 */
+.timeline li > div:first-child { line-height: 20px; } /* 第一行固定行高。中文字形在行框里偏下，圆点（top 7 + 高 10）比几何中心低 2px，看起来才对齐 */
 .timeline .when { color: var(--faint); font-size: 12px; }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
 .timeline .text { white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; margin-top: 2px; color: var(--ink); }

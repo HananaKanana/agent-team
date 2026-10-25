@@ -104,5 +104,5 @@
   - `rules add` 不带授权被拒、带授权落到正确的段。
   - 看板预览随输入变化。
   - `## 全员` 被提示没人收。
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2: Commit** `skills: rules by role, edits need user approval; checklist`
+- [x] **Step 1:** 实现。
+- [x] **Step 2: Commit** `skills: rules by role, edits need user approval; checklist`

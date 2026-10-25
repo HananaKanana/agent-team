@@ -8,6 +8,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
+import { addRule, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { checkOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -137,12 +138,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     renameSync(tmp, rulesFile);
     return readRules();
   }
+  // leader 用命令行改规则要用户同意；看板保存（用户本人）带 userApproved
+  function approvedRules(text, userApproved, preview) {
+    if (typeof text !== 'string') throw new AteamError('INVALID', '规则内容必须是文本。');
+    if (!userApproved) throw new AteamError('NEEDS_USER', `${preview}请给用户看，用户同意后加 --user-approved 重新运行。`);
+    return writeRules(text);
+  }
+  function countsChange(before, after) {
+    const a = new Map(sectionCounts(before).map((c) => [c.section, c.count]));
+    const b = new Map(sectionCounts(after).map((c) => [c.section, c.count]));
+    const names = [...new Set([...a.keys(), ...b.keys()])];
+    const diff = names.filter((n) => (a.get(n) ?? 0) !== (b.get(n) ?? 0)).map((n) => `${n} ${a.get(n) ?? 0} → ${b.get(n) ?? 0}`);
+    return diff.length ? `改动前后各段条数：${diff.join('，')}。` : '各段条数没有变化，内容有改动。';
+  }
+  const knownRoles = () => [...new Set([...store.state.tasks, ...store.state.agents].map((x) => x.role).filter(Boolean).map((r) => r.trim().toLowerCase()))].sort();
   // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
   // 和项目规则（长期有效的约定）
   function withRules(result) {
     if (!result || !RULES_KINDS.has(result.kind)) return result;
     const out = { ...result };
-    const rules = readRules().trim();
+    const rules = rulesFor(readRules(), result.task.role).trim();
     if (rules) out.rules = rules;
     const job = store.state.jobs.find((j) => j.id === result.task.jobId);
     if (job?.description?.trim()) out.job = { id: job.id, title: job.title, description: job.description.trim() };
@@ -414,8 +429,21 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task, agentId };
     },
-    'GET /api/rules': () => ({ rules: readRules() }),
-    'POST /api/rules': (b) => ({ rules: writeRules(b.text) }),
+    'GET /api/rules': (_b, url) => {
+      const rules = readRules();
+      const role = url.searchParams.get('role');
+      const roles = knownRoles();
+      return { rules, ...(role ? { forRole: rulesFor(rules, role) } : {}), unreceived: unreceived(rules, roles), needsTidy: needsTidy(rules), roles };
+    },
+    'POST /api/rules': (b) => ({ rules: approvedRules(b.text, !!b.userApproved, countsChange(readRules(), String(b.text ?? ''))) }),
+    'POST /api/rules/add': (b) => {
+      const line = String(b.text ?? '').trim();
+      if (!line) throw new AteamError('INVALID', '规则不能为空。');
+      const roles = Array.isArray(b.roles) ? b.roles.map(String).filter((r) => r.trim()) : [];
+      const { text, section } = addRule(readRules(), line, roles);
+      const rule = `- ${line.replace(/^[-*]\s+/, '')}`;
+      return { rules: approvedRules(text, !!b.userApproved, `将在 ${section} 段加一条：${rule}。`), section };
+    },
     'POST /api/report': (b) => ({ job: store.report(b.jobId, b.report) }),
     'GET /api/state': (_b, url) => ({
       // 看板不用事件列表（命令行 status 要用它数未读事件），?view=dashboard 时去掉，减小数据量

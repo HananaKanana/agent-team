@@ -71,7 +71,7 @@ leader
   ateam critique --as <ID> ok T5 [T6 ...] ／ issue T5 "<问题和建议>" --basis "<依据>" [--because "<重新审的原因>"]
   ateam critique agree T5 "<打算怎么改>" --basis "<依据>" ／ dispute T5 "<为什么不改>" --basis "<依据>" ／ done T5 "<改了什么>"
   ateam note T5 "<给正在做的 worker 的补充说明>"
-  ateam rules [add "<一条规则>" | set --file rules.md]
+  ateam rules [--role <角色>] | add "<一条规则>" [--role a,b] [--user-approved] | set --file rules.md [--user-approved]（改规则必须用户同意）
   ateam jobs [--all] [--grep <关键词>]
   ateam job show J1
   ateam show T3
@@ -451,28 +451,43 @@ const commands = {
     return `已答复 ${task.id}，${where}。`;
   },
 
-  // 项目规则：每个任务派给 worker 时自动附上
+  // 项目规则：每个任务派给 worker 时按角色附上（## ALL 段给所有人，## <角色> 段只给这些角色）。
+  // 改规则必须用户同意：先不带 --user-approved 运行，把服务给出的改动说明给用户看
   async rules({ flags, positional }) {
     const sub = positional[0];
+    const approved = !!flags['user-approved'];
     if (!sub) {
-      const { rules } = await request('GET', '/api/rules');
-      return rules.trim()
-        ? `# 项目规则（每个任务派发时自动附上）\n\n${rules.trim()}`
-        : '还没有项目规则。添加：ateam rules add "提交前先跑一遍编译"，或 ateam rules set --file rules.md';
+      const role = flags.role ? String(flags.role).trim() : '';
+      const info = await request('GET', `/api/rules${role ? `?role=${encodeURIComponent(role)}` : ''}`);
+      let out;
+      if (role) {
+        out = info.forRole.trim() ? `# ${role} 收到的项目规则\n\n${info.forRole.trim()}` : `${role} 目前收不到任何项目规则。`;
+      } else {
+        out = info.rules.trim()
+          ? `# 项目规则（派发时按角色附上）\n\n${info.rules.trim()}`
+          : '还没有项目规则。添加：ateam rules add "提交前先跑一遍编译" [--role <角色>]（需要用户同意），或 ateam rules set --file rules.md';
+      }
+      if (info.unreceived?.length) out += `\n\n这些段目前没有角色会收到：${info.unreceived.join('、')}（现有角色：${info.roles.join('、') || '无'}）。全员段的小标题只认 ## ALL。`;
+      if (info.needsTidy) out += '\n\n规则还没按角色分段，各角色都会收到全部规则；可以向用户提议整理（先给用户看哪条归哪段，用户同意后 ateam rules set --file … --user-approved）。';
+      return out;
     }
     if (sub === 'add') {
-      const line = requireArg(positional[1], '规则', 'ateam rules add "不写新的测试代码"');
-      const { rules: old } = await request('GET', '/api/rules');
-      const text = `${old.trim()}${old.trim() ? '\n' : ''}- ${line.trim().replace(/^[-*]\s+/, '')}`;
-      await request('POST', '/api/rules', { text });
-      return `已添加。之后派发的任务都会带上这条规则（ateam rules 查看全部）。`;
+      const line = requireArg(positional[1], '规则', 'ateam rules add "不写新的测试代码" [--role test]');
+      const roles = flags.role ? splitList(flags.role) : [];
+      const { section } = await request('POST', '/api/rules/add', { text: line, roles, userApproved: approved });
+      return `已加到 ${section} 段。之后派发的${roles.length ? ` ${roles.join('、')} ` : '所有'}任务会带上（ateam rules 查看全部）。`;
     }
     if (sub === 'set') {
       const file = requireArg(flags.file, '规则文件 --file', 'ateam rules set --file rules.md');
-      const { rules } = await request('POST', '/api/rules', { text: readTextFile(file, '--file') });
-      return rules.trim() ? '已更新项目规则。之后派发的任务都会带上。' : '已清空项目规则。';
+      try {
+        const { rules } = await request('POST', '/api/rules', { text: readTextFile(file, '--file'), userApproved: approved });
+        return rules.trim() ? '已更新项目规则。之后派发的任务按角色带上。' : '已清空项目规则。';
+      } catch (err) {
+        if (err instanceof ServerError && err.code === 'NEEDS_USER') throw new ServerError(err.code, `${err.message}新内容：${file}`);
+        throw err;
+      }
     }
-    fail('用法：ateam rules ／ ateam rules add "<一条规则>" ／ ateam rules set --file rules.md');
+    fail('用法：ateam rules [--role <角色>] ／ ateam rules add "<一条规则>" [--role a,b] [--user-approved] ／ ateam rules set --file rules.md [--user-approved]');
   },
 
   async status({ flags }) {

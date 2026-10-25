@@ -64,10 +64,10 @@
   - `set --file f [--user-approved]` → `/api/rules`；`NEEDS_USER` 信息由服务给，命令行在后面补「新内容：<f>」。
   - USAGE 那一行改为 `ateam rules [--role <角色>] | add "<一条规则>" [--role a,b] [--user-approved] | set --file rules.md [--user-approved]（改规则必须用户同意）`。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测（临时目录起真服务）：写入分段规则（带授权）；`POST /api/rules` 不带授权返回 `NEEDS_USER` 且文件没变；`/api/rules/add` 不带授权 `NEEDS_USER` 含段名；`GET ?role=test` 的 `forRole` 不含 backend 段；建一张 test 卡让 worker 领取，wait 结果的规则不含 backend 段内容、含 ALL 段内容；老文件（无标题）领取时规则与文件 `trim()` 相同。
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测（临时目录起真服务）：写入分段规则（带授权）；`POST /api/rules` 不带授权返回 `NEEDS_USER` 且文件没变；`/api/rules/add` 不带授权 `NEEDS_USER` 含段名；`GET ?role=test` 的 `forRole` 不含 backend 段；建一张 test 卡让 worker 领取，wait 结果的规则不含 backend 段内容、含 ALL 段内容；老文件（无标题）领取时规则与文件 `trim()` 相同。
   Run: `node --check src/server.js bin/ateam.js && node <scratchpad>/probe-rules-server.mjs <scratchpad>` → `ALL PASS`，删除脚本和临时目录。
-- [ ] **Step 3: Commit** `server/cli: rules delivered by role; leader edits need --user-approved`
+- [x] **Step 3: Commit** `server/cli: rules delivered by role; leader edits need --user-approved`
 
 ### Task 3: 看板
 

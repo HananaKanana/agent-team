@@ -125,6 +125,12 @@ button.worker:hover { background: var(--sunken); }
 .btn.icon svg { width: 16px; height: 16px; }
 .btn.attention[hidden] { display: none; }
 .att-modal { width: min(640px, 100%); }
+/* 「需要你处理」：从页头按钮下面弹出的气泡，不盖暗整个页面 */
+.att-pop { position: fixed; z-index: 30; top: 60px; right: 20px; }
+.att-pop[hidden] { display: none; }
+.att-pop .att-modal { width: min(620px, calc(100vw - 32px)); max-height: min(75vh, 720px); box-shadow: 0 0 0 1px var(--line), var(--shadow-pop); }
+.att-pop::before { content: ""; position: absolute; z-index: 1; top: -6px; right: var(--arrow-x, 40px); width: 10px; height: 10px; transform: rotate(45deg);
+  background: var(--surface); box-shadow: -1px -1px 0 var(--line); }
 .att-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .att-head h4 { font-size: 13px; color: var(--faint); margin: 14px 0 4px; font-weight: 600; }
 .att-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 13px; }
@@ -972,7 +978,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
 <div class="prompter-strip" id="prompter-strip" aria-live="polite"></div>
-<div class="modal-back" id="attention-list" hidden role="dialog" aria-modal="true" aria-label="需要你处理"></div>
+<div class="att-pop" id="attention-list" hidden role="dialog" aria-label="需要你处理"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 <div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
@@ -2896,7 +2902,12 @@ function renderNeeds() {
   pill.title = `缺少这些角色的在线 worker：${summary}`;
   pill.setAttribute('aria-expanded', needsOpen ? 'true' : 'false');
   pill.hidden = false;
-  pill.onclick = (e) => { e.stopPropagation(); needsOpen = !needsOpen; renderNeeds(); };
+  pill.onclick = (e) => {
+    e.stopPropagation();
+    needsOpen = !needsOpen;
+    if (needsOpen && attentionOpen) { attentionOpen = false; renderAttentionList(); } // 两个气泡位置重叠，只开一个
+    renderNeeds();
+  };
   if (!needsOpen) { box.hidden = true; box.replaceChildren(); return; }
   // 气泡的小箭头对准标签
   const r = pill.getBoundingClientRect();
@@ -3237,7 +3248,7 @@ document.addEventListener('keydown', (e) => {
 });
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
-  if (attentionOpen && (e.target.id === 'attention-list' || !e.target.closest('#attention, #attention-list'))) { attentionOpen = false; renderAttentionList(); }
+  if (attentionOpen && !e.target.closest('#attention, #attention-list')) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (needsOpen && !e.target.closest('#needs, #needs-pill')) { needsOpen = false; renderNeeds(); }
   if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
@@ -3344,10 +3355,13 @@ function renderAttentionList() {
     el('div', { class: 'att-head' }, el('h4', null, `其它（${others.length}）`)),
     others.map((i) => el('div', { class: 'att-row' },
       el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其它'), el('span', null, i.body)),
-      i.key === 'stale' ? el('span', { class: 'hint' }, '见页面顶部提示') : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理'))),
+      i.key === 'stale' ? el('span', { class: 'hint' }, '见右上角提示') : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理'))),
   ] : null;
 
   box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
+  // 气泡的小箭头对准页头的「需要你处理」按钮
+  const r = document.getElementById('attention').getBoundingClientRect();
+  box.style.setProperty('--arrow-x', `${Math.max(16, window.innerWidth - 20 - (r.left + r.width / 2) - 5)}px`);
   fill(box, el('div', { class: 'modal att-modal', onclick: (e) => e.stopPropagation() },
     modalHead(`需要你处理（${items.length}）`, () => { attentionOpen = false; renderAttentionList(); }),
     el('div', { class: 'modal-body' }, acceptSec, otherSec)));
@@ -3357,6 +3371,7 @@ function renderAttentionList() {
 document.getElementById('attention').addEventListener('click', (e) => {
   e.stopPropagation();
   attentionOpen = !attentionOpen;
+  if (attentionOpen && needsOpen) { needsOpen = false; renderNeeds(); } // 两个气泡位置重叠，只开一个
   acceptPick = null;
   acceptConfirm = false;
   acceptMsg = '';

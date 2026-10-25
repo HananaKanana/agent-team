@@ -175,7 +175,7 @@ input[type="checkbox"]:not(.switch):checked::after {
   border: solid var(--on-color); border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 .btn.attention + .helper-btn, #notify-btn + .helper-btn { margin-left: 0; }
-.helper-btn + .btn.icon { margin-left: -10px; }
+.helper-btn + .btn.icon { margin-left: -8px; }
 #notify-btn[hidden] { display: none; }
 /* 提示词面板：顶部右侧弹出 */
 /* 使用说明：右侧整高面板，和任务抽屉同一套样式；顶部标题和标签页固定 */
@@ -460,6 +460,10 @@ html.prompter-only .prompter-strip > .say { flex: 0 1 auto; min-height: 0; displ
 .btn:hover { background: color-mix(in srgb, var(--faint) 34%, transparent); }
 .btn.sm { height: 26px; padding: 0 9px; font-size: 12.5px; }
 .btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+/* 页头右侧的次要按钮（使用说明、深浅色）：白底细边，和红色的「需要你处理」同高同圆角 */
+.btn.head-btn { height: 32px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); font-weight: 500; }
+.btn.head-btn:hover { color: var(--ink); background: var(--sunken); }
+.btn.head-btn svg { width: 15px; height: 15px; }
 .btn.ghost:hover { background: color-mix(in srgb, var(--faint) 14%, transparent); color: var(--ink); }
 .btn.done { background: color-mix(in srgb, var(--approved) 14%, transparent); color: var(--approved); }
 .hint { color: var(--muted); font-size: 12.5px; }
@@ -960,6 +964,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <symbol id="i-text-up" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4M12.5 6v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
   <symbol id="i-bg-less" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
   <symbol id="i-bg-more" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".55" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 6.3a1.9 1.9 0 0 1 3.7.5c0 1.3-1.9 1.6-1.9 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".9" fill="currentColor"/></symbol>
   <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13.5 2.5v11M2.5 8h8M7.5 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 <header class="top">
@@ -969,8 +974,8 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn" id="notify-btn" type="button" hidden title="允许浏览器弹通知：有需求待验收、任务缺 worker、leader 掉线时提醒你">开启通知</button>
-  <button class="btn ghost helper-btn" id="helper-btn" type="button">使用说明</button>
-  <button class="btn ghost icon" id="theme-btn" type="button"></button>
+  <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
+  <button class="btn head-btn icon" id="theme-btn" type="button"></button>
 </header>
 <section class="needs pop" id="needs" hidden aria-label="需要 worker" role="dialog"></section>
 <!-- 页面提示都做成右上角的浮动气泡，不占页面、可以关掉 -->

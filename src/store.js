@@ -83,23 +83,36 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
   }
 
-  // 编号 = 角色 + 序号，比如 frontend-1、frontend-2。序号按角色递增、永不复用：
-  // 掉线后重新加入会拿到新序号，时间线里的编号始终指同一个窗口。
+  // 编号 = 角色 + 序号，比如 frontend-1、frontend-2。新加入的 worker 拿本角色最小的空号：
+  // 从没用过的号，或者用过它的 worker 已不在线、24 小时内没用这个号调过任何 ateam 命令（被拒绝的调用也算），
+  // 手上也没有挂着的任务。点了下线但旧窗口还在调用的，号一直留着，新窗口拿别的号，不会两个窗口共用一个号。
+  const REUSE_QUIET_MS = 24 * 60 * 60 * 1000;
   function roleSlug(role) {
     return role.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '') || 'worker';
   }
 
+  function reusable(agent) {
+    if (agent.status === 'online') return false;
+    const last = Math.max(agent.lastCallAt ?? 0, agent.lastSeenAt ?? 0, agent.joinedAt ?? 0);
+    if (now() - last < REUSE_QUIET_MS) return false;
+    return !state.tasks.some((t) => (t.assignee === agent.id && !['approved', 'cancelled', 'pending'].includes(t.status))
+      || (t.assignTo === agent.id && t.status === 'pending'));
+  }
+
+  // 号让给新 worker：旧记录移到 retiredAgents（时间线里的旧记录照常显示这个编号）
+  function retireAgent(agent) {
+    state.agents.splice(state.agents.indexOf(agent), 1);
+    (state.retiredAgents ??= []).push({ ...agent, retiredAt: now() });
+  }
+
   function newAgentId(role) {
     const slug = roleSlug(role);
-    state.seq.agents ??= {};
-    let n = state.seq.agents[slug] ?? 0;
-    for (const a of state.agents) {
-      const m = a.id.match(/^(.*)-(\d+)$/);
-      if (m && m[1] === slug) n = Math.max(n, Number(m[2]));
+    for (let n = 1; ; n++) {
+      const id = `${slug}-${n}`;
+      const old = findAgent(id);
+      if (!old) return id;
+      if (reusable(old)) { retireAgent(old); return id; }
     }
-    n += 1;
-    state.seq.agents[slug] = n;
-    return `${slug}-${n}`;
   }
 
   // ---------- 路径重叠 ----------
@@ -254,7 +267,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // wantId：想用的编号（看板给的提示词里预先写好，让 agent 窗口的标题和编号对得上）。
   // - 编号没人用、格式是「本角色-序号」：直接用它。
   // - 是本角色一个已掉线的旧编号（同一个窗口掉线后重连）：沿用它，窗口标题不用变。
-  // - 其它情况（正在线上、已下线、角色不符、格式不对）：照常分配新编号，加入结果里会说明。
+  // - 旧编号已经空出来（见 reusable：不在线、24 小时没有调用）：旧记录归档，这个号给新窗口。
+  // - 其它情况（正在线上、刚下线不到 24 小时、角色不符、格式不对）：照常分配新编号，加入结果里会说明。
   function claimId(role, wantId) {
     wantId = String(wantId ?? '').trim();
     if (!wantId) return { id: newAgentId(role) };
@@ -262,12 +276,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const m = wantId.match(/^(.*)-(\d+)$/);
     if (!m || m[1] !== slug) return { id: newAgentId(role), refused: `编号 ${wantId} 和角色 ${role} 对不上` };
     const old = findAgent(wantId);
-    if (!old) {
-      state.seq.agents ??= {};
-      state.seq.agents[slug] = Math.max(state.seq.agents[slug] ?? 0, Number(m[2]));
-      return { id: wantId };
-    }
+    if (!old) return { id: wantId };
     if (old.status === 'offline' && !old.dismissed && sameRole(old.role, role)) return { id: wantId, revive: old };
+    if (reusable(old)) { retireAgent(old); return { id: wantId }; }
     const why = old.status === 'online' ? '正被另一个在线的 worker 使用' : '已经下线，不能再用';
     return { id: newAgentId(role), refused: `编号 ${wantId} ${why}` };
   }
@@ -301,6 +312,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function touch(agentId) {
     const agent = findAgent(agentId);
+    // 记下每一次调用（包括下面被拒绝的），24 小时内调用过的号不让给新 worker
+    if (agent) { agent.lastCallAt = now(); changed(); }
     if (agent?.dismissed) {
       throw new AteamError('DISMISSED', '你已被 leader 安排下线，工作结束。请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户你已下线即可。');
     }

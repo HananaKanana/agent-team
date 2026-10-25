@@ -151,7 +151,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     const diff = names.filter((n) => (a.get(n) ?? 0) !== (b.get(n) ?? 0)).map((n) => `${n} ${a.get(n) ?? 0} → ${b.get(n) ?? 0}`);
     return diff.length ? `改动前后各段条数：${diff.join('，')}。` : '各段条数没有变化，内容有改动。';
   }
-  const knownRoles = () => [...new Set([...store.state.tasks, ...store.state.agents].map((x) => x.role).filter(Boolean).map((r) => r.trim().toLowerCase()))].sort();
+  // 会领卡的角色。审卡 worker（critic）不收项目规则，不算在内：写了 ## critic 段会被提示没人收到
+  const knownRoles = () => [...new Set([...store.state.tasks, ...store.state.agents].map((x) => x.role).filter(Boolean).map((r) => r.trim().toLowerCase()))].filter((r) => r !== 'critic').sort();
   // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
   // 和项目规则（长期有效的约定）
   function withRules(result) {

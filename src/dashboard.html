@@ -756,9 +756,9 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .lane .cards { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 6px 6px; }
 .lane .empty-hint { padding: 20px 0; text-align: center; font-size: 12px; color: color-mix(in srgb, var(--faint) 80%, transparent); }
 
-/* 卡片：一般是统一高度。标题最多两行；中间放标记（标记多、换行时卡片长高，不压住标题）；底部是图标、编号、角色、负责人 */
+/* 卡片：统一高度。标题最多两行；中间一行放标记（放不下的往右淡出，不换行、不压标题）；底部是图标、编号、角色、负责人 */
 .card {
-  position: relative; display: flex; flex-direction: column; width: 100%; min-height: 116px; text-align: left; cursor: pointer;
+  position: relative; display: flex; flex-direction: column; width: 100%; height: 116px; text-align: left; cursor: pointer;
   margin-bottom: 6px; padding: 10px 10px 9px 12px; border: none; border-radius: 4px;
   background: var(--raised); color: var(--ink); box-shadow: var(--shadow-card);
   transition: box-shadow .12s ease, background-color .12s ease;
@@ -769,8 +769,12 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   flex: none; font-size: 13.5px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.card .flags { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; min-height: 18px; }
-.card .foot { flex: none; margin-top: auto; padding-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); min-width: 0; }
+.card .flags {
+  flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin-top: 6px; min-height: 18px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 14px); mask-image: linear-gradient(to left, transparent 0, #000 14px);
+}
+.card .flags > * { flex: none; }
+.card .foot { flex: none; margin-top: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); min-width: 0; }
 .card .key { font-weight: 600; color: var(--muted); }
 .card.c-approved .key { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
 /* 计时（时钟 + 时长）：任何地方出现都是小图标跟一行字 */

@@ -56,6 +56,13 @@ export function parseSteps(markdown) {
 }
 
 // 「## 演示步骤」段里的步骤数
+// 一场演播选中的步骤写成人话：连续的写「第 12–21 步」，否则「第 3、5、7 步」；没有选（完整演播）返回空串
+export function stepsLabel(steps) {
+  if (!steps?.length) return '';
+  const contiguous = steps.every((n, i) => i === 0 || n === steps[i - 1] + 1);
+  return contiguous && steps.length > 1 ? `第 ${steps[0]}–${steps[steps.length - 1]} 步` : `第 ${steps.join('、')} 步`;
+}
+
 export function stepCount(markdown) {
   return parseSteps(markdown).length;
 }

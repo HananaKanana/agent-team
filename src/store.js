@@ -1,5 +1,6 @@
 // 纯逻辑状态机：需求、任务、worker、事件。不碰网络和磁盘，时钟可注入。
 import { AteamError } from './errors.js';
+import { stepsLabel } from './demo.js';
 
 const KEEP_DELIVERED_EVENTS = 200;
 
@@ -1307,10 +1308,22 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   const DEMO_MODES = { rehearsal: '预演', show: '演播' };
   const modeLabel = (run) => DEMO_MODES[run?.mode] ?? '演播';
 
-  function startDemo(taskId, mode = 'show') {
+  // steps：演播只演这几步（步骤编号数组）；totalSteps：脚本总步数，由服务读脚本得出。预演不能选步骤
+  function startDemo(taskId, mode = 'show', steps = null, totalSteps = null) {
     const task = getTask(taskId);
     if (!isDemo(task)) throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);
     if (!DEMO_MODES[mode]) throw new AteamError('INVALID', '开始方式只能是 rehearsal（预演）或 show（演播）。');
+    let picked = null;
+    if (steps != null) {
+      if (mode === 'rehearsal') throw new AteamError('INVALID', '预演要从头完整走，不能选步骤。');
+      if (!Number.isInteger(totalSteps) || totalSteps < 1) throw new AteamError('INVALID', '读不到脚本的步数，不能选步骤。');
+      if (!Array.isArray(steps) || steps.some((n) => !Number.isInteger(n) || n < 1 || n > totalSteps)) {
+        throw new AteamError('INVALID', `步骤编号要在 1 到 ${totalSteps} 之间。`);
+      }
+      picked = [...new Set(steps)].sort((a, b) => a - b);
+      if (!picked.length) throw new AteamError('INVALID', '至少选一步。');
+      if (picked.length === totalSteps) picked = null; // 全选 = 完整演播
+    }
     if (task.status !== 'ready') throw new AteamError('BAD_STATE', `演播卡 ${task.id} 当前状态是 ${task.status}，只有待演播时可以开始。`);
     if (mode === 'show' && !task.rehearsedAt) throw new AteamError('BAD_STATE', `演播卡 ${task.id} 还没预演过，请先开始预演。`);
     const blockers = demoBlockers(task.id);
@@ -1318,6 +1331,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.status = 'queued';
     task.queuedAt = now();
     task.pendingMode = mode;
+    if (picked) task.pendingSteps = picked;
+    else delete task.pendingSteps;
     emit('demo_queued', { taskId: task.id, text: `用户开始${DEMO_MODES[mode]} ${task.id} ${task.title}，派发已暂停，等 ${task.role} worker 领取` });
     changed();
     return task;
@@ -1330,8 +1345,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     agent.currentTask = task.id;
     const mode = task.pendingMode ?? 'show';
     delete task.pendingMode;
-    task.runs.push({ startedAt: now(), by: agent.id, mode });
-    addHistory(task, 'claimed', agent.id, `开始${DEMO_MODES[mode]}`);
+    const run = { startedAt: now(), by: agent.id, mode };
+    if (task.pendingSteps) run.steps = task.pendingSteps;
+    delete task.pendingSteps;
+    task.runs.push(run);
+    addHistory(task, 'claimed', agent.id, `开始${DEMO_MODES[mode]}${run.steps ? `（${stepsLabel(run.steps)}）` : ''}`);
     emit('demo_started', { taskId: task.id, agentId: agent.id, text: `${agent.id} 开始${DEMO_MODES[mode]} ${task.id}` });
     changed();
     return { kind: 'demo', task };
@@ -1378,7 +1396,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       return { kind: 'demo_stopped', task };
     }
     if (task.status === 'demoing') return { kind: 'demo', task };
-    if (task.status === 'wrapping') return { kind: 'demo_wrap', task, outcome: lastRun(task)?.outcome ?? 'done' };
+    if (task.status === 'wrapping') return { kind: 'demo_wrap', task, outcome: lastRun(task)?.outcome ?? 'done', steps: lastRun(task)?.steps ?? null };
     return null;
   }
 
@@ -1438,11 +1456,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!Number.isInteger(n) || !Number.isInteger(total) || n < 1 || total < 1 || n > total) {
       throw new AteamError('INVALID', '步数格式是「第几步/总步数」，比如 3/12。');
     }
+    const run = lastRun(task);
+    if (run?.steps && !run.steps.includes(n)) {
+      throw new AteamError('INVALID', `这一场只演${stepsLabel(run.steps)}，第 ${n} 步不在其中，不要做。`);
+    }
+    if (run) run.lastStep = n;
     task.demoStep = { n, total, text: requireText(text, '这一步的说明'), ts: now() };
     if (cue) task.demoStep.cue = { narration: String(cue.narration ?? ''), next: String(cue.next ?? '') };
     if (slow) {
       task.demoStep.slow = true;
-      const run = lastRun(task);
       if (run) {
         run.slowSteps ??= [];
         if (!run.slowSteps.includes(n)) run.slowSteps.push(n);

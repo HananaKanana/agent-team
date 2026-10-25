@@ -41,10 +41,10 @@
 - 新导出辅助 `stepsLabel(steps): string`：连续区间写「第 12–21 步」，否则「第 3、5、7 步」；`null` 返回空串。供 format.js 使用（放 `src/demo.js`，store 和 format 都从那里引）。
 - wrapping 结果：`{ kind: 'demo_wrap', task, outcome, steps }`，`steps` = 最后一场的 `run.steps ?? null`。
 
-- [ ] **Step 1:** 在 `src/demo.js` 加 `stepsLabel`；实现 store 改动。
-- [ ] **Step 2:** scratchpad 探测（`createStore` 驱动，先预演跑完一张卡）：`startDemo(id,'rehearsal',[2])` 抛 INVALID；`startDemo(id,'show',[],21)`、`[0]`、`[22]`、`[1.5]` 抛 INVALID；`[5,3,3]` → 领取后 `run.steps` 为 `[3,5]`；选 1…21 全部 → `run.steps` 不存在；部分演播 `demoStep(…, 4, 21, …)` 抛 INVALID，`demoStep(…, 5, 21, …)` 后 `run.lastStep === 5`；`stepsLabel([12,13,14])==='第 12–14 步'`、`stepsLabel([3,5,7])==='第 3、5、7 步'`。
+- [x] **Step 1:** 在 `src/demo.js` 加 `stepsLabel`；实现 store 改动。
+- [x] **Step 2:** scratchpad 探测（`createStore` 驱动，先预演跑完一张卡）：`startDemo(id,'rehearsal',[2])` 抛 INVALID；`startDemo(id,'show',[],21)`、`[0]`、`[22]`、`[1.5]` 抛 INVALID；`[5,3,3]` → 领取后 `run.steps` 为 `[3,5]`；选 1…21 全部 → `run.steps` 不存在；部分演播 `demoStep(…, 4, 21, …)` 抛 INVALID，`demoStep(…, 5, 21, …)` 后 `run.lastStep === 5`；`stepsLabel([12,13,14])==='第 12–14 步'`、`stepsLabel([3,5,7])==='第 3、5、7 步'`。
   Run: `node --check src/store.js src/demo.js && node <scratchpad>/probe-steps-store.mjs` → `ALL PASS`，删除脚本。
-- [ ] **Step 3: Commit** `store: show runs can select steps (run.steps, run.lastStep)`
+- [x] **Step 3: Commit** `store: show runs can select steps (run.steps, run.lastStep)`
 
 ### Task 2: server、worker 指令、命令行展示
 

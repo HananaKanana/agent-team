@@ -40,6 +40,11 @@ function hasHeadings(text) {
   return parseRules(text).some((s) => s.heading !== null);
 }
 
+// 只有空行和 # 标题行（比如文件开头的「# 项目规则」）的段算空：不发给 worker，看板也不显示
+export function hasContent(body) {
+  return String(body ?? '').split('\n').some((l) => l.trim() && !/^#{1,6}\s/.test(l.trim()));
+}
+
 function receives(section, role) {
   return section.roles === 'all' || section.roles.includes(String(role ?? '').trim().toLowerCase());
 }
@@ -48,7 +53,7 @@ function receives(section, role) {
 export function rulesFor(text, role) {
   if (!hasHeadings(text)) return String(text ?? '').trim();
   return parseRules(text)
-    .filter((s) => receives(s, role) && s.body.trim())
+    .filter((s) => receives(s, role) && hasContent(s.body))
     .map((s) => (s.heading === null ? s.body.trim() : `## ${s.heading}\n${s.body.trim()}`))
     .join('\n\n');
 }

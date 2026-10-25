@@ -1599,6 +1599,11 @@ function parseRules(text) {
   return out.map((x) => ({ heading: x.heading, roles: x.roles, body: x.lines.join('\n') }));
 }
 
+// 同 src/rules.js 的 hasContent：只有空行和 # 标题行的段算空
+function hasContent(body) {
+  return String(body || '').split('\n').some((l) => l.trim() && !/^#{1,6}\s/.test(l.trim()));
+}
+
 function unreceivedRoles(text, known) {
   const set = new Set(known.map((r) => r.toLowerCase()));
   const out = [];
@@ -1682,7 +1687,7 @@ function rulesEditor() {
     const role = rules.previewRole;
     const list = parseRules(rules.draft);
     const split = list.some((x) => x.heading !== null);
-    const secs = list.filter((x) => (!split || x.roles === 'all' || x.roles.includes(role)) && x.body.trim());
+    const secs = list.filter((x) => (!split || x.roles === 'all' || x.roles.includes(role)) && hasContent(x.body));
     const total = secs.reduce((n, x) => n + x.body.split('\n').filter((l) => /^- /.test(l.trim())).length, 0);
     const md = (text) => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(text); return d; }; // renderMarkdown 先转义了 HTML
     body = [

@@ -453,6 +453,9 @@ nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); m
 .job .title .jid, .job-head .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }
 .job .sub .accepted { color: var(--approved); font-weight: 600; }
 /* 已作废的需求：和作废的卡一样置灰，标题划掉 */
+main.job-dropped .board, main.job-dropped .progress, main.job-dropped .job-side, main.job-dropped .report-bar { filter: grayscale(1); opacity: .6; }
+main.job-dropped .board:hover { opacity: .85; }
+main.job-dropped .card .t { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
 .since.dead-dep { color: var(--rework); font-weight: 600; }
 .job.dropped .title { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
 .job.dropped .strip { opacity: .35; filter: grayscale(1); }
@@ -1713,6 +1716,8 @@ function renderJobs() {
 function renderMain() {
   const main = document.getElementById('main');
   const job = data.state.jobs.find((j) => j.id === view.job);
+  // 已作废的需求：代码还在、但需求不算了。卡片状态照实保留，整页置灰、卡片标题划掉
+  main.classList.toggle('job-dropped', job?.status === 'cancelled');
   if (!job) {
     main.removeAttribute('aria-busy');
     fill(main, data.state.jobs.length

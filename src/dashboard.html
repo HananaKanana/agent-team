@@ -129,12 +129,14 @@ button.worker:hover { background: var(--sunken); }
   font-size: 12px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .btn.attention { gap: 8px; height: 32px; padding: 0 8px 0 12px; border-radius: 6px; }
 .btn.attention .cnt { background: color-mix(in srgb, #fff 22%, transparent); color: var(--on-color); }
-.needs-pill .cnt { background: var(--asking); color: var(--on-color); }
+
 .att-modal { width: min(640px, 100%); }
 /* 「需要你处理」：从页头按钮下面弹出的气泡，不盖暗整个页面 */
 .att-pop { position: fixed; z-index: 30; top: 60px; right: 20px; }
 .att-pop[hidden] { display: none; }
 .att-pop .att-modal { width: min(620px, calc(100vw - 32px)); max-height: min(75vh, 720px); box-shadow: 0 0 0 1px var(--line), var(--shadow-pop); }
+.att-prompt { margin: -2px 0 10px; padding: 0 0 4px; }
+.att-prompt .hint { margin: 0 0 4px; font-size: 12.5px; }
 .att-pop::before { content: ""; position: absolute; z-index: 1; top: -6px; right: var(--arrow-x, 40px); width: 10px; height: 10px; transform: rotate(45deg);
   background: var(--surface); box-shadow: -1px -1px 0 var(--line); }
 .att-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -251,24 +253,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 /* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
 .needs::before { top: 17px; }
 .needs { --c: var(--asking); }
-/* 「有任务没人做」不占页面：页头一个琥珀色按钮，点开是浮在页面上的气泡。和「需要你处理」同一个形状，只是浅色底 */
-.needs-pill { appearance: none; display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 12px; border: 0; border-radius: 6px; cursor: pointer;
-  background: color-mix(in srgb, var(--asking) 20%, var(--surface)); color: color-mix(in srgb, var(--asking) 55%, var(--ink));
-  font: inherit; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
-.needs-pill[hidden] { display: none; }
-.needs-pill:hover, .needs-pill[aria-expanded="true"] { background: color-mix(in srgb, var(--asking) 30%, var(--surface)); }
+/* 「有任务没人做」：从「需要你处理」里点缺人那一项打开的气泡，箭头对着「需要你处理」按钮 */
 .needs.pop { padding-right: 40px; }
-.banner.stale { --c: var(--asking); }
-/* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
-.needs::before { top: 17px; }
-.needs { --c: var(--asking); }
-/* 「有任务没人做」不占页面：页头一个黄色小标签，点开是浮在页面上的气泡 */
-.needs-pill { appearance: none; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px 0 8px; border-radius: 999px; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--asking) 55%, transparent); background: color-mix(in srgb, var(--asking) 14%, var(--surface));
-  color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.needs-pill[hidden] { display: none; }
-.needs-pill:hover, .needs-pill[aria-expanded="true"] { background: color-mix(in srgb, var(--asking) 24%, var(--surface)); }
-.needs-pill .ic { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--on-color); background: var(--asking); }
 .needs.pop { position: fixed; z-index: 25; top: 60px; right: 20px; margin: 0; width: min(600px, calc(100vw - 32px)); max-height: min(70vh, 640px); overflow-y: auto;
   background: color-mix(in srgb, var(--asking) 7%, var(--surface)); box-shadow: inset 3px 0 0 var(--c), 0 0 0 1px color-mix(in srgb, var(--c) 28%, transparent), var(--shadow-pop); }
 .needs.pop::after { content: ""; position: absolute; top: -6px; right: var(--arrow-x, 40px); width: 10px; height: 10px; transform: rotate(45deg);
@@ -976,7 +962,6 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <span class="vr"></span>
   <div class="workers" id="workers"></div>
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
-  <button class="needs-pill" id="needs-pill" type="button" hidden aria-haspopup="dialog" aria-controls="needs"></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn" id="notify-btn" type="button" hidden title="允许浏览器弹通知：有需求待验收、任务缺 worker、leader 掉线时提醒你">开启通知</button>
   <button class="btn ghost helper-btn" id="helper-btn" type="button">使用说明</button>
@@ -2905,41 +2890,11 @@ function rolesNeedingWorkers() {
   return byRole;
 }
 
-// 页头的「有任务没人做」小标签，点开才显示详情气泡，不把页面内容往下推
-let needsOpen = false;
+// 「有任务没人做」：并进了页头的「需要你处理」（缺人那几项可以就地展开提示词），这里不再单独弹气泡
 function renderNeeds() {
   const box = document.getElementById('needs');
-  const pill = document.getElementById('needs-pill');
-  // 预演 / 演播期间派发暂停，没人领也正常，不打扰
-  const byRole = frozenDemo() ? new Map() : rolesNeedingWorkers();
-  if (byRole.size === 0) { box.hidden = true; box.replaceChildren(); pill.hidden = true; needsOpen = false; return; }
-  const summary = [...byRole].map(([role, ts]) => `${role}（${ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、')}）`).join('，');
-  const count = [...byRole.values()].reduce((n, ts) => n + ts.length, 0);
-  fill(pill, '有任务没人做', el('span', { class: 'cnt' }, String(count)));
-  pill.title = `缺少这些角色的在线 worker：${summary}`;
-  pill.setAttribute('aria-expanded', needsOpen ? 'true' : 'false');
-  pill.hidden = false;
-  pill.onclick = (e) => {
-    e.stopPropagation();
-    needsOpen = !needsOpen;
-    if (needsOpen && attentionOpen) { attentionOpen = false; renderAttentionList(); } // 两个气泡位置重叠，只开一个
-    renderNeeds();
-  };
-  if (!needsOpen) { box.hidden = true; box.replaceChildren(); return; }
-  // 气泡的小箭头对准标签
-  const r = pill.getBoundingClientRect();
-  box.style.setProperty('--arrow-x', `${Math.max(16, Math.min(560, window.innerWidth - 20 - (r.left + r.width / 2) - 5))}px`);
-  fill(box,
-    toastX(() => { needsOpen = false; renderNeeds(); }),
-    el('div', { class: 'needs-row' },
-      el('b', null, '有任务没人做'),
-      el('span', null, `缺少这些角色的在线 worker：${summary}`),
-      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); showPrompts = !showPrompts; render(); } },
-        showPrompts ? '收起提示词' : '显示提示词')),
-    showPrompts ? el('div', null,
-      el('p', { class: 'hint' }, '打开一个新的 agent 窗口（可以换账号），工作目录选项目目录，把下面这句话发给它。它会自动接手，在已有改动上继续。想给这个窗口起名字，就在第一行末尾加「，名字 账号B」。'),
-      [...byRole.keys()].map((role) => promptBox(role))) : null);
-  box.hidden = false;
+  box.hidden = true;
+  box.replaceChildren();
 }
 
 // ---------- worker 可能停了：弹框请用户确认 ----------
@@ -3121,8 +3076,8 @@ function attentionItems() {
   for (const j of data.state.jobs.slice().reverse()) {
     if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待你验收`, body: `${j.id} ${j.title} 待你验收` });
   }
-  for (const role of rolesNeedingWorkers().keys()) {
-    items.push({ key: `needs:${role.toLowerCase()}`, text: `${role} 缺 worker`, body: `${role} 的任务没人做，需要开一个 ${role} worker` });
+  for (const [role, ts] of (frozenDemo() ? new Map() : rolesNeedingWorkers())) {
+    items.push({ key: `needs:${role.toLowerCase()}`, role, tasks: ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、'), text: `${role} 缺 worker`, body: `${role} 的任务没人做，需要开一个 ${role} worker` });
   }
   if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
   for (const t of data.state.tasks) {
@@ -3256,7 +3211,6 @@ async function poll() {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (showDlg) { closeShowDialog(); return; }
-  if (needsOpen) { needsOpen = false; renderNeeds(); return; }
   if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
@@ -3267,7 +3221,6 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   if (attentionOpen && !e.target.closest('#attention, #attention-list')) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
-  if (needsOpen && !e.target.closest('#needs, #needs-pill')) { needsOpen = false; renderNeeds(); }
   if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
   if (!view.task) return;
   if (e.target.closest('#drawer, .card, .cancelled-row, .demo-row, #demo-banner, #stale-dialog, #decide-dialog, #show-dialog')) return;
@@ -3288,9 +3241,9 @@ function goAttention(key) {
     render();
     document.getElementById('main').scrollTop = 0;
   } else if (kind === 'needs') {
-    showPrompts = true;
-    needsOpen = true;
-    render();
+    needsExpanded.add(id ? [...rolesNeedingWorkers().keys()].find((r) => r.toLowerCase() === id) || id : id);
+    attentionOpen = true;
+    renderAttentionList();
   } else if (kind === 'leader') {
     helper = { open: true, focus: null, tab: 'lead' };
     renderHelper();
@@ -3312,6 +3265,7 @@ function goAttention(key) {
 }
 
 // 「其它」里每件事前面的类别：[文字, 颜色]
+const needsExpanded = new Set(); // 「需要你处理」里展开了提示词的缺人角色
 const ATT_KIND = {
   needs: ['缺人', 'asking'], stale: ['重启', 'rework'], dispute: ['分歧', 'submitted'], assign: ['指派', 'working'],
   cancel: ['作废', 'rework'], quiet: ['停了', 'asking'], leader: ['leader', 'rework'],
@@ -3370,9 +3324,19 @@ function renderAttentionList() {
 
   const otherSec = others.length ? [
     el('div', { class: 'att-head' }, el('h4', null, `其它（${others.length}）`)),
-    others.map((i) => el('div', { class: 'att-row' },
-      el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其它'), el('span', null, i.body)),
-      i.key === 'stale' ? el('span', { class: 'hint' }, '见右上角提示') : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理'))),
+    others.map((i) => {
+      // 缺人：不跳走，就地展开开 worker 的提示词
+      const role = i.key.startsWith('needs:') ? i.role : null;
+      const open = role && needsExpanded.has(role);
+      return [el('div', { class: 'att-row' },
+        el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其它'), el('span', null, i.body)),
+        i.key === 'stale' ? el('span', { class: 'hint' }, '见右上角提示')
+          : role ? el('button', { class: 'btn sm', onclick: stop(() => { open ? needsExpanded.delete(role) : needsExpanded.add(role); renderAttentionList(); }) }, open ? '收起' : '开 worker')
+          : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理')),
+        open ? el('div', { class: 'att-prompt' },
+          el('p', { class: 'hint' }, `任务：${i.tasks}。打开一个新的 agent 窗口（可以换账号），工作目录选项目目录，把下面这句话发给它，它会自动接手。想给窗口起名字，就在第一行末尾加「，名字 账号B」。`),
+          promptBlock(workerPrompt(role), renderAttentionList)) : null];
+    }),
   ] : null;
 
   box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
@@ -3388,7 +3352,6 @@ function renderAttentionList() {
 document.getElementById('attention').addEventListener('click', (e) => {
   e.stopPropagation();
   attentionOpen = !attentionOpen;
-  if (attentionOpen && needsOpen) { needsOpen = false; renderNeeds(); } // 两个气泡位置重叠，只开一个
   acceptPick = null;
   acceptConfirm = false;
   acceptMsg = '';

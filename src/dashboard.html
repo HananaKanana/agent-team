@@ -523,7 +523,8 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .activity { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 10px; border-top: 1px solid var(--line-soft); }
 .side-h { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
 .side-h .sub { font-weight: 400; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
-.acts { list-style: none; margin: 0 -8px; padding: 0; overflow-y: auto; min-height: 0; flex: 1; }
+.acts { list-style: none; margin: 0 -8px; padding: 0; overflow: hidden; min-height: 0; flex: 1; }
+.acts li[hidden] { display: none; }
 .acts li { display: grid; grid-template-columns: 7px auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 2px 8px; border-radius: 4px; font-size: 12.5px; line-height: 22px; }
 .acts li.link { cursor: pointer; }
 .acts li.link:hover, .acts li.link:focus-visible { background: var(--sunken); }
@@ -1744,6 +1745,7 @@ function renderMain() {
   const scrolls = Object.fromEntries([...main.querySelectorAll('.lane[data-lane] .cards')].map((c) => [c.parentNode.dataset.lane, c.scrollTop]));
   main.removeAttribute('aria-busy');
   fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : emptyState('split', 'leader 正在拆任务', '拆好后任务会出现在这里。需要哪些角色的 worker，leader 会在对话里告诉你。'), cancelledBox);
+  fitActs();
   for (const c of main.querySelectorAll('.lane[data-lane] .cards')) c.scrollTop = scrolls[c.parentNode.dataset.lane] || 0;
 }
 
@@ -1763,7 +1765,8 @@ function jobSide(job, tasks) {
   const acts = tasks.flatMap((t) => t.history.filter((h) => ACTIVITY_TYPES.has(h.type)).map((h) => ({ ...h, task: t })));
   if (job.acceptedAt) acts.push({ ts: job.acceptedAt, type: 'job_accepted' });
   acts.sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  const shown = acts.slice(0, 5);
+  // 先多渲染一些，fitActs 按卡片剩下的高度只留能完整显示的条数（至少 3 条）
+  const shown = acts.slice(0, 30);
   const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
   const kpi = (value, label, cls = '', title) => el('div', { class: `kpi ${cls}`, title }, el('b', null, value), el('span', null, label));
   return el('aside', { class: `job-side${shown.length ? '' : ' bare'}`, 'aria-label': '概览和最近动态' },
@@ -1791,6 +1794,30 @@ function jobSide(job, tasks) {
           el('span', { class: 'what' }, el('span', { class: 'key' }, a.task.id), label, el('span', { class: 'who' }, agentName(a.actor))));
         }))) : null));
 }
+
+// 最近动态的条数跟着卡片高度走：说明收起时卡片矮，至少留 3 条（不够就把卡片撑高）；
+// 说明展开、卡片变高时显示满。只显示完整的行，不出现半条。窄屏卡片自己撑高，固定最多 5 条
+const MIN_ACTS = 3;
+function fitActs() {
+  const side = document.querySelector('#main .job-side');
+  const ol = side?.querySelector('.acts');
+  if (!ol) return;
+  const items = [...ol.children];
+  for (const li of items) li.hidden = false;
+  side.style.minHeight = '';
+  const narrow = getComputedStyle(side.querySelector('.inner')).position === 'static';
+  if (narrow) { items.forEach((li, i) => { li.hidden = i >= 5; }); return; }
+  const fits = () => { const max = ol.getBoundingClientRect().bottom; return items.filter((li) => li.getBoundingClientRect().bottom <= max + 0.5).length; };
+  let n = fits();
+  const want = Math.min(MIN_ACTS, items.length);
+  if (n < want) {
+    const rowH = items[0].getBoundingClientRect().height;
+    side.style.minHeight = `${side.getBoundingClientRect().height + (want - n) * rowH + 2}px`;
+    n = Math.max(fits(), want);
+  }
+  items.forEach((li, i) => { li.hidden = i >= n; });
+}
+addEventListener('resize', () => fitActs());
 
 // 已作废：默认收起，展开后一行一张，点开看详情
 let cancelledOpen = false;

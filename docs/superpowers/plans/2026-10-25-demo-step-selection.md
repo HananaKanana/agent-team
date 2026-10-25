@@ -58,10 +58,10 @@
 - 收尾 `# 演播收尾`：`outcome === 'done'` 且 `steps` 存在且不含总步数（最后一步）→ 写「这一场只演了 <stepsLabel>，没跑到最后一步，不清理，数据留给下一场接着用」，替换原来的清理句；包含最后一步 → 原清理句后补「有的数据这一场没造过，找不到就跳过」。总步数从 wrap 结果附带的 `script.steps` 取（server 在 demo_wrap 时也附 script，现状已附）。
 - `formatDemoTask` / `demoLine` 的运行记录：run 有 `steps` 时附 `stepsLabel(run.steps)`。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测（临时 git 仓库 + 真服务，脚本 5 步）：预演跑完后 `start {mode:'show', steps:[3,4]}` → wait 输出含「第 3–4 步」「不执行「## 准备」段」；`start {mode:'rehearsal', steps:[2]}` 返回错误；脚本文件改名后 `start {steps:[2]}` 返回「读不到脚本的步数」；部分演播 `demo end` 后 wait 的收尾输出含「不清理」；`steps:[4,5]` 跑完收尾含「找不到就跳过」且不含「不清理」。
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测（临时 git 仓库 + 真服务，脚本 5 步）：预演跑完后 `start {mode:'show', steps:[3,4]}` → wait 输出含「第 3–4 步」「不执行「## 准备」段」；`start {mode:'rehearsal', steps:[2]}` 返回错误；脚本文件改名后 `start {steps:[2]}` 返回「读不到脚本的步数」；部分演播 `demo end` 后 wait 的收尾输出含「不清理」；`steps:[4,5]` 跑完收尾含「找不到就跳过」且不含「不清理」。
   Run: `node --check src/server.js src/format.js && node <scratchpad>/probe-steps-server.mjs <scratchpad>` → `ALL PASS`，删除脚本和临时目录。
-- [ ] **Step 3: Commit** `server/cli: show runs with selected steps — worker rules skip prep, cleanup only when the last step ran`
+- [x] **Step 3: Commit** `server/cli: show runs with selected steps — worker rules skip prep, cleanup only when the last step ran`
 
 ### Task 3: 看板
 

@@ -1,5 +1,6 @@
 // 把任务、事件、状态渲染成给大模型读的 markdown 文本。
 // worker skill 依赖 formatWait 的标题文本，修改时要同步 skills/ateam-worker/SKILL.md。
+import { stepsLabel } from './demo.js';
 
 const STATUS = {
   pending: '待领取',
@@ -22,7 +23,8 @@ const RUN_MODE = { rehearsal: '预演', show: '演播' };
 const rehearsalFlag = (t) => (!t.rehearsedAt ? '未预演' : t.mayChange ? '已预演，页面可能有变动' : '已预演');
 function runText(r) {
   const slow = r.slowSteps?.length ? `；慢档：第 ${r.slowSteps.join('、')} 步` : '';
-  return `${formatTime(r.startedAt)} ${RUN_MODE[r.mode] ?? '演播'} ${RUN_OUTCOME[r.outcome] ?? '进行中'}${slow}`;
+  const only = r.steps?.length ? `（${stepsLabel(r.steps)}）` : '';
+  return `${formatTime(r.startedAt)} ${RUN_MODE[r.mode] ?? '演播'}${only} ${RUN_OUTCOME[r.outcome] ?? '进行中'}${slow}`;
 }
 
 // 演播卡一行摘要：脚本、预演状态、次数、上一次的结果
@@ -322,17 +324,30 @@ function formatDemoWait(result, agentId) {
       ].map(((n) => (l) => (l.startsWith('   ') ? l : `${++n}. ${l}`))(0)),
     ].join('\n') + scriptBlock;
   } else if (kind === 'demo') {
+    const only = script?.only?.length ? script.only : null;
     out = [
       `# 演播 ${title}`,
       '',
-      '用户正在给客户现场演播，你在用户前台的浏览器里按脚本**从头到尾顺序操作**，用户在旁边讲解。**要快**：照「## 操作记录」直接做，不要每步都截图、琢磨。',
+      only
+        ? `用户正在给客户现场演播，**这一场只演${stepsLabel(only)}**，你在用户前台的浏览器里按脚本顺序操作这几步，用户在旁边讲解。**要快**：照「## 操作记录」直接做，不要每步都截图、琢磨。`
+        : '用户正在给客户现场演播，你在用户前台的浏览器里按脚本**从头到尾顺序操作**，用户在旁边讲解。**要快**：照「## 操作记录」直接做，不要每步都截图、琢磨。',
       '',
+      ...(only ? [
+        '## 只演部分步骤',
+        '',
+        `- 这一场只演${stepsLabel(only)}。没列出的步骤**完全不做**，也不要 demo step。`,
+        '- **不要执行「## 准备」段**：准备段会清掉上一场留下的「演示-」数据，而这些数据正是接着演要用的。只核对视口（见下面第 1 条），再截一张图确认当前页面能接上第一步。',
+        '- 跳过的步骤留下的数据和页面由用户保证。某一步要用的数据不在、页面接不上，就按对不上处理：这一步切慢档；慢档也走不通就停住，--stuck 的说明里写清缺了什么。',
+        `- demo step 照样用脚本里的原编号和总步数（比如 ${only[0]}/${script.steps}）。`,
+        `- 选中的最后一步（第 ${only[only.length - 1]} 步）跑完就 demo end。`,
+        '',
+      ] : []),
       '## 演播规则',
       '',
       ...[
         script && !script.hasOps
           ? '⚠ 这张卡的「## 操作记录」是空的（还没预演写过）。这次只能按预演的方式慢慢走，并把每步写进操作记录；提醒用户以后先预演。'
-          : `先通读「## 操作记录」，按「## 准备」段检查状态。截一张图，看截图结果里的视口尺寸和操作记录开头的「视口：」一致；**不一致先自己调**：运行 ateam demo viewport ${task.id} --now <截图里的宽x高>（它会按差值调 Chrome 窗口大小），再截一张图核对；输出带 ✗ 或调完仍不一致，就停住：ateam demo end --as ${agentId} --stuck "视口不一致：预演时 <宽x高>，现在 <宽x高>，请把浏览器窗口调成一样大"。`,
+          : `先通读「## 操作记录」${only ? '' : '，按「## 准备」段检查状态'}。截一张图，看截图结果里的视口尺寸和操作记录开头的「视口：」一致；**不一致先自己调**：运行 ateam demo viewport ${task.id} --now <截图里的宽x高>（它会按差值调 Chrome 窗口大小），再截一张图核对；输出带 ✗ 或调完仍不一致，就停住：ateam demo end --as ${agentId} --stuck "视口不一致：预演时 <宽x高>，现在 <宽x高>，请把浏览器窗口调成一样大"。`,
         report,
         '**快档（默认）**：每一步把它动作块里的每一段，**各用一次 cua_execute 原样执行**（actions 就是那段 JSON，{时间} 换成当前时间），**不截图、不读 DOM、不琢磨**。段与段之间不用额外等待，调用往返就够了；脚本写了要停几秒的，就在这一步最后一段之后再停。',
         '**核对**：标了【核对】的步骤，把一个 {"type":"screenshot"} 放进**下一步第一段的最前面**一起执行，用返回的截图对照「核对：」那一行；最后一步是核对的，单独截一次图。其他步骤都不截图。',
@@ -354,11 +369,16 @@ function formatDemoWait(result, agentId) {
     ].join('\n') + scriptBlock;
   } else {
     const done = result.outcome === 'done';
+    const only = result.steps?.length ? result.steps : null;
+    // 部分演播：跑到了最后一步才清理整场的数据；只演了中间几步就不清理，留给下一场接着用
+    const reachedEnd = !only || (script?.steps > 0 && only.includes(script.steps));
     out = [
       `# ${word}收尾 ${title}`,
       '',
-      done
-        ? `${word}已经跑完。先执行脚本的「## 清理」段：只删名称以「演示-」开头、且标了【数据：清理】的数据，别的一概不动。`
+      done && !reachedEnd
+        ? `这一场只演了${stepsLabel(only)}，没跑到最后一步，**不要清理数据**，留给下一场接着用。`
+        : done
+        ? `${word}已经跑完。先执行脚本的「## 清理」段：只删名称以「演示-」开头、且标了【数据：清理】的数据，别的一概不动。${only ? '这一场是从中间开始演的，有的数据这一场没造过，找不到就跳过。' : ''}`
         : `这次${word}${result.outcome === 'interrupted' ? '没走通，停住了' : '被叫停了'}，**不要清理数据**，残留留给下次的「## 准备」段处理。`,
       '',
       rehearsal

@@ -156,6 +156,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       const runs = result.task.runs ?? [];
       out.script.mode = runs[runs.length - 1]?.mode ?? 'show';
+      out.script.only = runs[runs.length - 1]?.steps ?? null;
     }
     return out;
   }
@@ -270,7 +271,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       if (!existsSync(join(root, script))) throw new AteamError('INVALID', `脚本文件 ${script} 不存在，请先按演播脚本格式写好并提交，再建演播卡。`);
       return { task: store.addDemo({ jobId: b.jobId, title: b.title, script, role: b.role }) };
     },
-    'POST /api/demo/start': (b) => ({ task: store.startDemo(requireId(b), b.mode ?? 'show') }),
+    // steps：演播只演这几步。总步数从脚本读，读不到就交给 store 拒绝
+    'POST /api/demo/start': (b) => {
+      const id = requireId(b);
+      let total = null;
+      if (b.steps != null) {
+        try { total = stepCount(readFileSync(join(root, store.getTask(id).script), 'utf8')); } catch {}
+      }
+      return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total) };
+    },
     'GET /api/demo/ops': (_b, url) => {
       const task = store.getTask(url.searchParams.get('id') ?? '');
       if (task.kind !== 'demo') throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);

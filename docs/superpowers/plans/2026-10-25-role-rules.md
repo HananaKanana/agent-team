@@ -42,10 +42,10 @@
 - `unreceived(text, knownRoles: string[]) -> string[]`：非 ALL 段标题里不在 `knownRoles`（不分大小写）中的角色名，去重。
 - `needsTidy(text) -> boolean`：没有 `## ` 且 `- ` 开头的行 > 8。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测：Review Focus 1–5；`addRule('', 'x')` → `'- x'`；`addRule('## backend\n- a', 'b')` 新内容里 `- b` 在 `## backend` 之前；`sectionCounts` 对「开头 2 条 + `## ALL` 1 条 + `## test` 3 条」返回 ALL 3、test 3；`needsTidy` 对 9 条无标题为真、8 条为假。
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测：Review Focus 1–5；`addRule('', 'x')` → `'- x'`；`addRule('## backend\n- a', 'b')` 新内容里 `- b` 在 `## backend` 之前；`sectionCounts` 对「开头 2 条 + `## ALL` 1 条 + `## test` 3 条」返回 ALL 3、test 3；`needsTidy` 对 9 条无标题为真、8 条为假。
   Run: `node --check src/rules.js && node <scratchpad>/probe-rules.mjs` → `ALL PASS`，删除脚本。
-- [ ] **Step 3: Commit** `rules: section parsing by role (## ALL / ## <role>)`
+- [x] **Step 3: Commit** `rules: section parsing by role (## ALL / ## <role>)`
 
 ### Task 2: 服务与命令行
 

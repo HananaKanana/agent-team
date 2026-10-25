@@ -853,7 +853,15 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
   .layout { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
   .needs { max-height: 40vh; overflow-y: auto; }
   nav.jobs, main { overflow-y: auto; scrollbar-width: thin; }
+  /* 看板高度 = 主区可视高度：头部（标题、说明、概览）在上面，往上滑就能把头部滑走、让看板占满一屏；
+     原来看板只填剩下的空间，主区没有可滚的内容，滑不动 */
+  @supports (height: 1cqh) {
+    main { container-type: size; }
+    main > .board { flex: none; height: calc(100cqh - 38px); }
+  }
 }
+/* 拖动滚动时不选中文字 */
+html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
 .drawer, .helper { scrollbar-width: thin; overscroll-behavior: contain; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
@@ -3160,6 +3168,66 @@ try {
 } catch {}
 // 切回标签页时马上刷新一次
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+
+// Mac 外接触摸屏：macOS 把单指当成鼠标按住拖动，页面不会滚。这里在可滚动区域按住上下拖就滚动，
+// 松手带一点惯性；拖过之后的那次点击吞掉，不误开卡片。输入框、代码块不接管，照常能选中文字
+(() => {
+  if (PROMPTER_ONLY) return;
+  const SKIP = 'input, textarea, select, pre, code, .pblock, [contenteditable]';
+  const scroller = (node) => {
+    for (let n = node; n && n !== document.documentElement; n = n.parentElement) {
+      if (/(auto|scroll)/.test(getComputedStyle(n).overflowY) && n.scrollHeight > n.clientHeight + 1) return n;
+    }
+    return null;
+  };
+  let st = null;
+  let glide = 0;
+  addEventListener('pointerdown', (e) => {
+    cancelAnimationFrame(glide);
+    if (e.button !== 0 || e.pointerType === 'pen' || e.target.closest(SKIP)) return;
+    const box = scroller(e.target);
+    if (box) st = { box, id: e.pointerId, y: e.clientY, top: box.scrollTop, dragging: false, v: 0, lastY: e.clientY, lastT: e.timeStamp };
+  }, true);
+  addEventListener('pointermove', (e) => {
+    if (!st || e.pointerId !== st.id) return;
+    const dy = e.clientY - st.y;
+    if (!st.dragging) {
+      if (Math.abs(dy) < 8) return;
+      st.dragging = true;
+      document.documentElement.classList.add('drag-scrolling');
+      getSelection()?.removeAllRanges();
+    }
+    st.box.scrollTop = st.top - dy;
+    const dt = e.timeStamp - st.lastT;
+    if (dt > 0) st.v = (e.clientY - st.lastY) / dt;
+    st.lastY = e.clientY;
+    st.lastT = e.timeStamp;
+    e.preventDefault();
+  }, true);
+  const end = () => {
+    if (st?.dragging) {
+      document.documentElement.classList.remove('drag-scrolling');
+      const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => removeEventListener('click', swallow, true), 0);
+      // 惯性：按松手前的速度继续滚，逐渐减速
+      const { box } = st;
+      let v = st.v * 16;
+      let last = performance.now();
+      const step = (now) => {
+        const k = (now - last) / 16;
+        last = now;
+        box.scrollTop -= v * k;
+        v *= Math.pow(0.94, k);
+        if (Math.abs(v) > 0.3) glide = requestAnimationFrame(step);
+      };
+      if (Math.abs(v) > 1) glide = requestAnimationFrame(step);
+    }
+    st = null;
+  };
+  addEventListener('pointerup', end, true);
+  addEventListener('pointercancel', end, true);
+})();
 </script>
 </body>
 </html>

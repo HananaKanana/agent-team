@@ -881,8 +881,9 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline { list-style: none; margin: 0; padding: 0; }
 .timeline li { position: relative; padding: 0 0 14px 26px; }
 .timeline li::before {
-  content: ""; position: absolute; left: 6px; top: 4px; width: 10px; height: 10px;
-  border-radius: 50%; background: var(--surface); border: 2px solid var(--c, var(--pending));
+  /* 空心圆用渐变画，不用 border：Safari 在抽屉滑入（transform）后，小圆的 border 会出现一道缺口 */
+  content: ""; position: absolute; z-index: 1; left: 6px; top: 4px; width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--surface) 55%, var(--c, var(--pending)) 60%);
 }
 .timeline li::after { content: ""; position: absolute; left: 10px; top: 16px; bottom: 0; width: 2px; background: var(--line-soft); }
 .timeline li:last-child::after { display: none; }

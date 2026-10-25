@@ -125,11 +125,11 @@ button.worker:hover { background: var(--sunken); }
 .btn.icon svg { width: 16px; height: 16px; }
 .btn.attention[hidden] { display: none; }
 /* 按钮里的数字：圆角小徽标，不和文字挤在一起 */
-.cnt { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+.cnt { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 4px;
   font-size: 12px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-.btn.attention { gap: 8px; }
-.btn.attention .cnt { background: var(--on-color); color: var(--rework); }
-.needs-pill .cnt { background: var(--asking); color: var(--on-color); margin-left: 1px; }
+.btn.attention { gap: 8px; height: 32px; padding: 0 8px 0 12px; border-radius: 6px; }
+.btn.attention .cnt { background: color-mix(in srgb, #fff 22%, transparent); color: var(--on-color); }
+.needs-pill .cnt { background: var(--asking); color: var(--on-color); }
 .att-modal { width: min(640px, 100%); }
 /* 「需要你处理」：从页头按钮下面弹出的气泡，不盖暗整个页面 */
 .att-pop { position: fixed; z-index: 30; top: 60px; right: 20px; }
@@ -246,6 +246,17 @@ input[type="checkbox"]:not(.switch):checked::after {
 .toast-x { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--faint); cursor: pointer; }
 .toast-x:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 .toast-x svg { width: 14px; height: 14px; }
+.needs.pop { padding-right: 40px; }
+.banner.stale { --c: var(--asking); }
+/* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
+.needs::before { top: 17px; }
+.needs { --c: var(--asking); }
+/* 「有任务没人做」不占页面：页头一个琥珀色按钮，点开是浮在页面上的气泡。和「需要你处理」同一个形状，只是浅色底 */
+.needs-pill { appearance: none; display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 12px; border: 0; border-radius: 6px; cursor: pointer;
+  background: color-mix(in srgb, var(--asking) 20%, var(--surface)); color: color-mix(in srgb, var(--asking) 55%, var(--ink));
+  font: inherit; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.needs-pill[hidden] { display: none; }
+.needs-pill:hover, .needs-pill[aria-expanded="true"] { background: color-mix(in srgb, var(--asking) 30%, var(--surface)); }
 .needs.pop { padding-right: 40px; }
 .banner.stale { --c: var(--asking); }
 /* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
@@ -2904,7 +2915,7 @@ function renderNeeds() {
   if (byRole.size === 0) { box.hidden = true; box.replaceChildren(); pill.hidden = true; needsOpen = false; return; }
   const summary = [...byRole].map(([role, ts]) => `${role}（${ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、')}）`).join('，');
   const count = [...byRole.values()].reduce((n, ts) => n + ts.length, 0);
-  fill(pill, el('span', { class: 'ic' }, '!'), '有任务没人做', el('span', { class: 'cnt' }, String(count)));
+  fill(pill, '有任务没人做', el('span', { class: 'cnt' }, String(count)));
   pill.title = `缺少这些角色的在线 worker：${summary}`;
   pill.setAttribute('aria-expanded', needsOpen ? 'true' : 'false');
   pill.hidden = false;

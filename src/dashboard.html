@@ -452,6 +452,9 @@ nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); m
 .job[aria-current="true"] .title { color: var(--brand-ink); }
 .job .title .jid, .job-head .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }
 .job .sub .accepted { color: var(--approved); font-weight: 600; }
+/* 已作废的需求：和作废的卡一样置灰，标题划掉 */
+.job.dropped .title { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
+.job.dropped .strip { opacity: .35; filter: grayscale(1); }
 .accepted-toggle {
   display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 10px; padding: 10px 12px 10px 14px;
   border: none; border-top: 1px solid var(--line-soft); background: none; cursor: pointer;
@@ -508,6 +511,7 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 24px; align-items: start; }
 .job-head .crumbs { grid-column: 1 / -1; font-size: 12.5px; color: var(--faint); }
 .job-head h2.job-title { font-size: 22px; line-height: 1.4; color: var(--ink); font-weight: 650; margin: 0; }
+.job-head h2.job-title.dropped { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
 .job-head .head-acts { padding-top: 4px; }
 .job-head .desc { grid-column: 1 / -1; color: var(--muted); margin: 2px 0 0; max-width: 78ch; white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; }
 .job-head .desc.clamped { max-height: 5.1em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 40%, transparent); mask-image: linear-gradient(#000 40%, transparent); }
@@ -1655,14 +1659,14 @@ function renderJobs() {
     if (j.demo) {
       const live = jt.find((t) => t.status === 'queued' || t.status === 'demoing');
       return el('button', {
-        class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
+        class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'aria-current': view.job === j.id ? 'true' : 'false',
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
       },
       el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
       el('div', { class: 'sub' }, el('span', { class: 'tag' }, '演播'), el('span', null, live ? (live.status === 'demoing' ? `${modeWord(live)}中` : DEMO_STATUS[live.status][0]) : `${jt.length} 张演播卡`)));
     }
     return el('button', {
-      class: 'job', 'aria-current': view.job === j.id ? 'true' : 'false',
+      class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
     },
     el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
@@ -1721,7 +1725,7 @@ function renderMain() {
   const headMain = [
     el('div', { class: 'crumbs' }, `需求 / ${job.id}`,
       job.demo ? null : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
-    el('h2', { class: 'job-title' }, job.title),
+    el('h2', { class: `job-title${job.status === 'cancelled' ? ' dropped' : ''}` }, job.title),
     job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
     job.status === 'cancelled' ? el('div', { class: 'job-cancelled' },
       `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的卡和代码保留，没做完的卡已作废。`) : null,

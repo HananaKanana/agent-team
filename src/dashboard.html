@@ -565,6 +565,7 @@ main.job-dropped .card .t { text-decoration: line-through; text-decoration-color
   color: var(--muted); font-size: 13px; font-weight: 600; text-align: left;
 }
 .accepted-toggle:hover { color: var(--ink); }
+.accepted-toggle.first { margin-top: 0; border-top: none; padding-top: 4px; }
 .accepted-toggle .tag.live { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
 /* 已作废需求的提示条 */
 .job-cancelled { padding: 8px 12px; border-radius: 6px; font-size: 13px; line-height: 1.6; color: var(--muted);
@@ -2021,6 +2022,9 @@ function setNavCollapsed(on) {
   try { localStorage.setItem('ateam.navCollapsed', on ? '1' : '0'); } catch {}
   renderJobs();
 }
+// 进行中的需求（规划中、进行中、待验收）：第一组，默认展开
+let openJobsOpen = true;
+try { openJobsOpen = localStorage.getItem('ateam.openJobsOpen') !== '0'; } catch {}
 // 演播需求一直是进行中，不和开发需求混在一起：单独一组，默认收起
 let demoJobsOpen = false;
 try { demoJobsOpen = localStorage.getItem('ateam.demoJobsOpen') === '1'; } catch {}
@@ -2058,6 +2062,17 @@ function renderJobs() {
   const dropped = newest.filter((j) => j.status === 'cancelled');
   // 收起时也提示正在预演 / 演播的
   const liveDemo = demos.some((j) => tasks.some((t) => t.jobId === j.id && (t.status === 'queued' || t.status === 'demoing' || t.status === 'wrapping')));
+  const openGroup = open.length ? [
+    el('button', {
+      class: 'accepted-toggle first', 'aria-expanded': openJobsOpen ? 'true' : 'false',
+      onclick: () => {
+        openJobsOpen = !openJobsOpen;
+        try { localStorage.setItem('ateam.openJobsOpen', openJobsOpen ? '1' : '0'); } catch {}
+        renderJobs();
+      },
+    }, el('span', null, openJobsOpen ? '▾' : '▸'), `进行中（${open.length}）`),
+    openJobsOpen ? open.map(jobItem) : null,
+  ] : [];
   const demoGroup = demos.length ? [
     el('button', {
       class: 'accepted-toggle', 'aria-expanded': demoJobsOpen ? 'true' : 'false',
@@ -2115,7 +2130,7 @@ function renderJobs() {
     }), done.length || dropped.length || demos.length ? el('button', { class: 'job-mini more', title: `展开查看演播 ${demos.length}、已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
     return;
   }
-  fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), open.map(jobItem), empty, demoGroup, doneGroup, droppedGroup);
+  fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), openGroup, empty, demoGroup, doneGroup, droppedGroup);
 }
 
 function renderMain() {

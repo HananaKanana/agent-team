@@ -3743,6 +3743,24 @@ try {
 // 切回标签页时马上刷新一次
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 
+// 排查触屏点不动：地址带 ?inputlog 时，左下角列出最近收到的指针 / 触摸 / 点击事件（类型、来源、目标、是否被拦下）
+if (new URLSearchParams(location.search).has('inputlog')) {
+  const box = document.createElement('pre');
+  box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99999;margin:0;padding:8px 10px;max-width:70vw;font:11px/1.5 ui-monospace,Menlo,monospace;background:rgba(0,0,0,.82);color:#9fe;border-radius:6px;pointer-events:none;white-space:pre-wrap';
+  document.body.append(box);
+  const lines = [];
+  const desc = (t) => t && t.nodeType === 1 ? `${t.tagName.toLowerCase()}${t.className && typeof t.className === 'string' ? '.' + t.className.trim().split(/\s+/).join('.') : ''}` : String(t);
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click']) {
+    addEventListener(type, (e) => {
+      setTimeout(() => {
+        lines.push(`${new Date().toLocaleTimeString()} ${type}${e.pointerType ? ` [${e.pointerType}]` : ''} ${e.defaultPrevented ? '(拦下) ' : ''}${desc(e.target).slice(0, 60)}`);
+        while (lines.length > 14) lines.shift();
+        box.textContent = lines.join('\n');
+      }, 0);
+    }, true);
+  }
+}
+
 // Mac 外接触摸屏（设置里开启「触屏模式」才生效）：macOS 把单指当成鼠标按住拖动，页面不会滚。这里在可滚动区域按住拖动就滚动（上下、左右都行），
 // 松手带一点惯性；拖过之后的那次点击吞掉，不误开卡片。输入框、代码块不接管，照常能选中文字
 (() => {

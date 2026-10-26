@@ -1183,7 +1183,7 @@ const HISTORY = {
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
   demo_ended: ['运行结束', 'approved'], demo_saved: ['操作记录', 'approved'],
-  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'],
+  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['挂起', 'held'],
 };
 // 演播卡的状态：名称、lozenge 颜色
 const DEMO_STATUS = { ready: ['待演播', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演播中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
@@ -1439,12 +1439,14 @@ function renderWorkers() {
   const leader = data.leader || {};
   const leaderChip = el('button', {
     type: 'button',
-    class: `worker leader-chip ${leader.online ? 'online' : 'offline-lead'}`,
-    title: leader.online
+    class: `worker leader-chip ${leader.online && !leader.away ? 'online' : 'offline-lead'}`,
+    title: leader.online && !leader.away
       ? (leader.watching ? 'leader 在线，正在监听事件。点击查看 leader 的提示词' : `leader ${ago(leader.lastSeenAt)}操作过，但没有在监听事件。点击查看提示词`)
-      : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
+      : leader.away
+        ? `无 leader 模式（${fmtTime(leader.away.since)} 起，leader 有事没处理，可能 token 用完了）：等答复、待 review 的卡挂起，worker 先做没有依赖的卡；leader 回来后自动恢复。点击查看加入的提示词`
+        : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
     onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
-  }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: 'task' }, leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
+  }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: 'task' }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
   // 审卡 worker 和 leader 一样常驻，紧挨着 leader 放
   const isCriticAgent = (a) => a.role.trim().toLowerCase() === 'critic';
   const chips = [leaderChip, ...[...online.filter(isCriticAgent), ...online.filter((a) => !isCriticAgent(a))].map((a) => {
@@ -1593,6 +1595,10 @@ const SETTING_ITEMS = [
   { key: 'criticAutoLeave', type: 'bool', label: '审完自动下线', hint: '审卡 worker 审完所有待审的卡就下线（新开的也一样）；之后有新卡要审，再开一个。关掉时审卡 worker 常驻，只有你要求才下线。' },
   { group: 'review' },
   { key: 'rejectLimit', type: 'int', label: '打回几次后挂起', hint: '同一个任务被打回这么多次，停止自动派发，转给 leader 处理（改写任务或自己动手）。' },
+  { group: 'leader' },
+  { type: 'leaderMode' },
+  { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在上面点「leader 下线」才进入。开着时，有卡在等 leader（提问、待 review）而 leader 超过下面的时间没执行任何命令（后台监听不算，token 用完时它也挂着），也自动进入。' },
+  { key: 'leaderAwayMin', type: 'int', label: '多久没处理算掉线（分钟）', hint: '只在上面的自动开关开着时有用。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';
@@ -1622,6 +1628,23 @@ function settingsPage() {
     el('p', { class: 'tab-hint' }, '这些设置对整个项目生效，改完马上生效，重启服务也不会丢。'),
     SETTING_ITEMS.map((it) => {
       if (it.group) return el('div', { class: 'helper-sec' }, el('h4', null, it.group));
+      if (it.type === 'leaderMode') {
+        const away = data.leader?.away;
+        const btn = el('button', { class: `btn${away ? '' : ' warn'}`, onclick: async (e) => {
+          e.stopPropagation();
+          try {
+            const res = await fetch('/api/leader/away', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on: !away }) });
+            const out = await res.json();
+            settingsMsg = out.ok ? (away ? '已退出无 leader 模式。' : '已进入无 leader 模式。') : out.message;
+          } catch { settingsMsg = '连不上 ateam 服务。'; }
+          await poll();
+          renderHelper(true);
+        } }, away ? '恢复 leader' : 'leader 下线');
+        return el('div', { class: 'setting' }, btn, el('span', null, el('b', null, away ? `无 leader 模式（${fmtTime(away.since)} 起，${away.by === 'user' ? '你宣布的' : '检测到 leader 掉线'}）` : '无 leader 模式'),
+          el('span', { class: 'hint' }, away
+            ? '等答复、待 review 的卡挂起，worker 先做没有依赖、不改同一批文件的卡。leader 执行任何命令会自动退出；也可以点「恢复 leader」。'
+            : 'leader 的 token 用完、暂时回不来时点「leader 下线」：worker 不再干等，把等答复、待 review 的卡挂起，先去做没有依赖、不改同一批文件的卡；依赖待 review 卡的卡继续等。leader 回来执行任何命令就自动退出，按顺序答复和 review，卡交回原来的 worker。')));
+      }
       let input;
       if (it.type === 'bool') {
         input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -2292,6 +2315,8 @@ function card(t, lane) {
       waiting && t.onHold ? el('span', { class: 'tag hold', title: `这张卡暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
+      t.parked ? el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先把这张卡挂起、去做别的卡了；leader 回来处理后交回给它` }, '挂起') : null,
+      t.returnTo && waiting ? el('span', { class: 'tag assigned', title: `挂起后被 leader 处理，留给原来的 ${t.returnTo} 接着做（它不在线就谁都能领）` }, `留给 ${agentName(t.returnTo)}`) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
       critiqueTag(t),
@@ -3566,7 +3591,11 @@ function attentionItems() {
   }
   // 演播需求一直是进行中，但不需要 leader 在线
   const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
-  if (busy && data.leader && !data.leader.online) items.push({ key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
+  if (busy && data.leader && (data.leader.away || !data.leader.online)) {
+    items.push(data.leader.away
+      ? { key: 'leader', text: '无 leader 模式', body: 'leader 不在线：等答复、待 review 的卡挂起，worker 先做没有依赖的卡。leader 回来后会按顺序处理' }
+      : { key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
+  }
   return items;
 }
 

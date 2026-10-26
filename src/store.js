@@ -26,6 +26,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     leaseMin: { type: 'num', min: 1, max: 240, def: () => defaultLeaseMs / 60000 },
     idleMin: { type: 'num', min: 1, max: 240, def: () => defaultIdleMs / 60000 },
     rejectLimit: { type: 'int', min: 1, max: 10, def: () => 3 },
+    // 无 leader 模式：autoNoLeader 关着时只有用户在看板上宣布 leader 下线才进入；开着时 leader 掉线（有事没处理、超过 leaderAwayMin 没操作）也自动进入
+    autoNoLeader: { type: 'bool', def: () => false },
+    leaderAwayMin: { type: 'int', min: 1, max: 120, def: () => 10 },
     // 演播视口：预演按它录，演播沿用这张卡预演时记下的尺寸
     demoViewport: { type: 'size', def: () => '1600x800' },
   };
@@ -529,17 +532,22 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (agent.currentTask) {
       const task = getTask(agent.currentTask);
       if (isDemo(task)) return demoNext(task);
-      if (task.status !== 'working') return null; // asking / submitted：等答复或 review 结果
-      // 规则 1：待送达的打回意见或答复
-      if (task.pendingDelivery) {
-        const delivery = task.pendingDelivery;
-        task.pendingDelivery = null;
-        changed();
-        return { kind: delivery.kind, task, delivery };
+      if (task.status !== 'working') {
+        // asking / submitted：等答复或 review 结果。无 leader 模式下有别的卡能做，就把这张挂起，先去做别的
+        if (!(state.noLeader && candidatesFor(agent, task).length)) return null;
+        park(agent, task);
+      } else {
+        // 规则 1：待送达的打回意见或答复
+        if (task.pendingDelivery) {
+          const delivery = task.pendingDelivery;
+          task.pendingDelivery = null;
+          changed();
+          return { kind: delivery.kind, task, delivery };
+        }
+        // 规则 2：重复调用 wait，重新返回当前任务（有补充说明一起带上）
+        const note = takeNote(task);
+        return note ? { kind: 'resume', task, delivery: { kind: 'note', text: note } } : { kind: 'resume', task };
       }
-      // 规则 2：重复调用 wait，重新返回当前任务（有补充说明一起带上）
-      const note = takeNote(task);
-      return note ? { kind: 'resume', task, delivery: { kind: 'note', text: note } } : { kind: 'resume', task };
     }
 
     // 规则 3：领取新任务，派发顺序见 dispatchOrder
@@ -551,12 +559,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (demoFrozen()) return null;
 
     const own = (t) => t.handoff && t.prevAssignee === agent.id;
-    const mine = (t) => t.assignTo === agent.id;
-    const candidates = state.tasks
-      .filter((t) => t.status === 'pending' && !onHold(t) && sameRole(t.role, agent.role) && depsMet(t) && (!t.assignTo || mine(t)))
-      .sort((a, b) => (own(b) - own(a)) || (mine(b) - mine(a)) || dispatchOrder(a, b));
-    const task = candidates[0];
+    const task = candidatesFor(agent)[0];
     if (!task) return null;
+    const parked = state.tasks.filter((t) => t.parked && t.assignee === agent.id).map((t) => t.id);
+    const back = task.backFromPark;
+    delete task.backFromPark;
+    delete task.returnTo;
 
     if (own(task)) {
       task.status = 'working';
@@ -565,10 +573,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       agent.currentTask = task.id;
       const delivery = task.pendingDelivery ?? undefined;
       task.pendingDelivery = null;
-      addHistory(task, 'claimed', agent.id, '重新加入，拿回掉线前自己在做的任务');
-      emit('claimed', { taskId: task.id, agentId: agent.id, text: `${agent.id} 重新加入，拿回了 ${task.id}` });
+      addHistory(task, 'claimed', agent.id, back ? '拿回挂起的任务' : '重新加入，拿回掉线前自己在做的任务');
+      emit('claimed', { taskId: task.id, agentId: agent.id, text: back ? `${agent.id} 拿回了挂起的 ${task.id}` : `${agent.id} 重新加入，拿回了 ${task.id}` });
       changed();
-      return { kind: 'own', task, delivery };
+      return { kind: back ? 'back' : 'own', task, delivery, parked };
     }
 
     const isHandoff = task.handoff;
@@ -578,13 +586,69 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     agent.currentTask = task.id;
     const delivery = task.pendingDelivery ?? undefined;
     task.pendingDelivery = null;
-    addHistory(task, 'claimed', agent.id, isHandoff ? '接手任务（上一位 worker 掉线）' : '领取任务');
+    const why = back ? '原 worker 不在线' : '上一位 worker 掉线';
+    addHistory(task, 'claimed', agent.id, isHandoff ? `接手任务（${why}）` : '领取任务');
     emit('claimed', {
       taskId: task.id, agentId: agent.id,
-      text: isHandoff ? `${agent.id} 接手了 ${task.id}（上一位 worker 掉线）` : `${agent.id} 领取了 ${task.id}`,
+      text: isHandoff ? `${agent.id} 接手了 ${task.id}（${why}）` : `${agent.id} 领取了 ${task.id}`,
     });
     changed();
-    return { kind: isHandoff ? 'handoff' : 'task', task, delivery };
+    return { kind: isHandoff ? 'handoff' : 'task', task, delivery, parked };
+  }
+
+  // 这个 worker 能领的卡，按领取顺序排。also：马上要挂起的卡（还没标 parked），一起算进「挂起的卡」
+  // - 用户指派给别人的不领；挂起后退回的卡留给原 worker（returnTo），它不在线才谁都能领
+  // - 和挂起的卡改同一批文件的不领：提问挂起的卡有没提交的半成品，待 review 的卡打回后还要改这些文件
+  function candidatesFor(agent, also = null) {
+    if (state.tasks.some((t) => isDemo(t) && t.status === 'queued' && sameRole(t.role, agent.role)) || demoFrozen()) return [];
+    const own = (t) => t.handoff && t.prevAssignee === agent.id;
+    const mine = (t) => t.assignTo === agent.id;
+    const reserved = (t) => t.returnTo && t.returnTo !== agent.id && findAgent(t.returnTo)?.status === 'online';
+    const parked = state.tasks.filter((t) => t.parked || t === also);
+    return state.tasks
+      .filter((t) => t.status === 'pending' && !onHold(t) && sameRole(t.role, agent.role) && depsMet(t) && (!t.assignTo || mine(t))
+        && !reserved(t) && !parked.some((p) => pathsOverlap(p.paths, t.paths)))
+      .sort((a, b) => (own(b) - own(a)) || (mine(b) - mine(a)) || dispatchOrder(a, b));
+  }
+
+  // ---------- 无 leader 模式 ----------
+  // leader（Claude Code）token 用完、不在线时，worker 不干等：等答复、待 review 的卡挂起（parked），
+  // worker 先去做没有依赖、不撞文件的卡。leader 回来后答复或打回，卡退回待领取并留给原 worker（returnTo）；
+  // 原 worker 不在线就照常换手。挂起的卡 status 不变（asking / submitted），assignee 仍是原 worker
+  function park(agent, task) {
+    task.parked = now();
+    agent.currentTask = null;
+    addHistory(task, 'parked', agent.id, task.status === 'asking' ? 'leader 不在线，提问先挂起，先去做别的卡' : 'leader 不在线，等 review 期间先去做别的卡');
+    changed();
+  }
+
+  // 挂起的卡被答复或打回：退回待领取，留给原 worker
+  function unpark(task) {
+    delete task.parked;
+    if (task.assignee) task.prevAssignee = task.assignee;
+    task.returnTo = task.prevAssignee;
+    task.backFromPark = true;
+    task.status = 'pending';
+    task.handoff = true;
+    task.assignee = null;
+  }
+
+  // by：user（用户在看板上宣布 leader 下线 / 恢复）或 auto（检测到 leader 掉线、leader 回来）
+  function setLeaderAway(on, by = 'auto') {
+    if (!!state.noLeader === !!on) return state.noLeader ?? null;
+    if (on) {
+      state.noLeader = { since: now(), by };
+      const why = by === 'user' ? '用户宣布 leader 下线' : `有卡等 leader 处理，leader 超过 ${config().leaderAwayMin} 分钟没有任何操作（可能 token 用完了）`;
+      emit('no_leader', { text: `${why}，进入无 leader 模式：等答复、待 review 的卡挂起，worker 先做没有依赖的卡` });
+    } else {
+      delete state.noLeader;
+      const asking = state.tasks.filter((t) => t.status === 'asking').map((t) => t.id);
+      const submitted = state.tasks.filter((t) => t.status === 'submitted').map((t) => t.id);
+      const backlog = [asking.length ? `待答复 ${asking.join('、')}` : '', submitted.length ? `待 review ${submitted.join('、')}` : ''].filter(Boolean).join('；');
+      emit('leader_back', { text: `${by === 'user' ? '用户恢复了 leader' : 'leader 回来了'}，退出无 leader 模式。${backlog ? `积压：${backlog}。先答复，再 review（ateam status 看全部）` : '没有积压。'}` });
+    }
+    changed();
+    return state.noLeader ?? null;
   }
 
   function finishDismiss(agent) {
@@ -1057,6 +1121,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.status = 'approved';
     task.handoff = false;
     task.pendingDelivery = null;
+    delete task.parked;
     releaseAgentOf(task);
     addHistory(task, 'approved', 'lead', note ?? '');
     // 有新代码进来了：预演过的演播卡，页面可能已经变了
@@ -1076,12 +1141,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
     if (task.rejectCount >= config().rejectLimit) {
       task.status = 'held';
+      delete task.parked;
       releaseAgentOf(task);
       emit('task_held', { taskId: task.id, text: `${task.id} 已被打回 ${task.rejectCount} 次，转为挂起，等你处理（task edit + release，或自己修改后 approve）` });
     } else {
       const agent = findAgent(task.assignee);
       task.pendingDelivery = { kind: 'rejected', text };
-      if (agent && agent.status === 'online' && agent.currentTask === task.id) {
+      if (task.parked) {
+        unpark(task);
+      } else if (agent && agent.status === 'online' && agent.currentTask === task.id) {
         task.status = 'working';
       } else {
         task.status = 'pending';
@@ -1096,7 +1164,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function answer(taskId, text) {
     text = requireText(text, '答复');
     const task = getTask(taskId);
-    if (task.status === 'asking') {
+    if (task.status === 'asking' && task.parked) {
+      unpark(task);
+    } else if (task.status === 'asking') {
       task.status = 'working';
     } else if (!(task.status === 'pending' && task.handoff)) {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，没有待回答的提问。`);
@@ -1150,6 +1220,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     releaseAgentOf(task);
     task.status = 'cancelled';
+    delete task.parked;
+    delete task.returnTo;
+    delete task.backFromPark;
     task.handoff = false;
     task.pendingDelivery = null;
     task.cancelReason = String(reason ?? '').trim();
@@ -1242,8 +1315,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (task.status !== 'working' && task.status !== 'asking') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中或等待答复的任务可以收回。`);
     }
-    const agent = task.assignee && findAgent(task.assignee);
-    const who = agent?.id ?? task.assignee ?? '原 worker';
+    // 挂起的卡：原 worker 正在做别的卡，只收回卡，不动它
+    const agent = !task.parked && task.assignee && findAgent(task.assignee);
+    delete task.parked;
+    const who = task.assignee ?? '原 worker';
     if (agent) {
       agent.status = 'offline';
       agent.currentTask = null;
@@ -1749,6 +1824,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
-    addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
+    setLeaderAway, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };
 }

@@ -100,6 +100,8 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `critique` | 审卡意见，先别改卡，按「审卡意见」一节回复 agree 或 dispute |
 | `critique_ruling` | 用户决定了审卡意见怎么改：照做后 `ateam critique done T5 "<改了什么>"` |
+| `no_leader` | 用户在看板上点了「leader 下线」，或者（用户开了自动开关时）你有事没处理、超过设定时间没执行任何命令，被判定掉线（通常是 token 用完了），进入**无 leader 模式**：worker 把等答复、待 review 的卡挂起，先去做没有依赖、不改同一批文件的卡；依赖待 review 卡的卡继续等。你执行任何命令就自动退出 |
+| `leader_back` | 你回来了，退出无 leader 模式。事件里列着积压：**先逐个答复，再逐个 review**（`ateam status` 看全部）。照常 `answer` / `approve` / `reject` 就行：被答复或打回的挂起卡会自动交回原 worker，它正在做别的卡就做完再接；原 worker 不在线就换人接手。卡上标「挂起」「留给 xx」是正常的 |
 | `worker_joined` `claimed` `job_accepted` | 了解即可 |
 | `demo_queued` `demo_started` `demo_ended` `demo_stopped` `demo_saved` `demo_unclaimed` `demo_interrupted` | 演播卡的事件（预演和演播都用这些），了解即可：不用 review、不用汇报。预演、演播期间派发暂停，worker 领不到普通任务是正常的 |
 

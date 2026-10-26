@@ -233,6 +233,25 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return out;
   }
 
+  // 无 leader 模式：看 leader 有没有在处理事，不看它挂没挂着监听（token 用完后，后台的 watch --follow 照样挂着）。
+  // 有卡在等 leader（提问、待 review），而 leader 从那时起超过设置的分钟数没执行过任何命令（watch 不算），就进入；
+  // leader 执行任何命令就退出。服务刚启动从启动时算起；状态存在 store 里，重启后保留到 leader 真回来
+  const serverStart = Date.now();
+  let leaderActedAt = null;
+  const waitedOn = (t) => t.history.findLast((h) => h.type === 'asked' || h.type === 'submitted')?.ts ?? Date.now();
+  function checkLeader() {
+    const t = Date.now();
+    if (store.state.noLeader) {
+      if (leaderActedAt !== null && leaderActedAt >= store.state.noLeader.since) store.setLeaderAway(false);
+      return;
+    }
+    if (!store.config().autoNoLeader) return;
+    const waiting = store.state.tasks.filter((x) => x.status === 'asking' || x.status === 'submitted');
+    if (!waiting.length) return;
+    const since = Math.min(...waiting.map(waitedOn));
+    if (t - Math.max(since, serverStart, leaderActedAt ?? 0) > store.config().leaderAwayMin * 60000) store.setLeaderAway(true);
+  }
+
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
 
   // 每次状态变化：落盘，并在下一轮事件循环唤醒挂起的请求。
@@ -385,6 +404,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return {};
     },
     'POST /api/prompter/close': () => { prompterProc?.kill(); prompterProc = null; return {}; },
+    // 用户在看板上宣布 leader 下线（进入无 leader 模式）或恢复
+    'POST /api/leader/away': (b) => ({ away: store.setLeaderAway(!!b.on, 'user') }),
     'POST /api/demo/pause': (b) => ({ task: store.pauseDemo(requireId(b)) }),
     'POST /api/demo/resume': (b) => ({ task: store.resumeDemo(requireId(b)) }),
     'POST /api/demo/end': (b) => {
@@ -520,7 +541,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 待演播的演播卡现在能不能开始、缺什么
       demoBlockers: Object.fromEntries(store.state.tasks.filter((t) => t.kind === 'demo' && t.status === 'ready').map((t) => [t.id, store.demoBlockers(t.id)])),
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
-      leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline() },
+      leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline(), away: store.state.noLeader ?? null },
     }),
     'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),
   };
@@ -623,7 +644,13 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       const body = req.method === 'POST' ? await readBody(req) : {};
       // 命令行发来、且不带 --as 的请求都是 leader 的（worker 的命令都带 --as）
-      if (req.headers['x-ateam-cli'] && !body.as && key !== 'POST /api/join') leaderSeenAt = Date.now();
+      if (req.headers['x-ateam-cli'] && !body.as && key !== 'POST /api/join') {
+        leaderSeenAt = Date.now();
+        if (key !== 'POST /api/watch') {
+          leaderActedAt = leaderSeenAt;
+          checkLeader();
+        }
+      }
       if (key === 'GET /api/stream') {
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' });
         res.write('retry: 3000\n\n');
@@ -661,6 +688,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         const ts = await latestChangeTime(root, task.paths).catch(() => null);
         if (ts) store.noteActivity(agent.id, ts);
       }
+      checkLeader();
       store.sweep((id) => waiters.has(id));
       store.expireDemoRequests();
       store.checkIdle();

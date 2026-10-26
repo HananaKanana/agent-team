@@ -1682,7 +1682,7 @@ function settingsPage() {
         try { localStorage.setItem('ateam.touchScroll', touchScroll ? '1' : '0'); } catch {}
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '触屏模式'),
-        el('span', { class: 'hint' }, '给 Mac 外接触摸屏用：在列表、看板、抽屉里按住拖动就能滚动（上下、左右都行）。开启后用鼠标拖选文字也会变成滚动（输入框、代码块除外）。只对这台设备的这个浏览器生效。')));
+        el('span', { class: 'hint' }, '给 Mac 外接触摸屏用：在列表、看板、抽屉里按住拖动就能滚动（上下、左右都行）。开启后用鼠标拖选文字也会变成滚动（输入框除外；提示词用旁边的复制按钮）。只对这台设备的这个浏览器生效。')));
     })(),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -3947,17 +3947,28 @@ if (new URLSearchParams(location.search).has('inputlog')) {
 // 松手带一点惯性；拖过之后的那次点击吞掉，不误开卡片。输入框、代码块不接管，照常能选中文字
 (() => {
   if (PROMPTER_ONLY) return;
-  // 按在按钮、链接上不接管：手指点按时难免挪动几像素，被当成拖动后这次点击会被吞掉，按钮就点不动了。
-  // 卡片、需求列表这类整块的按钮除外，按住它们要能拖动滚动
-  const SKIP = 'input, textarea, select, pre, code, .pblock, [contenteditable], a, summary, label, button:not(.card):not(.job):not(.job-mini):not(.worker)';
-  // 往上找能在这个方向滚动的容器：y 上下（主区、列内），x 左右（顶部 worker 一排、看板各列）
-  const scroller = (node, axis) => {
+  // 输入框里不接管（要能选字、移动光标）
+  const SKIP = 'input, textarea, select, [contenteditable]';
+  // 按在按钮、链接、设置项、代码块、提示词上也能拖动滚动，只是要多拖一段才接管：手指点按时难免挪动几像素，
+  // 被当成拖动后这次点击会被吞掉。卡片、需求列表这类整块的按钮照常
+  const FIRM = 'pre, code, .pblock, a, summary, label, button:not(.card):not(.job):not(.job-mini):not(.worker)';
+  // 往上找所有能在这个方向滚动的容器，近的在前，最后是整页：y 上下（主区、列内、面板），x 左右（顶部 worker 一排、看板各列）
+  const scrollers = (node, axis) => {
+    const out = [];
     for (let n = node; n && n !== document.documentElement; n = n.parentElement) {
       const cs = getComputedStyle(n);
-      if (axis === 'y' && /(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) return n;
-      if (axis === 'x' && /(auto|scroll)/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 1) return n;
+      if (axis === 'y' && /(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) out.push(n);
+      if (axis === 'x' && /(auto|scroll)/.test(cs.overflowX) && n.scrollWidth > n.clientWidth + 1) out.push(n);
     }
-    return null;
+    const page = document.scrollingElement;
+    if (page && (axis === 'y' ? page.scrollHeight > page.clientHeight + 1 : page.scrollWidth > page.clientWidth + 1)) out.push(page);
+    return out;
+  };
+  // 往 d 方向（手指移动的距离）还能滚的第一个：里层滚到头了就交给外层
+  const canMove = (n, axis, d) => {
+    const pos = axis === 'x' ? n.scrollLeft : n.scrollTop;
+    const max = axis === 'x' ? n.scrollWidth - n.clientWidth : n.scrollHeight - n.clientHeight;
+    return d < 0 ? pos < max - 1 : pos > 1;
   };
   let st = null;
   let glide = 0;
@@ -3965,18 +3976,19 @@ if (new URLSearchParams(location.search).has('inputlog')) {
     cancelAnimationFrame(glide);
     if (!touchScroll) return; // 设置里的「触屏模式」，默认关闭
     if (e.button !== 0 || e.pointerType === 'pen' || e.target.closest(SKIP)) return;
-    const boxes = { x: scroller(e.target, 'x'), y: scroller(e.target, 'y') };
-    if (boxes.x || boxes.y) st = { boxes, id: e.pointerId, x: e.clientX, y: e.clientY, axis: null, box: null, start: 0, v: 0, last: 0, lastT: e.timeStamp };
+    const boxes = { x: scrollers(e.target, 'x'), y: scrollers(e.target, 'y') };
+    if (boxes.x.length || boxes.y.length) st = { boxes, firm: !!e.target.closest(FIRM), id: e.pointerId, x: e.clientX, y: e.clientY, axis: null, box: null, start: 0, v: 0, last: 0, lastT: e.timeStamp };
   }, true);
   addEventListener('pointermove', (e) => {
     if (!st || e.pointerId !== st.id) return;
     const dx = e.clientX - st.x;
     const dy = e.clientY - st.y;
     if (!st.axis) {
-      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < (st.firm ? 16 : 8)) return;
       // 按先动的方向定：横着拖滚左右，竖着拖滚上下；这个方向没有可滚的就不接管
       st.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
-      st.box = st.boxes[st.axis];
+      const list = st.boxes[st.axis];
+      st.box = list.find((n) => canMove(n, st.axis, st.axis === 'x' ? dx : dy)) ?? list[0];
       if (!st.box) { st = null; return; }
       st.start = st.axis === 'x' ? st.box.scrollLeft : st.box.scrollTop;
       st.last = st.axis === 'x' ? e.clientX : e.clientY;

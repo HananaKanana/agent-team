@@ -533,7 +533,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       const task = getTask(agent.currentTask);
       if (isDemo(task)) return demoNext(task);
       if (task.status !== 'working') {
-        // asking / submitted：等答复或 review 结果。无 leader 模式下有别的卡能做，就把这张挂起，先去做别的
+        // asking / submitted：等答复或 review 结果。无 leader 模式下有别的卡能做，就把这张暂放，先去做别的
         if (!(state.noLeader && candidatesFor(agent, task).length)) return null;
         park(agent, task);
       } else {
@@ -596,9 +596,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return { kind: isHandoff ? 'handoff' : 'task', task, delivery, parked };
   }
 
-  // 这个 worker 能领的卡，按领取顺序排。also：马上要挂起的卡（还没标 parked），一起算进「挂起的卡」
+  // 这个 worker 能领的卡，按领取顺序排。also：马上要暂放的卡（还没标 parked），一起算进「暂放的卡」
   // - 用户指派给别人的不领；挂起后退回的卡留给原 worker（returnTo），它不在线才谁都能领
-  // - 和挂起的卡改同一批文件的不领：提问挂起的卡有没提交的半成品，待 review 的卡打回后还要改这些文件
+  // - 和暂放的卡改同一批文件的不领：提问暂放的卡有没提交的半成品，待 review 的卡打回后还要改这些文件
   function candidatesFor(agent, also = null) {
     if (state.tasks.some((t) => isDemo(t) && t.status === 'queued' && sameRole(t.role, agent.role)) || demoFrozen()) return [];
     const own = (t) => t.handoff && t.prevAssignee === agent.id;
@@ -612,17 +612,17 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // ---------- 无 leader 模式 ----------
-  // leader（Claude Code）token 用完、不在线时，worker 不干等：等答复、待 review 的卡挂起（parked），
+  // leader（Claude Code）token 用完、不在线时，worker 不干等：等答复、待 review 的卡暂放（parked），
   // worker 先去做没有依赖、不撞文件的卡。leader 回来后答复或打回，卡退回待领取并留给原 worker（returnTo）；
-  // 原 worker 不在线就照常换手。挂起的卡 status 不变（asking / submitted），assignee 仍是原 worker
+  // 原 worker 不在线就照常换手。暂放的卡 status 不变（asking / submitted），assignee 仍是原 worker
   function park(agent, task) {
     task.parked = now();
     agent.currentTask = null;
-    addHistory(task, 'parked', agent.id, task.status === 'asking' ? 'leader 不在线，提问先挂起，先去做别的卡' : 'leader 不在线，等 review 期间先去做别的卡');
+    addHistory(task, 'parked', agent.id, task.status === 'asking' ? 'leader 不在线，提问先暂放，先去做别的卡' : 'leader 不在线，等 review 期间先去做别的卡');
     changed();
   }
 
-  // 挂起的卡被答复或打回：退回待领取，留给原 worker
+  // 暂放的卡被答复或打回：退回待领取，留给原 worker
   function unpark(task) {
     delete task.parked;
     if (task.assignee) task.prevAssignee = task.assignee;
@@ -639,7 +639,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (on) {
       state.noLeader = { since: now(), by };
       const why = by === 'user' ? '用户宣布 leader 下线' : `leader 超过 ${config().leaderAwayMin} 分钟没有监听、也没有操作（掉线了，可能 token 用完）`;
-      emit('no_leader', { text: `${why}，进入无 leader 模式：等答复、待 review 的卡挂起，worker 先做没有依赖的卡` });
+      emit('no_leader', { text: `${why}，进入无 leader 模式：等答复、待 review 的卡暂放，worker 先做没有依赖的卡` });
     } else {
       delete state.noLeader;
       const asking = state.tasks.filter((t) => t.status === 'asking').map((t) => t.id);
@@ -1315,7 +1315,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (task.status !== 'working' && task.status !== 'asking') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中或等待答复的任务可以收回。`);
     }
-    // 挂起的卡：原 worker 正在做别的卡，只收回卡，不动它
+    // 暂放的卡：原 worker 正在做别的卡，只收回卡，不动它
     const agent = !task.parked && task.assignee && findAgent(task.assignee);
     delete task.parked;
     const who = task.assignee ?? '原 worker';

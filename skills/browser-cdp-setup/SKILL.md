@@ -243,7 +243,7 @@ curl -s -X POST "$U?cmd=click" -H "$H" -d "{\"tabId\":\"$T\",\"selector\":\"#go\
   带登录态
 - **本轮开的 tab 本轮 `close`**，遗留的标签是用户可见的变化
 
-### 5.1 不要抢用户的焦点：`open` 少用，`activate` 不用
+### 5.1 不要抢用户的焦点、不要占满连接：`open` 少用、用完就关，`activate` 不用
 
 插件的 `open` 和 `activate` 会调 `Page.bringToFront`，在 macOS 上会把整个 Chrome
 拉到最前面、抢走用户正在用的窗口的焦点。其他命令（`goto`/`click`/`type`/`eval`/
@@ -254,6 +254,10 @@ curl -s -X POST "$U?cmd=click" -H "$H" -d "{\"tabId\":\"$T\",\"selector\":\"#go\
 - **点击、输入、等待、核对、截图时一律不 `open`**，也不要为了「保险」先 `open` 一下
 - **不用 `activate`**。窗口不在最前面时照样能截图、能等文字：`chrome-agent.sh`
   启动时已经关掉了后台降速
+- **一个任务只留一个标签页，用完就 `close`**：同一个网站，整个 Chrome 最多 6 条连接
+  （HTTP/1.1，按浏览器算，不按标签页算），几个 agent 共用一个 Chrome、每页又挂着长连接
+  （SSE、WebSocket、长轮询）时，标签页一多，后打开的页面接口会全部卡住。`cmd=tabs` 里
+  `owned: true` 的都是本会话开的，没用的及时关
 - 截图像是没刷新、页面动画卡住：先确认浏览器是用 `chrome-agent.sh` 启动的（带那三个
   `--disable-*` 参数），不是就让用户关掉它重新用脚本启动；不要用 `activate` 顶上去
 

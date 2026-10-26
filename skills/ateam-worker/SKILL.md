@@ -103,6 +103,7 @@ ateam wait --as <编号>
   - 浏览器用 DeepSeek Harness 的 browser-cdp（dsh-cdp 插件）。**开工前先按 `browser-cdp-setup` skill 连好浏览器并通过自检**（`cmd=status` 里 `browserId: custom`、`authorized: true`）。测试专用的 Chrome 没开（`no CDP endpoint found`）就**自己运行那个 skill 目录下的 `chrome-agent.sh` 打开它**，再 `cmd=connect`，不用让用户动手。打开后要测的网站还没登录，就 `ateam ask` 请用户在那个 Chrome 窗口里登录一次。连不上、弹授权框、自检不过也 `ateam ask` 说明情况，等答复，**不换别的工具绕过**。
   - 浏览器必须在前台、用户看得见；不用 headless / 后台浏览器。普通测试卡窗口太窄点不到时，可以先调窗口大小，或 `ateam ask`。**演播卡不行**，见下面演播一节。
   - **不要抢用户的焦点**：`cmd=open` 和 `cmd=activate` 会把 Chrome 拉到最前面。只在要切到别的页面时 `open`（开工时开一次，之后一直用这个 tabId；能在同一个标签页里 `cmd=goto` 换地址就用 `goto`，它不置顶）；点击、输入、等待、核对、截图时一律不 `open`。**不用 `activate`**，窗口不在最前面也能截图（见 `browser-cdp-setup` skill 第 5.1 节）。
+  - **一个任务只开一个标签页，用完就关**：开工时 `cmd=open` 一个，整个任务都用它，换页面用 `cmd=goto` 跳转，不另开；遇到页面自己弹出新标签页（`target=_blank` 的链接），看完马上 `cmd=close` 掉。交报告、`ateam ask`、`ateam submit` 之前先 `cmd=close` 自己的标签页，下次干活再开。原因：几个 test 共用一个 Chrome，同一个网站整个浏览器最多只有 6 条连接，每个页面又挂着长连接（消息铃铛、实时推送），标签页开多了后面的接口会全部卡住、一直转圈。遇到接口一直不返回，先 `cmd=tabs` 看看自己有没有没关的标签页，关掉再试；还不行就 `ateam ask` 说明，不要当成被测系统的 bug 报。
   - **不用 curl / 脚本调接口、不翻前端产物里的文案来代替页面操作**。要看接口状态码，就在同一个浏览器里看页面发出的请求（`cmd=network`）。
   - 测试地址、测试账号按项目规则或用户提供的来；账号口令不写进报告、提交、ateam 消息和日志；遇到登录、验证码、二次验证就停下，`ateam ask` 等用户处理。
   - 只操作自己造的测试数据，测完清理；改了别的东西要恢复，并在报告里写明。

@@ -1504,6 +1504,30 @@ function isLastOfRole(a) {
   return data.state.agents.filter((x) => x.status === 'online' && !x.dismiss && x.role.trim().toLowerCase() === role).length === 1;
 }
 
+// leader 的状态卡（「使用说明 → leader」最上面）：和 worker 卡一样，右边是下线 / 恢复。
+// 下线 = 进入无 leader 模式：token 用完、暂时回不来时用
+async function setLeaderAway(on) {
+  try {
+    await fetch('/api/leader/away', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on }) });
+  } catch {}
+  await poll();
+  renderHelper(true);
+}
+function leaderCard() {
+  const leader = data.leader || {};
+  const away = leader.away;
+  const state = away ? `无 leader 模式 · ${fmtTime(away.since)} 起${away.by === 'user' ? '，你设的' : '，检测到掉线'}`
+    : leader.online ? (leader.watching ? '在线，正在监听' : `在线，未监听 · ${ago(leader.lastSeenAt)}操作过`) : '未连接';
+  return el('div', { class: 'wcard' },
+    el('div', { class: 'wcard-head' },
+      el('span', { class: 'av' }, 'L'),
+      el('span', { class: 'grow' }, el('span', { class: 'who-line' }, el('b', null, 'leader'), el('span', { class: 'hint' }, state))),
+      el('button', { class: 'btn ghost sm', title: away ? '退出无 leader 模式，挂起的卡等 leader 处理' : '进入无 leader 模式', onclick: (e) => { e.stopPropagation(); setLeaderAway(!away); } }, away ? '恢复' : '下线')),
+    el('p', { class: 'hint' }, away
+      ? `等答复、待 review 的卡挂起，worker 先做没有依赖、不改同一批文件的卡。${away.by === 'user' ? 'leader 执行任何命令（后台监听不算）' : 'leader 重新挂上监听或执行命令'}会自动恢复。`
+      : 'leader 的 token 用完、暂时回不来时点「下线」：进入无 leader 模式，worker 不再干等，把等答复、待 review 的卡挂起，先去做没有依赖、不改同一批文件的卡。leader 回来执行任何命令就自动恢复，按顺序答复和 review，卡交回原来的 worker。设置里可以打开「掉线时自动进入」。'));
+}
+
 function dismissButtons(a) {
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   const last = isLastOfRole(a);
@@ -1597,8 +1621,7 @@ const SETTING_ITEMS = [
   { group: 'review' },
   { key: 'rejectLimit', type: 'int', label: '打回几次后挂起', hint: '同一个任务被打回这么多次，停止自动派发，转给 leader 处理（改写任务或自己动手）。' },
   { group: 'leader' },
-  { type: 'leaderMode' },
-  { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在上面点「leader 下线」才进入。开着时，leader 掉线（超过下面的时间既没挂着监听、也没执行命令）也自动进入，重新挂上监听或执行命令就自动退出。token 用完后它的后台监听最多还会挂半小时，这段时间仍算在线。' },
+  { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在「使用说明 → leader」里点「下线」才进入。开着时，leader 掉线（超过下面的时间既没挂着监听、也没执行命令）也自动进入，重新挂上监听或执行命令就自动退出。token 用完后它的后台监听最多还会挂半小时，这段时间仍算在线。' },
   { key: 'leaderAwayMin', type: 'int', label: '断开多久算掉线（分钟）', hint: '只在上面的自动开关开着时有用。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
@@ -1629,23 +1652,6 @@ function settingsPage() {
     el('p', { class: 'tab-hint' }, '这些设置对整个项目生效，改完马上生效，重启服务也不会丢。'),
     SETTING_ITEMS.map((it) => {
       if (it.group) return el('div', { class: 'helper-sec' }, el('h4', null, it.group));
-      if (it.type === 'leaderMode') {
-        const away = data.leader?.away;
-        const btn = el('button', { class: `btn${away ? '' : ' warn'}`, onclick: async (e) => {
-          e.stopPropagation();
-          try {
-            const res = await fetch('/api/leader/away', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on: !away }) });
-            const out = await res.json();
-            settingsMsg = out.ok ? (away ? '已退出无 leader 模式。' : '已进入无 leader 模式。') : out.message;
-          } catch { settingsMsg = '连不上 ateam 服务。'; }
-          await poll();
-          renderHelper(true);
-        } }, away ? '恢复 leader' : 'leader 下线');
-        return el('div', { class: 'setting' }, btn, el('span', null, el('b', null, away ? `无 leader 模式（${fmtTime(away.since)} 起，${away.by === 'user' ? '你宣布的' : '检测到 leader 掉线'}）` : '无 leader 模式'),
-          el('span', { class: 'hint' }, away
-            ? `等答复、待 review 的卡挂起，worker 先做没有依赖、不改同一批文件的卡。${away.by === 'user' ? 'leader 执行任何命令（后台监听不算）会自动退出' : 'leader 重新挂上监听或执行命令会自动退出'}；也可以点「恢复 leader」。`
-            : 'leader 的 token 用完、暂时回不来时点「leader 下线」：worker 不再干等，把等答复、待 review 的卡挂起，先去做没有依赖、不改同一批文件的卡；依赖待 review 卡的卡继续等。leader 回来执行任何命令就自动退出，按顺序答复和 review，卡交回原来的 worker。')));
-      }
       let input;
       if (it.type === 'bool') {
         input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -1985,6 +1991,7 @@ function renderHelper(force = false) {
     el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
     el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会立即停下。leader 那边对它说「让大家收工」也一样。'),
     ] : [
+    leaderCard(),
     el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面这句话。leader 只需要一个。'),
     el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' }, el('b', null, '加入'), el('span', { class: 'hint' }, '新开会话、或者上下文满了重开会话，都用这一句')),

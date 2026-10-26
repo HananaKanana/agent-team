@@ -1571,6 +1571,9 @@ let settingsMsg = '';
 // 触屏模式：只对这台设备的这个浏览器生效（存在本地），默认关闭。开了以后按住拖动就滚动，但拖选文字会变成滚动
 let touchScroll = false;
 try { touchScroll = localStorage.getItem('ateam.touchScroll') === '1'; } catch {}
+// 看板空列收窄：没有卡的列收成窄竖条。只对这台设备的这个浏览器生效，默认开启
+let slimLanes = true;
+try { slimLanes = localStorage.getItem('ateam.slimLanes') !== '0'; } catch {}
 
 async function saveSetting(key, value) {
   try {
@@ -1613,7 +1616,19 @@ function settingsPage() {
         try { localStorage.setItem('ateam.touchScroll', touchScroll ? '1' : '0'); } catch {}
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '触屏模式'),
-        el('span', { class: 'hint' }, '给 Mac 外接触摸屏用：在列表、看板、抽屉里按住上下拖就能滚动。开启后用鼠标拖选文字也会变成滚动（输入框、代码块除外）。只对这台设备的这个浏览器生效。')));
+        el('span', { class: 'hint' }, '给 Mac 外接触摸屏用：在列表、看板、抽屉里按住拖动就能滚动（上下、左右都行）。开启后用鼠标拖选文字也会变成滚动（输入框、代码块除外）。只对这台设备的这个浏览器生效。')));
+    })(),
+    (() => {
+      const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
+      input.checked = slimLanes;
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('change', () => {
+        slimLanes = input.checked;
+        try { localStorage.setItem('ateam.slimLanes', slimLanes ? '1' : '0'); } catch {}
+        renderMain();
+      });
+      return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '空列收窄'),
+        el('span', { class: 'hint' }, '看板里没有卡的列收成一条窄竖条，宽度让给有卡的列；关掉后七列一样宽。只对这台设备的这个浏览器生效。')));
     })(),
   ];
 }
@@ -2100,14 +2115,15 @@ function renderMain() {
 
   // 没有卡的列收成一条窄竖条（列名竖排），宽度让给有卡的列；有卡进来自动展开
   const laneCount = (key) => tasks.filter((t) => laneOf(t) === key).length;
-  const cols = LANES.map((lane) => (laneCount(lane.key) ? 'minmax(188px, 1fr)' : '40px')).join(' ');
+  const slim = (key) => slimLanes && !laneCount(key); // 设置 → 本设备 →「空列收窄」
+  const cols = LANES.map((lane) => (slim(lane.key) ? '40px' : 'minmax(188px, 1fr)')).join(' ');
   const board = el('div', { class: 'board', style: `--cols: ${cols}` }, LANES.map((lane) => {
     const cards = tasks.filter((t) => laneOf(t) === lane.key);
     // 待领取一列按派发顺序排：优先的在最上面（与服务端 dispatchOrder 一致）
     if (lane.key === 'pending') cards.sort((a, b) => ((b.priority ?? 0) - (a.priority ?? 0)) || (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
     // 已通过一列：越新通过的越靠上
     if (lane.key === 'approved') cards.sort((a, b) => (approvedAt(b) - approvedAt(a)) || (Number(b.id.slice(1)) - Number(a.id.slice(1))));
-    return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ' slim'}${lane.key === 'pending' && job.onHold ? ' held' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key, title: cards.length ? null : `${lane.label}：暂无` },
+    return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ''}${slim(lane.key) ? ' slim' : ''}${lane.key === 'pending' && job.onHold ? ' held' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key, title: slim(lane.key) ? `${lane.label}：暂无` : null },
       el('h3', null, el('span', { class: 'label' }, lane.label),
         lane.key === 'pending' && job.onHold ? el('span', { class: 'lane-held' }, '已暂停') : null,
         el('span', { class: 'n' }, cards.length)),

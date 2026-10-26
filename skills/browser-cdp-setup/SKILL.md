@@ -296,6 +296,10 @@ NODE="/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runt
 
 它只改窗口大小，不会把窗口拉到前面。
 
+**只在开工时调一次，干活过程中不要为了「显示不全」去拉大窗口**：`click`/`hover`/`drag`
+会先把目标元素滚进视口（弹窗、抽屉里的元素滚的是最近的滚动区域，不动背后的页面），
+要单独滚动就用 `wheel`。改了窗口，页面布局和用户看到的尺寸就都变了。
+
 ---
 
 ## 7. 其他限制（读源码确认）

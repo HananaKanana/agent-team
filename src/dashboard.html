@@ -802,6 +802,14 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .role { color: var(--rc); background: color-mix(in srgb, var(--rc) 13%, transparent); font-weight: 700; }
 .role-text { color: var(--rc); font-weight: 600; }
 .tag.warn, .tag.urgent { color: var(--rework); background: color-mix(in srgb, var(--rework) 13%, transparent); }
+.tag.paused { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); font-weight: 600; }
+.btn.pause-btn svg { width: 13px; height: 13px; flex: none; }
+.prompter-strip .head .strip-pause {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12.5px; font-weight: 600; padding: 3px 11px; cursor: pointer;
+  border: 1px solid #a87f0e; border-radius: 6px; background: rgba(168, 127, 14, .18); color: #f2d27a;
+}
+.prompter-strip .head .strip-pause:hover { background: rgba(168, 127, 14, .3); color: #fff; }
+.prompter-strip .head .strip-pause svg { width: 13px; height: 13px; }
 .tag.handoff { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); }
 .tag.assigned { color: var(--working); background: color-mix(in srgb, var(--working) 13%, transparent); }
 .tag.critique { color: var(--role-5); background: color-mix(in srgb, var(--role-5) 15%, transparent); }
@@ -995,6 +1003,8 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2"/></symbol>
   <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-pin" viewBox="0 0 16 16"><path d="M10 2.5l3.5 3.5-2.2 1-2.3 2.3.3 2.7-1 1L2.9 7.6l1-1 2.7.3L8.9 4.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.7 10.3L2.5 13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.8 8z" fill="currentColor"/></symbol>
   <symbol id="i-text-down" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
   <symbol id="i-text-up" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4M12.5 6v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
   <symbol id="i-bg-less" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
@@ -1076,7 +1086,7 @@ const HISTORY = {
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
   demo_ended: ['运行结束', 'approved'], demo_saved: ['操作记录', 'approved'],
-  note: ['补充说明', 'pending'], critique: ['审卡', 'held'],
+  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'],
 };
 // 演播卡的状态：名称、lozenge 颜色
 const DEMO_STATUS = { ready: ['待演播', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演播中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
@@ -2244,7 +2254,10 @@ function demoButton(t) {
       start('rehearsal', '重新预演', false, '重新走一遍，核实并改正操作记录'),
     ];
   }
-  if (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)) {
+  if (t.status === 'demoing' && !t.stopRequested) {
+    return [pauseButton(t, 'btn'), el('button', { class: 'btn warn', onclick: (e) => { stop(e); demoAction('stop', t); } }, `停止${modeWord(t)}`)];
+  }
+  if (t.status === 'queued') {
     return el('button', { class: 'btn warn', onclick: (e) => { stop(e); demoAction('stop', t); } }, `停止${modeWord(t)}`);
   }
   // 收尾中（或老数据里叫停了还停在演播中）：worker 迟迟不收尾时，用户可以直接结束
@@ -2263,7 +2276,22 @@ function demoProgress(t) {
   const since = run ? el('span', { class: 'since', title: '已演播时长', 'data-since': run.startedAt }, icon('clock'), el('span')) : null;
   if (since) tickSince(since);
   const step = t.demoStep ? [el('b', null, `第 ${t.demoStep.n}/${t.demoStep.total} 步`), ' ', t.demoStep.text] : '准备中';
-  return [el('span', null, step), ' ', since, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null];
+  return [el('span', null, step), ' ', since, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null];
+}
+
+// 暂停 / 继续：worker 做完当前这一步后停住，点继续接着做下一步
+function pauseButton(t, cls) {
+  const paused = !!t.paused;
+  return el('button', {
+    class: `${cls} pause-btn`, title: paused ? '让 worker 接着做下一步' : '当前这一步做完后停住，浏览器停在当前页面，方便讲解、回答提问',
+    onclick: (e) => { e.stopPropagation(); demoAction(paused ? 'resume' : 'pause', t); },
+  }, icon(paused ? 'play' : 'pause'), paused ? '继续' : '暂停');
+}
+function pausedTag(t) {
+  if (!t.paused) return null;
+  const s = t.demoStep;
+  const waiting = s && t.paused.afterStep === s.n ? '这一步做完后停住' : '已停住';
+  return el('span', { class: 'tag paused', title: `暂停中：${waiting}，点「继续」接着做下一步` }, '已暂停');
 }
 
 // 提词：这一步的讲解（没写就用这一步做什么）、下一步预告
@@ -2322,7 +2350,7 @@ function stepsBar(t) {
 function prompter(t) {
   const c = cueOf(t);
   return el('div', { class: 'prompter', onclick: (e) => e.stopPropagation() },
-    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '这一步照操作记录没走通，worker 在自己摸索，会停顿几秒' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
+    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '这一步照操作记录没走通，worker 在自己摸索，会停顿几秒' }, '慢档') : null, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
     el('div', { class: 'say' }, c.say),
     stepsBar(t),
     el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方，可以拖到第二块屏幕', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, icon('popout'), '弹出提词'));
@@ -2384,7 +2412,8 @@ function renderPrompterStrip() {
       s ? el('span', { class: 'count' }, String(s.n), el('small', null, `/${s.total}`)) : null,
       sceneOf(t) ? el('span', { class: 'scene' }, sceneOf(t)) : null,
       el('b', null, s ? s.text : c.head), runSince(t),
-      s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
+      s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null,
+      t.stopRequested ? null : pauseButton(t, 'strip-pause'), tools),
     el('div', { class: `say${changed ? ' enter' : ''}` }, c.say),
     c.next ? el('div', { class: 'next' }, el('span', { class: 'lbl' }, '下一步'), el('span', null, c.next)) : null);
   fitSay();
@@ -2472,6 +2501,7 @@ function renderDemoBanner() {
     el('span', null, '派发已暂停'),
     t.status === 'demoing' ? el('span', { class: 'step' }, t.demoStep ? `第 ${t.demoStep.n}/${t.demoStep.total} 步：${cueOf(t).say}` : '准备中') : null,
     el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); view = { job: t.jobId, task: null, report: false }; saveView(); render(); } }, '查看'),
+    t.status === 'demoing' && !t.stopRequested ? pauseButton(t, 'btn sm') : null,
     el('button', { class: 'btn warn sm', onclick: (e) => { e.stopPropagation(); demoAction('stop', t); } }, `停止${modeWord(t)}`),
     toastX(() => { toastClosed.add(key); renderDemoBanner(); }));
   box.hidden = false;

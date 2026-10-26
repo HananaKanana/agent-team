@@ -563,8 +563,24 @@ const commands = {
     const m = String(positional[0] ?? '').match(/^(\d+)\/(\d+)$/);
     if (!m) fail(`步数格式是「第几步/总步数」，比如：ateam demo step --as ${as} 3/12 "新建装备"`);
     const text = requireArg(positional[1], '这一步的说明', `ateam demo step --as ${as} 3/12 "新建装备"`);
-    const data = await request('POST', '/api/demo/step', { as, n: Number(m[1]), total: Number(m[2]), text, slow: !!flags.slow });
+    const data = await request('POST', '/api/demo/step', { as, n: Number(m[1]), total: Number(m[2]), text, slow: !!flags.slow, timeout: 50 });
     if (data.stopped) return formatWait({ kind: 'demo_stopped', task: data.task }, as);
+    if (data.paused) {
+      // 用户暂停了：原样再运行这条命令等着（带递增的 --round，免得被平台判成重复命令）
+      const round = (Number.parseInt(flags.round ?? '0', 10) || 0) + 1;
+      const q = (v) => `"${String(v).replace(/(["\\$`])/g, '\\$1')}"`;
+      const again = `ateam demo step --as ${as} ${m[1]}/${m[2]} ${q(text)}${flags.slow ? ' --slow' : ''} --round ${round}`;
+      const after = data.task.paused?.afterStep;
+      return [
+        '# 演播已暂停',
+        '',
+        `用户暂停了演播（${after ? `第 ${after} 步做完后` : '第一步开始前'}），第 ${m[1]} 步还没开始。**不要操作浏览器、不要截图**，立刻原样运行：`,
+        '',
+        `  ${again}`,
+        '',
+        `用户点「继续」后这条命令会直接返回「已记录第 ${m[1]}/${m[2]} 步」，你接着做第 ${m[1]} 步；如果又输出「# 演播已暂停」，就照它给的命令再运行。不要结束、不要向用户汇报。`,
+      ].join('\n');
+    }
     return `已记录第 ${m[1]}/${m[2]} 步${flags.slow ? '（慢档）' : ''}。继续；全部跑完后运行 ateam demo end --as ${as} "<结果>"。`;
   },
 

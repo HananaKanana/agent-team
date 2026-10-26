@@ -1423,6 +1423,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.status = 'wrapping';
     delete task.stopRequested;
     delete task.demoStep;
+    delete task.paused;
   }
 
   // 演播中或收尾中 worker 不在了：卡直接回到待演播，这次不收尾
@@ -1433,6 +1434,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.assignee = null;
     delete task.stopRequested;
     delete task.demoStep;
+    delete task.paused;
     emit('demo_interrupted', { taskId: task.id, text: `演播 ${task.id} 中断（${why}），已回到待演播` });
   }
 
@@ -1470,6 +1472,30 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     } else {
       throw new AteamError('BAD_STATE', `演播卡 ${task.id} 当前状态是 ${task.status}，不在演播中。`);
     }
+    changed();
+    return task;
+  }
+
+  // 暂停 / 继续：只在步与步之间生效。暂停后 worker 报到下一步时服务不放行（demoStep 返回 paused），
+  // 它原地等着、不碰浏览器；继续后放行，接着做这一步
+  function pauseDemo(taskId) {
+    const task = getTask(taskId);
+    if (!isDemo(task) || task.status !== 'demoing' || task.stopRequested) throw new AteamError('BAD_STATE', `演播卡 ${task.id} 不在演播中，不能暂停。`);
+    if (task.paused) return task;
+    const after = task.demoStep?.n;
+    task.paused = { at: now(), afterStep: after ?? null };
+    addHistory(task, 'demo_paused', 'user', after ? `暂停（第 ${after} 步做完后停住）` : '暂停（第一步开始前停住）');
+    changed();
+    return task;
+  }
+
+  function resumeDemo(taskId) {
+    const task = getTask(taskId);
+    if (!isDemo(task) || !task.paused) throw new AteamError('BAD_STATE', `演播卡 ${task.id} 没有暂停。`);
+    const run = lastRun(task);
+    if (run) run.pausedMs = (run.pausedMs ?? 0) + Math.max(0, now() - task.paused.at);
+    delete task.paused;
+    addHistory(task, 'demo_resumed', 'user', '继续');
     changed();
     return task;
   }
@@ -1513,6 +1539,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (run?.steps && !run.steps.includes(n)) {
       throw new AteamError('INVALID', `这一场只演${stepsLabel(run.steps)}，第 ${n} 步不在其中，不要做。`);
     }
+    if (task.paused) return { task, stopped: false, paused: true };
     if (run) run.lastStep = n;
     task.demoStep = { n, total, text: requireText(text, '这一步的说明'), ts: now() };
     if (cue) task.demoStep.cue = { narration: String(cue.narration ?? ''), next: String(cue.next ?? '') };
@@ -1653,7 +1680,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     addDemo, demoBlockers, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

@@ -323,21 +323,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return {};
     },
     'POST /api/prompter/close': () => { prompterProc?.kill(); prompterProc = null; return {}; },
-    'POST /api/demo/step': (b) => {
-      // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演播
-      let cue = null;
-      const held = store.state.agents.find((a) => a.id === b.as)?.currentTask;
-      const task = held && store.state.tasks.find((t) => t.id === held && t.kind === 'demo');
-      if (task) {
-        try {
-          const steps = parseSteps(readFileSync(join(root, task.script), 'utf8'));
-          const i = steps.findIndex((s) => s.n === Number(b.n));
-          const step = i >= 0 ? steps[i] : null;
-          cue = { narration: step?.narration ?? '', next: steps[i + 1]?.text ?? '' };
-        } catch {}
-      }
-      return store.demoStep(b.as, b.n, b.total, b.text, cue, !!b.slow);
-    },
+    'POST /api/demo/pause': (b) => ({ task: store.pauseDemo(requireId(b)) }),
+    'POST /api/demo/resume': (b) => ({ task: store.resumeDemo(requireId(b)) }),
     'POST /api/demo/end': (b) => {
       // 预演跑完：每一步都要录好动作块，才算预演完成
       const held = store.state.agents.find((a) => a.id === b.as)?.currentTask;
@@ -488,6 +475,39 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     });
   }
 
+  // 报告演播的一步。暂停中：挂起这次请求，继续后放行（记下这一步）；挂满 timeout 还在暂停，
+  // 回 paused，worker 原样再运行一次。叫停、中断等也在挂起期间放行，由 demoStep 给出结果
+  function demoStepOnce(b) {
+    // 从脚本里取这一步的讲解和下一步，给看板提词；读不到脚本就不提词，不影响演播
+    let cue = null;
+    const held = store.state.agents.find((a) => a.id === b.as)?.currentTask;
+    const task = held && store.state.tasks.find((t) => t.id === held && t.kind === 'demo');
+    if (task) {
+      try {
+        const steps = parseSteps(readFileSync(join(root, task.script), 'utf8'));
+        const i = steps.findIndex((s) => s.n === Number(b.n));
+        const step = i >= 0 ? steps[i] : null;
+        cue = { narration: step?.narration ?? '', next: steps[i + 1]?.text ?? '' };
+      } catch {}
+    }
+    return store.demoStep(b.as, b.n, b.total, b.text, cue, !!b.slow);
+  }
+  function handleDemoStep(body, res) {
+    const first = demoStepOnce(body);
+    if (!first.paused) return send(res, 200, { ok: true, ...first });
+    const taskId = first.task.id;
+    const deadline = Date.now() + holdMs(body.timeout);
+    const timer = setInterval(() => {
+      const t = store.state.tasks.find((x) => x.id === taskId);
+      const still = t?.paused && t.status === 'demoing';
+      if (still && Date.now() < deadline) return;
+      clearInterval(timer);
+      if (still) return send(res, 200, { ok: true, ...first, task: t });
+      try { send(res, 200, { ok: true, ...demoStepOnce(body) }); } catch (err) { sendError(res, err); }
+    }, 500);
+    res.on('close', () => clearInterval(timer));
+  }
+
   function handleWatch(body, res) {
     const events = store.takeEvents();
     if (events.length > 0) return send(res, 200, { ok: true, events });
@@ -536,6 +556,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       if (key === 'POST /api/wait') return handleWait(body, res);
       if (key === 'POST /api/watch') return handleWatch(body, res);
+      if (key === 'POST /api/demo/step') return handleDemoStep(body, res);
       const route = routes[key];
       if (!route) throw new AteamError('NOT_FOUND', `未知接口：${key}`);
       const out = await route(body, url);

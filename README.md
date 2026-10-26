@@ -16,7 +16,7 @@
 
 | 名词 | 含义 |
 |---|---|
-| agent | 一个 AI 编程程序的窗口。目前 leader 用 Claude Code，worker 用 WorkBuddy；也可以换成别的，只要能运行 shell 命令、能加载 skill |
+| agent | 一个 AI 编程程序的窗口。目前 leader 用 Claude Code，worker 用 DeepSeek Harness；也可以换成别的，只要能运行 shell 命令、能加载 skill |
 | leader | 带团队的那个 agent（Claude Code，加载 `ateam-lead` skill）。你只和它对话：它拆任务、派任务、review、回答提问、写汇报 |
 | worker | 干活的 agent（加载 `ateam-worker` skill）。领任务、写代码、提交。一个 worker 就是一个 agent 窗口，同一时间只做一个任务 |
 | 角色 | worker 的工作分类。标准的有 product（产品）、frontend（前端）、backend（后端）、test（测试），另有可选的 critic（审卡）。任务只派给同角色的 worker。按「做什么活」起名，不要按窗口起名 |
@@ -90,22 +90,24 @@ ateam help          # 能打印出命令列表就成功了
 echo "export PATH=\"$(npm prefix -g)/bin:\$PATH\"" >> ~/.zshrc
 ```
 
-### 2. 安装两份 skill
-
-两份 skill 分给两个程序用，**两边各放一份**：
+### 2. 安装 skill
 
 | skill | 给谁用 | 放到哪里 |
 |---|---|---|
-| [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（leader） | `~/.claude/skills/ateam-lead/SKILL.md` |
-| [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | WorkBuddy（worker） | `~/.workbuddy/skills/ateam-worker/SKILL.md` |
+| [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（leader） | `~/.claude/skills/ateam-lead/` |
+| [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | DeepSeek Harness（worker） | `~/.agents/skills/ateam-worker/` |
+| [skills/browser-cdp-setup/SKILL.md](skills/browser-cdp-setup/SKILL.md) | DeepSeek Harness（test worker 操作浏览器） | `~/.agents/skills/browser-cdp-setup/` |
 
-用软链安装，以后 agent-team 更新了，skill 自动就是新的：
+用软链安装，以后 agent-team 更新了，skill 自动就是新的（已经有同名目录的先删掉再链）：
 
 ```bash
-mkdir -p ~/.claude/skills ~/.workbuddy/skills
-ln -s ~/code/agent-team/skills/ateam-lead   ~/.claude/skills/ateam-lead
-ln -s ~/code/agent-team/skills/ateam-worker ~/.workbuddy/skills/ateam-worker
+mkdir -p ~/.claude/skills ~/.agents/skills
+ln -s ~/code/agent-team/skills/ateam-lead        ~/.claude/skills/ateam-lead
+ln -s ~/code/agent-team/skills/ateam-worker      ~/.agents/skills/ateam-worker
+ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup
 ```
+
+**test worker 的浏览器（一次性）**：测试和演播都在一个独立的 Chrome 里做，不会弹「允许远程调试」框。启动方法和 DeepSeek Harness 的插件配置见 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md) 第 2 节；第一次启动后在这个 Chrome 里把要测的网站登录一次。看板「使用说明 → 安装」里有可以复制的命令。
 
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 
@@ -170,7 +172,7 @@ leader 在线时，看板顶部最前面是绿点「leader 在线」。
 
 ### 4. 开 worker
 
-按 leader 说的角色和数量开 WorkBuddy 窗口，**工作目录选同一个项目**，分别对它们说：
+按 leader 说的角色和数量开 DeepSeek Harness 窗口，**工作目录选同一个项目**，分别对它们说：
 
 ```
 使用 ateam-worker skill，角色 product
@@ -266,7 +268,7 @@ worker 应该一直循环等任务。如果它停下来问你「要继续等吗�
 
 ### 作废了一个 worker 正在做的任务
 
-worker 正在干活时没法被打断，要等它下一次调用 ateam 命令（一般几分钟内）才会收到作废通知，然后停手、逐个还原它自己改过的文件（不会碰别人的文件）。在那之前，看板「需要你处理」里会出现「xx 还在做已作废的 T5」，标题出现数字、弹浏览器通知。想让它马上停：点「需要你处理」，打开它的卡片，在它的 WorkBuddy 窗口里点停止，把卡片上那句叫停的话发过去。作废任务的详情里也有这句话。
+worker 正在干活时没法被打断，要等它下一次调用 ateam 命令（一般几分钟内）才会收到作废通知，然后停手、逐个还原它自己改过的文件（不会碰别人的文件）。在那之前，看板「需要你处理」里会出现「xx 还在做已作废的 T5」，标题出现数字、弹浏览器通知。想让它马上停：点「需要你处理」，打开它的卡片，在它的 worker 窗口里点停止，把卡片上那句叫停的话发过去。作废任务的详情里也有这句话。
 
 ### worker 提交时报「指定路径下没有改动」
 

@@ -99,14 +99,20 @@ ateam wait --as <编号>
   - 有问题：`ateam critique --as <编号> issue T5 "<问题在哪、为什么是问题、建议怎么改>" --basis "<依据>"`，一张卡一条，写具体。依据必须是可核对的：需求说明或用户原话的哪一句、设计文档哪一段、代码哪个文件第几行、命令的实际输出。拿不出依据、只是「我觉得」的意见不要提。
   - 发现新卡和已经审过的旧卡冲突：对旧卡也提 issue，加 `--because "和 T12 冲突"`，会记进历史。
   - 清单里的卡全部标完再 `ateam wait`。只挑真问题，不要为了凑数提意见，也不要提纯文字润色。
-- **test（测试）**：不改业务代码（路径外的改动不会被提交）。按任务里列的验收标准逐条验证：跑构建、起服务、用 curl 调接口、查数据库、看日志。遵守项目规则（比如规则说不写测试代码，就不写，用命令验证；说不开浏览器，就不开）。把结果写成报告放到任务路径里：每条验收标准「通过 / 不通过」、怎么验证的（命令和关键输出）、发现的问题（复现步骤、期望、实际）。发现问题也照常提交报告，不要自己去修；修复由 leader 另派任务。
+- **test（测试）**：不改业务代码（路径外的改动不会被提交）。**所有测试工作（验收、复测、补测、演播的预演和演播）都在浏览器里实际操作页面完成，以页面上的结果为准**：
+  - 浏览器用 DeepSeek Harness 的 browser-cdp（dsh-cdp 插件）。**开工前先按 `browser-cdp-setup` skill 连好浏览器并通过自检**（`cmd=status` 里 `browserId: custom`、`authorized: true`）；连不上、弹授权框、自检不过就 `ateam ask` 说明情况，等答复，**不换别的工具绕过**。
+  - 浏览器必须在前台、用户看得见；不用 headless / 后台浏览器。窗口太窄点不到时先调窗口大小，或 `ateam ask`。
+  - **不用 curl / 脚本调接口、不翻前端产物里的文案来代替页面操作**。要看接口状态码，就在同一个浏览器里看页面发出的请求（`cmd=network`）。
+  - 测试地址、测试账号按项目规则或用户提供的来；账号口令不写进报告、提交、ateam 消息和日志；遇到登录、验证码、二次验证就停下，`ateam ask` 等用户处理。
+  - 只操作自己造的测试数据，测完清理；改了别的东西要恢复，并在报告里写明。
+  - 遵守项目规则。按任务里的验收标准逐条验证，把结果写成报告放到任务路径里：每条「通过 / 不通过」、怎么操作的（页面、点了什么、看到的提示原文）、发现的问题（复现步骤、期望、实际）。发现问题也照常提交报告，不要自己去修；修复由 leader 另派任务。
   - 领到**演播卡**（输出以 `# 预演` 或 `# 演播` 开头）时不一样：按输出里的规则在前台浏览器里顺序操作，过程中不提问、不提交、不报进度，只用 `ateam demo step` / `ateam demo end` / `ateam demo save`。只改脚本的「## 操作记录」段。
-  - **演播卡怎么操作浏览器**（DeepSeek Harness 的 browser-cdp skill，接口是 `$DSH_WEB_URL/api/dsh-cdp`，详见它的说明）：
+  - **演播卡怎么操作浏览器**（同上用 browser-cdp；连接、自检、ref 和 tabId 的坑见 `browser-cdp-setup` skill）：
     - 用 `cmd=open` 开自己的标签页，整场都用这个 tabId，收尾时 `cmd=close`。不要操作用户自己的标签页。
     - **调视口**：`cmd=eval` 读 `({iw:innerWidth,ih:innerHeight,ow:outerWidth,oh:outerHeight})`，算出窗口和视口的差值，用窗口控制脚本把**真实窗口**设成「目标视口 + 差值」（`"$NODE" ~/dsh-cdp-guide/chrome-window.mjs set <宽> <高>`，`NODE` 是 DSH 自带的 node：`/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/node/bin/node`；最大化或全屏时先用 `minset <宽> <高>`），再 `eval` 确认 innerWidth/innerHeight 等于目标。**不要用 `cmd=resize`**：它只改页面以为的大小，窗口不变，内容会溢出。
     - **动作块**写成一串 curl（`click` / `type` / `key` / `select` / `wait`，用 CSS 选择器或按钮文字定位，不用坐标），一步一次 shell 调用执行完；任何一条返回 `ok:false` 就算这一步没走通。
     - **核对预期**用 `cmd=wait`（等文字出现）或 `cmd=assert`（一次核对多条，看 `passed`/`failed`，`ok:true` 不代表通过）。【核对】步再 `cmd=shot` 截一张图自己看。
-    - **慢档**用 `cmd=snapshot` 加 `aria:true` 看页面、拿 ref 找元素；ref 只在最近一次快照后有效，用完即弃。
+    - **慢档**用 `cmd=snapshot` 加 `aria:true` 看页面、拿 ref 找元素；ref 只在最近一次快照后有效，用完即弃。写进动作块的定位一律用 CSS 选择器或按钮文字，**不要把 ref 写进操作记录**（下次演播时早就失效了）。
 
 ## 4. 不确定就问
 

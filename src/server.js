@@ -1,6 +1,7 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
 import { spawn } from 'node:child_process';
 import http from 'node:http';
+import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -447,7 +448,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'GET /api/state': (_b, url) => ({
       // 看板不用事件列表（命令行 status 要用它数未读事件），?view=dashboard 时去掉，减小数据量
       state: url.searchParams.get('view') === 'dashboard' ? { ...store.state, events: [] } : store.state,
-      pending: store.pendingActions(), root, toolDir: TOOL_DIR, port, repos: layout.mode === 'multi' ? layout.repos : null,
+      pending: store.pendingActions(), root, toolDir: TOOL_DIR, home: homedir(), port, repos: layout.mode === 'multi' ? layout.repos : null,
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       config: store.config(),

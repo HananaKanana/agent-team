@@ -96,18 +96,16 @@ echo "export PATH=\"$(npm prefix -g)/bin:\$PATH\"" >> ~/.zshrc
 |---|---|---|
 | [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（leader） | `~/.claude/skills/ateam-lead/` |
 | [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | DeepSeek Harness（worker） | `~/.agents/skills/ateam-worker/` |
-| [skills/browser-cdp-setup/SKILL.md](skills/browser-cdp-setup/SKILL.md) | DeepSeek Harness（test worker 操作浏览器） | `~/.agents/skills/browser-cdp-setup/` |
 
 用软链安装，以后 agent-team 更新了，skill 自动就是新的（已经有同名目录的先删掉再链）：
 
 ```bash
 mkdir -p ~/.claude/skills ~/.agents/skills
-ln -s ~/code/agent-team/skills/ateam-lead        ~/.claude/skills/ateam-lead
-ln -s ~/code/agent-team/skills/ateam-worker      ~/.agents/skills/ateam-worker
-ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup
+ln -s ~/code/agent-team/skills/ateam-lead   ~/.claude/skills/ateam-lead
+ln -s ~/code/agent-team/skills/ateam-worker ~/.agents/skills/ateam-worker
 ```
 
-**test worker 的浏览器（一次性）**：测试和演播都在一个独立的 Chrome 里做，不会弹「允许远程调试」框。启动方法和 DeepSeek Harness 的插件配置见 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md) 第 2 节；第一次启动后在这个 Chrome 里把要测的网站登录一次。看板「使用说明 → 安装」里有可以复制的命令。
+**可选：test worker 的浏览器**（只有要让 test worker 做测试或演播时才需要，一次性）：再装一份浏览器说明书 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md)（`ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`），然后按它第 2 节启动一个独立的 Chrome、配好 DeepSeek Harness 插件，在这个 Chrome 里把要测的网站登录一次。看板「使用说明 → 安装」最下面有可以复制的命令。
 
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 

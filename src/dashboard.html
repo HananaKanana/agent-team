@@ -1525,7 +1525,11 @@ function leaderCard() {
       el('button', { class: 'btn ghost sm', title: away ? '退出无 leader 模式，挂起的卡等 leader 处理' : '进入无 leader 模式', onclick: (e) => { e.stopPropagation(); setLeaderAway(!away); } }, away ? '恢复' : '下线')),
     el('p', { class: 'hint' }, away
       ? `等答复、待 review 的卡挂起，worker 先做没有依赖、不改同一批文件的卡。${away.by === 'user' ? 'leader 执行任何命令（后台监听不算）' : 'leader 重新挂上监听或执行命令'}会自动恢复。`
-      : 'leader 的 token 用完、暂时回不来时点「下线」：进入无 leader 模式，worker 不再干等，把等答复、待 review 的卡挂起，先去做没有依赖、不改同一批文件的卡。leader 回来执行任何命令就自动恢复，按顺序答复和 review，卡交回原来的 worker。设置里可以打开「掉线时自动进入」。'));
+      : 'leader 的 token 用完、暂时回不来时点「下线」：进入无 leader 模式，worker 不再干等，把等答复、待 review 的卡挂起，先去做没有依赖、不改同一批文件的卡。leader 回来执行任何命令就自动恢复，按顺序答复和 review，卡交回原来的 worker。设置里可以打开「掉线时自动进入」。'),
+    leader.online || away ? promptBlock(leadWakePrompt(), renderHelper) : el('p', { class: 'hint' }, 'leader 没有连接：用 ① 里那句话重新开一个。'));
+}
+function leadWakePrompt() {
+  return '继续。你是 ateam leader。先运行 ateam status，按「待你处理」继续（先答复，再 review）；如果后台的 ateam watch --follow 监听停了，用 Monitor 重新启动它。中途不要停下来等我。';
 }
 
 function dismissButtons(a) {
@@ -1991,12 +1995,15 @@ function renderHelper(force = false) {
     el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
     el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会立即停下。leader 那边对它说「让大家收工」也一样。'),
     ] : [
-    leaderCard(),
+    el('div', { class: 'helper-sec' }, el('h4', null, '① 开 leader')),
     el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面这句话。leader 只需要一个。'),
     el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' }, el('b', null, '加入'), el('span', { class: 'hint' }, '新开会话、或者上下文满了重开会话，都用这一句')),
       promptBlock(leadPrompt(), renderHelper)),
     el('p', { class: 'hint' }, '加入后直接在对话里跟 leader 说需求，比如「需求是……」。它会拆任务、派给 worker，并告诉你需要开几个什么角色的 worker。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, `② 干活中：在线的 leader（${data.leader?.online && !data.leader?.away ? 1 : 0}）`)),
+    el('p', { class: 'hint' }, 'leader 停下来不动、或者后台监听停了，复制它的叫醒话，发到 leader 的会话里。token 用完暂时回不来，就点「下线」。'),
+    leaderCard(),
     ]),
   );
   panel.hidden = false;

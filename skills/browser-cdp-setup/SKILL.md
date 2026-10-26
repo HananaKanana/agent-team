@@ -78,7 +78,10 @@ DevTools remote debugging is disallowed by the system admin.
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=0 \
   --user-data-dir="$HOME/.chrome-agent" \
-  --no-first-run --no-default-browser-check &
+  --no-first-run --no-default-browser-check \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  --disable-background-timer-throttling &
 
 # Linux: google-chrome   Windows: chrome.exe
 ```
@@ -88,6 +91,8 @@ DevTools remote debugging is disallowed by the system admin.
   主浏览器抢（它常占着 9222），且默认 profile 残留的旧 `DevToolsActivePort` 会指向
   已退出的实例，握手失败
 - 浏览器**必须由人启动或由脚本启动**——插件永不启动浏览器
+- 后三个 `--disable-*`：窗口不在最前面、被挡住时照常渲染，定时器不降速。这样 agent
+  不用把它拉到前台（见第 5.1 节）
 
 等它就绪（`/json/version` 有应答即可用，通常 1 秒）：
 
@@ -238,6 +243,20 @@ curl -s -X POST "$U?cmd=click" -H "$H" -d "{\"tabId\":\"$T\",\"selector\":\"#go\
   带登录态
 - **本轮开的 tab 本轮 `close`**，遗留的标签是用户可见的变化
 
+### 5.1 不要抢用户的焦点：`open` 少用，`activate` 不用
+
+插件的 `open` 和 `activate` 会调 `Page.bringToFront`，在 macOS 上会把整个 Chrome
+拉到最前面、抢走用户正在用的窗口的焦点。其他命令（`goto`/`click`/`type`/`eval`/
+`wait`/`assert`/`shot`/`snapshot`……）都不会。
+
+- **只在要切到别的页面时 `open`**：开工时 `open` 一次拿到 tabId，之后一直用它
+- 切页面优先在同一个标签页里 `goto` 新地址（不置顶）；确实需要另开一个标签页才 `open`
+- **点击、输入、等待、核对、截图时一律不 `open`**，也不要为了「保险」先 `open` 一下
+- **不用 `activate`**。窗口不在最前面时照样能截图、能等文字：`chrome-agent.sh`
+  启动时已经关掉了后台降速
+- 截图像是没刷新、页面动画卡住：先确认浏览器是用 `chrome-agent.sh` 启动的（带那三个
+  `--disable-*` 参数），不是就让用户关掉它重新用脚本启动；不要用 `activate` 顶上去
+
 ---
 
 ## 6. 视口大小 ≠ 窗口大小
@@ -264,6 +283,18 @@ Browser.setWindowBounds({windowId, bounds:{width, height}})
 ```
 
 注意：最大化/全屏状态下直接改宽高可能不生效，先 `{windowState:"normal"}` 再设尺寸。
+
+本 skill 目录下的 `chrome-window.mjs` 就是做这个的（用 DSH 自带的 node 跑，它先找
+`~/.chrome-agent` 那个 Chrome）：
+
+```bash
+NODE="/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/node/bin/node"
+"$NODE" ~/.agents/skills/browser-cdp-setup/chrome-window.mjs get
+"$NODE" ~/.agents/skills/browser-cdp-setup/chrome-window.mjs set 1600 887
+"$NODE" ~/.agents/skills/browser-cdp-setup/chrome-window.mjs minset 1600 887   # 最大化/全屏时
+```
+
+它只改窗口大小，不会把窗口拉到前面。
 
 ---
 

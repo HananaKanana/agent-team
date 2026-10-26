@@ -16,6 +16,9 @@
 #   ./chrome-agent.sh --port 9333     # 固定端口（默认 0 = 自动挑选）
 #   ./chrome-agent.sh --reset         # 删掉 profile 目录再启动（登录态会丢）
 #
+# 后三个 --disable-* 参数让这个窗口不在最前面、被别的窗口挡住时照常渲染、
+# 定时器不降速。agent 就不用把它拉到前台（拉到前台会抢走用户的焦点）。
+#
 # 配套的 dsh-cdp 配置（一次性，改完重启 DSH）：
 #   - id: dsh-cdp
 #     name: '@dougen/dsh-cdp'
@@ -35,7 +38,7 @@ while [[ $# -gt 0 ]]; do
     --dir)    PROFILE_DIR="${2:?--dir needs a value}"; shift 2 ;;
     --reset)  RESET=1; shift ;;
     --status) STATUS_ONLY=1; shift ;;
-    -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -97,6 +100,9 @@ nohup "$CHROME" \
   --user-data-dir="$PROFILE_DIR" \
   --no-first-run \
   --no-default-browser-check \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
+  --disable-background-timer-throttling \
   >"$PROFILE_DIR/chrome.log" 2>&1 &
 
 for i in $(seq 1 20); do

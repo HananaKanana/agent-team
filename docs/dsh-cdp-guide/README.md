@@ -115,9 +115,9 @@ DevTools remote debugging is disallowed by the system admin.
 推荐组合是 `--remote-debugging-port=0` + 独立目录：
 
 ```bash
-~/dsh-cdp-guide/chrome-agent.sh          # 启动（profile: ~/.chrome-agent，端口自动）
-~/dsh-cdp-guide/chrome-agent.sh --status # 看当前端口
-~/dsh-cdp-guide/chrome-agent.sh --reset  # 清空登录态重来
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh          # 启动（profile: ~/.chrome-agent，端口自动）
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh --status # 看当前端口
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh --reset  # 清空登录态重来
 ```
 
 用 `0` 而不是 `9222` 的原因：**不会和你主 Chrome 抢端口**。你的主 Chrome 现在正占着 9222（授权模式下 Chrome 不提供 HTTP `/json` 端点，只写 `DevToolsActivePort`），换固定端口迟早撞上。
@@ -427,7 +427,7 @@ resize 400x300 →
 | `{windowState:"maximized"}` | 变 2560×1311，`osascript` 复查 `0,30,2560,1341` ✅ |
 | `{windowState:"normal"}` + `set 1600 887` | 完整恢复原状 ✅ |
 
-可运行脚本见附录 A（`~/dsh-cdp-guide/chrome-window.mjs`）。
+可运行脚本见附录 A（`~/.agents/skills/browser-cdp-setup/chrome-window.mjs`）。
 
 **重要顺序**：窗口最大化后直接 `setWindowBounds` 改尺寸可能无效，要先 `{windowState:"normal"}` 再设宽高。脚本里 `minset` 子命令做的就是这件事。
 
@@ -730,11 +730,11 @@ curl -s -X POST "$U?cmd=tabs" -H "$H" -d '{}'   # 确认只剩用户自己的页
 
 ## 附录 A：真窗口大小控制脚本
 
-插件没这能力，所以附一个独立脚本 `chrome-window.mjs`（与本文件同目录），用 DSH 自带的 Node 跑：
+插件没这能力，所以附一个独立脚本 `chrome-window.mjs`（在 `skills/browser-cdp-setup/` 里），用 DSH 自带的 Node 跑：
 
 ```bash
 NODE="/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/node/bin/node"
-W=~/dsh-cdp-guide/chrome-window.mjs
+W=~/.agents/skills/browser-cdp-setup/chrome-window.mjs
 
 "$NODE" "$W" get              # 读当前窗口
 "$NODE" "$W" set 1200 800     # 设为 1200x800
@@ -821,11 +821,11 @@ W=~/dsh-cdp-guide/chrome-window.mjs
 启动一个给 agent 专用的 Chrome。默认 `~/.chrome-agent` + 自动端口。
 
 ```bash
-~/dsh-cdp-guide/chrome-agent.sh            # 启动
-~/dsh-cdp-guide/chrome-agent.sh --status   # 看端口和状态
-~/dsh-cdp-guide/chrome-agent.sh --reset    # 清空登录态重来
-~/dsh-cdp-guide/chrome-agent.sh --dir ~/x  # 换目录
-~/dsh-cdp-guide/chrome-agent.sh --port 9333# 固定端口
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh            # 启动
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh --status   # 看端口和状态
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh --reset    # 清空登录态重来
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh --dir ~/x  # 换目录
+~/.agents/skills/browser-cdp-setup/chrome-agent.sh --port 9333# 固定端口
 ```
 
 脚本做的事：

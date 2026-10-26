@@ -198,9 +198,9 @@ input[type="checkbox"]:not(.switch):checked::after {
 .switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
 .switch:checked { background: var(--brand); }
 .switch:checked::after { transform: translateX(16px); }
-.setting-size-box { display: inline-flex; flex-direction: column; gap: 6px; flex: none; }
-.setting-select { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
-.setting-num.setting-size { width: 120px; text-align: left; }
+.setting-size-box { display: flex; flex-direction: column; align-items: stretch; gap: 6px; flex: none; width: 168px; }
+.setting-select { width: 100%; height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
+.setting-num.setting-size { width: 100%; text-align: left; }
 .warn-text { color: var(--rework); }
 .install-done { color: var(--approved); font-weight: 600; }
 .install-pick { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
@@ -1632,7 +1632,7 @@ function settingsPage() {
         });
         custom.addEventListener('change', () => saveSetting(it.key, custom.value.trim().toLowerCase().replace(/[×*]/g, 'x')));
         for (const n of [sel, custom]) n.addEventListener('click', (e) => e.stopPropagation());
-        input = el('span', { class: 'setting-size-box' }, sel, custom);
+        input = el('div', { class: 'setting-size-box' }, sel, custom);
       } else {
         input = el('input', { type: 'number', class: 'setting-num', min: '1', step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);

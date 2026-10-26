@@ -116,9 +116,9 @@
 - 演播卡：`opsCache` 记下 `legacy`。旧格式的卡，「开始演播」按钮禁用，旁边提示「操作记录是旧格式（按坐标录的），请重新预演」。「重新预演」照常可用。
 - 卡上显示这张卡记录的视口（读 `/api/demo/ops` 返回的 `viewport`），比如「视口 1600x800」，放在原来视口提示的位置。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** 语法检查 → `syntax ok`；代码审阅：`viewportTip` 没有残留引用；没有演播卡的项目页面不受影响。
-- [ ] **Step 3: Commit** `dashboard: demo viewport setting; legacy demo cards ask for a re-rehearsal; drop viewport tip`
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** 语法检查 → `syntax ok`；代码审阅：`viewportTip` 没有残留引用；没有演播卡的项目页面不受影响。
+- [x] **Step 3: Commit** `dashboard: demo viewport setting; legacy demo cards ask for a re-rehearsal; drop viewport tip`
 
 ### Task 4: skill 与核对清单
 

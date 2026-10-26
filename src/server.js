@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,6 +106,35 @@ function readBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+// 本机 DeepSeek Harness 的安装情况，给「安装」页拼命令用。
+// skill 目录：已经放着 ateam-worker 的那个优先，其次是存在的，都没有就用 ~/.agents/skills。
+// profile：$DSH_HOME/profiles 下的目录（DSH_HOME 默认 ~/.dsh）
+function installInfo() {
+  const home = homedir();
+  const dshHome = process.env.DSH_HOME || join(home, '.dsh');
+  const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
+  const profilesDir = join(dshHome, 'profiles');
+  // 真正的 profile 目录里有 cordis.yml（跳过 node_modules 之类）；当前会话用的（DSH_PROFILE）排最前
+  const profiles = (isDir(profilesDir) ? readdirSync(profilesDir).filter((n) => existsSync(join(profilesDir, n, 'cordis.yml'))).sort() : [])
+    .sort((a, b) => (b === process.env.DSH_PROFILE) - (a === process.env.DSH_PROFILE));
+  const skillCandidates = [join(home, '.agents', 'skills'), join(dshHome, 'skills'), ...profiles.map((p) => join(profilesDir, p, 'skills'))];
+  const has = (dir, name) => { try { lstatSync(join(dir, name)); return true; } catch { return false; } };
+  const skillsDir = skillCandidates.find((d) => has(d, 'ateam-worker')) || skillCandidates.find(isDir) || skillCandidates[0];
+  // browser-cdp-setup：linked = 软链到本仓库；copied = 有但不是软链（要先删掉再链）
+  let browserSkill = 'missing';
+  try {
+    const st = lstatSync(join(skillsDir, 'browser-cdp-setup'));
+    browserSkill = st.isSymbolicLink() && resolve(skillsDir, readlinkSync(join(skillsDir, 'browser-cdp-setup'))) === join(TOOL_DIR, 'skills', 'browser-cdp-setup') ? 'linked' : 'copied';
+  } catch {}
+  // 每个 profile 的 cordis.patch.yml 里有没有配 dsh-cdp 的 dataDir
+  const cdpConfigured = Object.fromEntries(profiles.map((p) => {
+    let text = '';
+    try { text = readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8'); } catch {}
+    return [p, /id:\s*dsh-cdp[\s\S]*?dataDir:/.test(text)];
+  }));
+  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, toolDir: TOOL_DIR };
 }
 
 export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
@@ -429,6 +458,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task, agentId };
     },
+    // 「安装」页用：本机 DeepSeek Harness 的 skill 目录和 profile、各项是否已经装好。都是现场读出来的，不写死
+    'GET /api/install-info': () => installInfo(),
     'GET /api/rules': (_b, url) => {
       const rules = readRules();
       const role = url.searchParams.get('role');

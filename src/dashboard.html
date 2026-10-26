@@ -202,6 +202,8 @@ input[type="checkbox"]:not(.switch):checked::after {
 .setting-select { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
 .setting-num.setting-size { width: 120px; text-align: left; }
 .warn-text { color: var(--rework); }
+.install-done { color: var(--approved); font-weight: 600; }
+.install-pick { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
 .setting-num { width: 72px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
 .rules-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--sunken); }
@@ -1902,6 +1904,7 @@ function renderHelper(force = false) {
       helper = { ...helper, tab: key };
       dismissAllArm = false;
       if (key === 'rules') loadRules();
+      if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
       settingsMsg = '';
       renderHelper(true);
     },
@@ -3169,8 +3172,28 @@ function roleStyle(role) {
 // 提示词：在新的 agent 窗口里对 worker 说的话
 // leader 的提示词：在项目目录里开一个 Claude Code 会话发给它
 // 「安装」页：一次性安装步骤，命令里的路径用服务所在的真实目录
+// 本机安装情况（DeepSeek Harness 的 skill 目录、profile、是否已装好），进「安装」页时读一次
+let installInfo = null;
+let installProfile = null;
+async function loadInstallInfo() {
+  installInfo = {}; // 读取中，避免重画时重复请求
+  try {
+    const out = await (await fetch('/api/install-info', { cache: 'no-store' })).json();
+    // 旧服务没有这个接口：按默认路径显示（profiles 为空数组时第 ② 步会提示）
+    installInfo = out.ok ? out : { failed: true, profiles: [], profilesDir: '~/.dsh/profiles' };
+  } catch { installInfo = { failed: true, profiles: [], profilesDir: '~/.dsh/profiles' }; }
+  renderHelper(true);
+}
+
 function installGuide() {
-  const tool = (data.toolDir || '~/code/agent-team').replace(/^\/Users\/[^/]+/, '~');
+  if (installInfo === null) loadInstallInfo();
+  const short = (p) => String(p).replace(/^\/Users\/[^/]+/, '~');
+  const tool = short(data.toolDir || '~/code/agent-team');
+  const info = installInfo || {};
+  const skillsDir = short(info.skillsDir || '~/.agents/skills');
+  const profiles = info.profiles || [];
+  if (!profiles.includes(installProfile)) installProfile = profiles[0] || null;
+  const done = (ok, text) => (ok ? el('p', { class: 'hint install-done' }, `✓ ${text}`) : null);
   const project = (data.root || '<你的项目>').replace(/^\/Users\/[^/]+/, '~');
   const port = data.port || 7700;
   const step = (title, hint, cmd) => el('div', { class: 'wcard' },
@@ -3184,7 +3207,7 @@ function installGuide() {
     step('提示找不到 ateam？', 'npm 的全局目录不在 PATH 里。运行下面这行把它加进 ~/.zshrc，然后开一个新终端再试。',
       'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
     step('② 安装 skill', '把「使用说明书」交给 AI：leader 用的放到 Claude Code，worker 用的放到 DeepSeek Harness。用链接的方式放，以后说明书更新了自动生效。提示「已存在」的话，先删掉那个旧文件夹再运行。',
-      `mkdir -p ~/.claude/skills ~/.agents/skills\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ~/.agents/skills/ateam-worker`),
+      `mkdir -p ~/.claude/skills ${skillsDir}\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ${skillsDir}/ateam-worker`),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
     step('③ 在项目根目录启动服务', '项目必须是 git 仓库。这个终端窗口一直开着；看到「项目目录」那一行是你要开发的项目就对了。',
       `cd ${project}\nateam serve`),
@@ -3193,12 +3216,37 @@ function installGuide() {
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试用的浏览器')),
     el('p', { class: 'hint' }, '只有要用 test worker 做测试或演播时才需要，只做一次。test worker 会自己打开一个专门的 Chrome 窗口来点页面，这个 Chrome 和你平时用的分开，不会动你的书签和登录，也不会每次弹「允许远程调试」的框。'),
-    step('① 把浏览器说明书交给 DeepSeek Harness', 'test worker 靠这份说明书连浏览器、避开常见的坑。',
-      `ln -s ${tool}/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`),
-    step('② 让 DeepSeek Harness 认这个浏览器', '在终端运行下面这段（把设置加到 DeepSeek Harness 的配置文件末尾），然后在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次。',
-      `cat >> ~/.dsh/profiles/desktop/cordis.patch.yml <<'EOF'\n- id: dsh-cdp\n  name: '@dougen/dsh-cdp'\n  config:\n    dataDir: ${data.home || '/Users/<你>'}/.chrome-agent\nEOF`),
+    info.browserSkill === 'linked'
+      ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, '① 把浏览器说明书交给 DeepSeek Harness')), done(true, `已装好（${skillsDir}/browser-cdp-setup）`))
+      : step('① 把浏览器说明书交给 DeepSeek Harness', `test worker 靠这份说明书连浏览器、避开常见的坑。${info.browserSkill === 'copied' ? '那里已经有一份复制过去的旧文件夹，下面会先把它删掉再换成链接。' : ''}`,
+        `${info.browserSkill === 'copied' ? `rm -rf ${skillsDir}/browser-cdp-setup\n` : ''}ln -s ${tool}/skills/browser-cdp-setup ${skillsDir}/browser-cdp-setup`),
+    installStep2(info, installProfile),
     step('③ 剩下的交给 test worker', '开 test worker 后，它会自己打开测试专用的 Chrome（一个新窗口，和你平时用的分开）并检查能不能用。第一次要测的网站还没登录时，它会停下来提问（看板上卡片进「等待答复」），你在那个新窗口里登录一次就行，之后一直有效。', null),
   ];
+}
+
+// 可选的浏览器第 ② 步：profile 从本机读出来；有多个就让用户选；已经配好就只显示「已配好」
+function installStep2(info, profile) {
+  const title = el('div', { class: 'wcard-head' }, el('b', null, '② 让 DeepSeek Harness 认这个浏览器'));
+  if (!info.profiles) return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, '读取中…'));
+  if (info.failed) return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, '读不到本机的 DeepSeek Harness 配置（ateam 服务是旧版本），重启 ateam serve 后再看。'));
+  if (!info.profiles.length) {
+    return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, `在 ${info.profilesDir} 下没找到 DeepSeek Harness 的配置。先装好并打开一次 DeepSeek Harness，再回到这里。`));
+  }
+  const pick = info.profiles.length > 1 ? el('label', { class: 'install-pick' }, '配置：', (() => {
+    const sel = el('select', { class: 'setting-select', onchange: (e) => { installProfile = e.target.value; renderHelper(true); } },
+      info.profiles.map((p) => el('option', { value: p }, p)));
+    sel.value = profile;
+    sel.addEventListener('click', (e) => e.stopPropagation());
+    return sel;
+  })(), el('span', { class: 'hint' }, '（你平时开 worker 用的那个）')) : null;
+  if (info.cdpConfigured?.[profile]) {
+    return el('div', { class: 'wcard' }, title, pick, el('p', { class: 'hint install-done' }, `✓ 「${profile}」已经配好了。改过配置后要在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次才生效。`));
+  }
+  const file = `${info.profilesDir}/${profile}/cordis.patch.yml`.replace(/^\/Users\/[^/]+/, '~');
+  return el('div', { class: 'wcard' }, title, pick,
+    el('p', { class: 'hint' }, '在终端运行下面这段（把设置加到 DeepSeek Harness 的配置文件末尾），然后在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次。'),
+    promptBlock(`cat >> ${file} <<'EOF'\n- id: dsh-cdp\n  name: '@dougen/dsh-cdp'\n  config:\n    dataDir: ${info.home}/.chrome-agent\nEOF`, renderHelper));
 }
 
 // leader 的加入提示词：不带需求，先就位；新开会话和会话重开都用这一句

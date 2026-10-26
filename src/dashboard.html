@@ -3192,15 +3192,12 @@ function installGuide() {
     el('p', { class: 'hint' }, '装好之后：切到「leader」页开 leader，切到「worker」页开 worker。'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试用的浏览器')),
-    el('p', { class: 'hint' }, '只有要用 test worker 做测试或演播时才需要，只做一次。test worker 会在一个专门的 Chrome 窗口里点页面，这个 Chrome 和你平时用的分开，不会动你的书签和登录，也不会每次弹「允许远程调试」的框。'),
+    el('p', { class: 'hint' }, '只有要用 test worker 做测试或演播时才需要，只做一次。test worker 会自己打开一个专门的 Chrome 窗口来点页面，这个 Chrome 和你平时用的分开，不会动你的书签和登录，也不会每次弹「允许远程调试」的框。'),
     step('① 把浏览器说明书交给 DeepSeek Harness', 'test worker 靠这份说明书连浏览器、避开常见的坑。',
       `ln -s ${tool}/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`),
-    step('② 打开测试专用的 Chrome', '会弹出一个新的 Chrome 窗口。以后每次开机后，要用 test worker 之前运行一下这条就行。',
-      `${tool}/docs/dsh-cdp-guide/chrome-agent.sh`),
-    step('③ 在这个新窗口里登录要测试的网站', '就像平时一样登录。只要登一次，以后一直有效。账号密码不会告诉 worker。', null),
-    step('④ 让 DeepSeek Harness 认这个浏览器', '在终端运行下面这段（把设置加到 DeepSeek Harness 的配置文件末尾），然后在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次。',
+    step('② 让 DeepSeek Harness 认这个浏览器', '在终端运行下面这段（把设置加到 DeepSeek Harness 的配置文件末尾），然后在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次。',
       `cat >> ~/.dsh/profiles/desktop/cordis.patch.yml <<'EOF'\n- id: dsh-cdp\n  name: '@dougen/dsh-cdp'\n  config:\n    dataDir: ${data.home || '/Users/<你>'}/.chrome-agent\nEOF`),
-    step('怎么知道好了？', '开 test worker 时，它会先自己检查一遍浏览器。连不上的话它会停下来提问（看板上卡片进「等待答复」），告诉你差哪一步。', null),
+    step('③ 剩下的交给 test worker', '开 test worker 后，它会自己打开测试专用的 Chrome（一个新窗口，和你平时用的分开）并检查能不能用。第一次要测的网站还没登录时，它会停下来提问（看板上卡片进「等待答复」），你在那个新窗口里登录一次就行，之后一直有效。', null),
   ];
 }
 

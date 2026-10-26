@@ -100,7 +100,7 @@ ateam wait --as <编号>
   - 发现新卡和已经审过的旧卡冲突：对旧卡也提 issue，加 `--because "和 T12 冲突"`，会记进历史。
   - 清单里的卡全部标完再 `ateam wait`。只挑真问题，不要为了凑数提意见，也不要提纯文字润色。
 - **test（测试）**：不改业务代码（路径外的改动不会被提交）。**所有测试工作（验收、复测、补测、演播的预演和演播）都在浏览器里实际操作页面完成，以页面上的结果为准**：
-  - 浏览器用 DeepSeek Harness 的 browser-cdp（dsh-cdp 插件）。**开工前先按 `browser-cdp-setup` skill 连好浏览器并通过自检**（`cmd=status` 里 `browserId: custom`、`authorized: true`）；连不上、弹授权框、自检不过就 `ateam ask` 说明情况，等答复，**不换别的工具绕过**。
+  - 浏览器用 DeepSeek Harness 的 browser-cdp（dsh-cdp 插件）。**开工前先按 `browser-cdp-setup` skill 连好浏览器并通过自检**（`cmd=status` 里 `browserId: custom`、`authorized: true`）。测试专用的 Chrome 没开（`no CDP endpoint found`）就**自己运行那个 skill 目录下的 `chrome-agent.sh` 打开它**，再 `cmd=connect`，不用让用户动手。打开后要测的网站还没登录，就 `ateam ask` 请用户在那个 Chrome 窗口里登录一次。连不上、弹授权框、自检不过也 `ateam ask` 说明情况，等答复，**不换别的工具绕过**。
   - 浏览器必须在前台、用户看得见；不用 headless / 后台浏览器。窗口太窄点不到时先调窗口大小，或 `ateam ask`。
   - **不用 curl / 脚本调接口、不翻前端产物里的文案来代替页面操作**。要看接口状态码，就在同一个浏览器里看页面发出的请求（`cmd=network`）。
   - 测试地址、测试账号按项目规则或用户提供的来；账号口令不写进报告、提交、ateam 消息和日志；遇到登录、验证码、二次验证就停下，`ateam ask` 等用户处理。

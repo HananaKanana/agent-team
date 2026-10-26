@@ -67,6 +67,12 @@ DevTools remote debugging is disallowed by the system admin.
 
 ### 第一步：用非默认 profile 启动浏览器
 
+**agent 自己就能做，不用让用户动手**：运行本 skill 目录下的 `chrome-agent.sh`（比如 `~/.agents/skills/browser-cdp-setup/chrome-agent.sh`）。它用 `~/.chrome-agent` 目录、自动端口启动一个前台可见的 Chrome，等到 CDP 能用才返回；已经在跑就不会再起第二个，所以每次开工前跑一下也没关系。`--status` 只看状态。
+
+第一次启动的是个干净的浏览器，要测的网站还没登录：打开页面遇到登录页就按第 8 节停下，请用户在这个窗口里登录一次，之后一直有效。
+
+脚本做的事等同于下面这条命令：
+
 ```bash
 # macOS
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \

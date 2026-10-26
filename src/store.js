@@ -432,6 +432,48 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   // 设为优先 / 取消优先。只对还没开始的任务（待领取、已挂起）有意义。
   // 优先只影响同角色 worker 领任务的先后，不会越过依赖。
+  // 暂停领取：卡照样留在待领取，但不派发给 worker，恢复后照常派发。正在做的卡不受影响。
+  // 可以单张卡暂停（task.onHold），也可以整个需求暂停（job.onHold，之后新加的卡也不派发）
+  const BY_LABEL = { user: '用户', lead: 'leader' };
+  function holdTask(taskId, on, reason = '', by = 'lead') {
+    const task = getTask(taskId);
+    if (on) {
+      if (isDemo(task) || (task.status !== 'pending' && task.status !== 'held')) {
+        throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有待领取或已挂起的卡可以暂停领取（正在做的卡不受影响）。`);
+      }
+      if (task.onHold) return task;
+      reason = String(reason ?? '').trim();
+      task.onHold = { at: now(), by, ...(reason ? { reason } : {}) };
+      addHistory(task, 'edited', by, `暂停领取${reason ? `：${reason}` : ''}`);
+    } else {
+      if (!task.onHold) return task;
+      delete task.onHold;
+      addHistory(task, 'edited', by, '恢复领取');
+    }
+    changed();
+    return task;
+  }
+
+  function holdJob(jobId, on, reason = '', by = 'lead') {
+    const job = liveJob(jobId);
+    if (job.status === 'accepted') throw new AteamError('BAD_STATE', `需求 ${job.id} 已验收，不需要暂停领取。`);
+    if (on) {
+      if (job.onHold) return job;
+      reason = String(reason ?? '').trim();
+      job.onHold = { at: now(), by, ...(reason ? { reason } : {}) };
+      emit('job_hold', { jobId: job.id, text: `${BY_LABEL[by] ?? by}暂停了需求 ${job.id} 的领取${reason ? `：${reason}` : ''}` });
+    } else {
+      if (!job.onHold) return job;
+      delete job.onHold;
+      emit('job_hold', { jobId: job.id, text: `${BY_LABEL[by] ?? by}恢复了需求 ${job.id} 的领取` });
+    }
+    job.updatedAt = now();
+    changed();
+    return job;
+  }
+
+  const onHold = (t) => !!(t.onHold || state.jobs.find((j) => j.id === t.jobId)?.onHold);
+
   function setPriority(taskId, top) {
     const task = getTask(taskId);
     if (task.status !== 'pending' && task.status !== 'held') {
@@ -509,7 +551,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const own = (t) => t.handoff && t.prevAssignee === agent.id;
     const mine = (t) => t.assignTo === agent.id;
     const candidates = state.tasks
-      .filter((t) => t.status === 'pending' && sameRole(t.role, agent.role) && depsMet(t) && (!t.assignTo || mine(t)))
+      .filter((t) => t.status === 'pending' && !onHold(t) && sameRole(t.role, agent.role) && depsMet(t) && (!t.assignTo || mine(t)))
       .sort((a, b) => (own(b) - own(a)) || (mine(b) - mine(a)) || dispatchOrder(a, b));
     const task = candidates[0];
     if (!task) return null;
@@ -1680,7 +1722,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
-    pauseDemo, resumeDemo, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     addDemo, demoBlockers, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

@@ -382,6 +382,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/note': (b) => ({ task: store.noteTask(requireId(b), b.text) }),
     'GET /api/cards': (_b, url) => ({ cards: store.cards({ jobId: url.searchParams.get('job') ?? '', todo: url.searchParams.get('todo') === '1' }) }),
     'POST /api/tasks/assign': (b) => ({ task: store.assignTask(requireId(b), b.to) }),
+    // by：看板传 user，命令行（leader）不传
+    'POST /api/tasks/hold': (b) => ({ task: store.holdTask(requireId(b), !!b.on, b.text ?? '', b.by === 'user' ? 'user' : 'lead') }),
+    'POST /api/jobs/hold': (b) => ({ job: store.holdJob(requireId(b), !!b.on, b.text ?? '', b.by === 'user' ? 'user' : 'lead') }),
     'POST /api/tasks/priority': (b) => ({ task: store.setPriority(requireId(b), !!b.top) }),
     'POST /api/tasks/edit': (b) => {
       const { id, ...patch } = b;

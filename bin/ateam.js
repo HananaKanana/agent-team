@@ -54,9 +54,11 @@ leader
   ateam demo add --job J1 --title "..." --script docs/demo/x.md [--role test]
   ateam job edit J1 [--title "..."] [--desc-file f.md] [--origin-file f.md（只能给没有原话的老需求补）]
   ateam job accept J1 [J2...]
+  ateam job hold J1 ["<原因>"] [--off]（整个需求暂停 / 恢复领取，用户要求时用）
   ateam job cancel J1 ["<原因>"] [--user-approved]（作废整个需求，必须用户明确同意）
   ateam task add --job J1 --role <角色> --paths a/,b/ [--after T1,T2] --title "..." [--desc-file t.md] [--accept "..."]... [--top]
   ateam task top T3 [--off]
+  ateam task hold T3 ["<原因>"] [--off]（暂停 / 恢复领取，用户要求时用）
   ateam task edit T3 [--title "..."] [--role <角色>] [--desc-file f.md] [--accept "..."]... [--paths ...] [--after ...]
   ateam release T3
   ateam cancel T3 ["<原因>"]
@@ -355,6 +357,23 @@ const commands = {
     if (!task.priority) return `已取消 ${task.id} 的优先，按编号顺序派发。`;
     const waiting = task.dependsOn.length ? `（它依赖 ${task.dependsOn.join('、')}，依赖通过后才会派发）` : '';
     return `已把 ${task.id} 设为优先：${task.role} 角色的 worker 下一个先领它${waiting}。正在做别的任务的 worker 不会被打断。`;
+  },
+
+  // 暂停领取：用户要求时才用。卡留在待领取但不派发，--off 恢复
+  async 'task hold'({ flags, positional }) {
+    const id = requireArg(positional[0], '任务编号', 'ateam task hold T5 "等接口定下来"');
+    const { task } = await request('POST', '/api/tasks/hold', { id, on: !flags.off, text: positional[1] ?? '' });
+    return task.onHold
+      ? `已暂停 ${task.id} 的领取：卡留在待领取，worker 不会领到它（ateam task hold ${task.id} --off 恢复）。`
+      : `已恢复 ${task.id} 的领取，按派发顺序派发。`;
+  },
+
+  async 'job hold'({ flags, positional }) {
+    const id = requireArg(positional[0], '需求编号', 'ateam job hold J5 "先停一下，等用户确认方向"');
+    const { job } = await request('POST', '/api/jobs/hold', { id, on: !flags.off, text: positional[1] ?? '' });
+    return job.onHold
+      ? `已暂停需求 ${job.id} 的领取：它下面待领取的卡（包括之后新加的）都不会派发；正在做的卡不受影响（ateam job hold ${job.id} --off 恢复）。`
+      : `已恢复需求 ${job.id} 的领取。`;
   },
 
   async 'task edit'({ flags, positional }) {

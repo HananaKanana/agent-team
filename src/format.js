@@ -541,11 +541,12 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
       continue;
     }
     const done = live.filter((t) => t.status === 'approved').length;
-    lines.push(`### ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}] 已通过 ${done}/${live.length}`, '');
+    const hold = j.onHold ? ` 【暂停领取${j.onHold.reason ? `：${j.onHold.reason}` : ''}，待领取的卡不派发；ateam job hold ${j.id} --off 恢复】` : '';
+    lines.push(`### ${j.id} ${j.title} [${JOB_STATUS[j.status] ?? j.status}] 已通过 ${done}/${live.length}${hold}`, '');
     for (const t of live) {
       const named = state.agents.find((a) => a.id === t.assignee)?.name;
       const who = t.assignee ? `，${named ? `${named}（${t.assignee}）` : t.assignee}` : '';
-      const flags = [t.assignTo && (t.status === 'pending' || t.status === 'held') ? `用户指派给 ${t.assignTo}` : '', t.priority && t.status === 'pending' ? '优先' : '', t.handoff ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
+      const flags = [t.assignTo && (t.status === 'pending' || t.status === 'held') ? `用户指派给 ${t.assignTo}` : '', t.priority && t.status === 'pending' ? '优先' : '', t.onHold && (t.status === 'pending' || t.status === 'held') ? `暂停领取${t.onHold.reason ? `（${t.onHold.reason}）` : ''}` : '', t.handoff ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
       lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}${who}）${flags ? ` ${flags}` : ''}`);
     }
     const cancelled = tasks.filter((t) => t.status === 'cancelled');

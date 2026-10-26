@@ -593,7 +593,10 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-head .crumbs .lozenge { height: 20px; font-size: 11.5px; }
 .job-head.has-side { grid-template-columns: minmax(0, 1fr) minmax(340px, 480px); gap: 0 28px; align-items: stretch; }
 .job-head.has-side .desc { max-width: none; }
-.job-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; min-width: 0; }
+.job-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-content: start; min-width: 0; }
+.job-main > * { grid-column: 1 / -1; }
+.job-main > h2.job-title { grid-column: 1; grid-row: 2; }
+.job-main > .head-acts { grid-column: 2; grid-row: 2; align-self: start; }
 .job-side { position: relative; }
 .job-side.bare { min-height: 0; }
 .job-side .inner { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
@@ -802,6 +805,10 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .role { color: var(--rc); background: color-mix(in srgb, var(--rc) 13%, transparent); font-weight: 700; }
 .role-text { color: var(--rc); font-weight: 600; }
 .tag.warn, .tag.urgent { color: var(--rework); background: color-mix(in srgb, var(--rework) 13%, transparent); }
+.tag.hold { color: var(--muted); background: color-mix(in srgb, var(--faint) 18%, transparent); }
+.job-hold { box-shadow: inset 3px 0 0 var(--asking); background: color-mix(in srgb, var(--asking) 8%, var(--surface)); }
+.btn.hold-btn svg { width: 13px; height: 13px; }
+.btn.hold-btn.on { color: var(--asking); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asking) 50%, transparent); background: color-mix(in srgb, var(--asking) 12%, transparent); font-weight: 600; }
 .tag.paused { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); font-weight: 600; }
 .btn.pause-btn svg { width: 13px; height: 13px; flex: none; }
 .prompter-strip .head .strip-pause {
@@ -1932,7 +1939,15 @@ function renderMain() {
     el('div', { class: 'crumbs' }, `需求 / ${job.id}`,
       job.demo ? null : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
     el('h2', { class: `job-title${job.status === 'cancelled' ? ' dropped' : ''}` }, job.title),
-    job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
+    job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求'))
+      : job.status === 'accepted' || job.status === 'cancelled' ? null
+      : el('div', { class: 'head-acts' }, el('button', {
+        class: `btn sm hold-btn${job.onHold ? ' on' : ''}`,
+        title: job.onHold ? '恢复后，这个需求待领取的卡照常派发' : '这个需求下待领取的卡（包括之后新加的）都先不派发；正在做的卡不受影响',
+        onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
+      }, icon(job.onHold ? 'play' : 'pause'), job.onHold ? '恢复领取' : '暂停领取')),
+    job.onHold && job.status !== 'cancelled' ? el('div', { class: 'job-cancelled job-hold' },
+      `${fmtTime(job.onHold.at)} ${job.onHold.by === 'user' ? '你' : 'leader'}暂停了领取${job.onHold.reason ? `：${job.onHold.reason}` : ''}。待领取的卡都不会派发，正在做的照常做完。`) : null,
     job.status === 'cancelled' ? el('div', { class: 'job-cancelled' },
       `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的卡和代码保留，没做完的卡已作废。`) : null,
     job.description ? (() => {
@@ -2105,6 +2120,8 @@ function approvedAt(t) {
   return h ? new Date(h.ts).getTime() || 0 : 0;
 }
 
+const cardOnHold = (t) => !!(t.onHold || data.state.jobs.find((j) => j.id === t.jobId)?.onHold);
+
 function card(t, lane) {
   const handedOff = t.history.some((h) => h.type === 'handoff');
   const waiting = t.status === 'pending' || t.status === 'held';
@@ -2115,6 +2132,7 @@ function card(t, lane) {
   },
     el('div', { class: 't' }, t.title),
     el('div', { class: 'flags' },
+      waiting && cardOnHold(t) ? el('span', { class: 'tag hold', title: t.onHold ? '这张卡暂停领取' : '整个需求暂停领取' }, '暂停领取') : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,
@@ -2683,7 +2701,7 @@ function renderDrawer(fresh) {
     facts,
     demo ? demoDrawerBody(t) : [
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
-    t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t)] : null,
+    t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t), holdBox(t)] : null,
     critiqueBox(t),
     (() => {
       // 作废了、但拿着它的 worker 还不知道：给出叫停的话
@@ -2733,6 +2751,35 @@ function closeDrawer() {
 
 // 设为优先 / 取消优先：只影响同角色 worker 领任务的先后
 let priorityError = null;
+let holdError = null;
+
+// 暂停 / 恢复领取：kind 是 tasks 或 jobs
+async function holdAction(kind, id, on) {
+  try {
+    const res = await fetch(`/api/${kind}/hold`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, on, by: 'user' }) });
+    const out = await res.json();
+    holdError = out.ok ? null : out.message;
+  } catch { holdError = '连不上 ateam 服务。'; }
+  await poll();
+  render();
+  renderDrawer(false);
+}
+
+function holdBox(t) {
+  const job = data.state.jobs.find((j) => j.id === t.jobId);
+  const on = !!t.onHold;
+  let hint;
+  if (job?.onHold) hint = `整个需求 ${job.id} 暂停了领取，这张卡也不会派发。到需求页点「恢复领取」。`;
+  else if (on) hint = `已暂停${t.onHold.reason ? `（${t.onHold.reason}）` : ''}：卡留在待领取，worker 不会领到它。恢复后按上面的派发顺序派发。`;
+  else hint = '先不想让 worker 领这张卡（比如等确认、等别的事），可以暂停领取。依赖它的卡也会跟着等。';
+  return [
+    el('h4', null, '暂停领取'),
+    el('p', { class: 'hint' }, hint),
+    job?.onHold ? null : el('div', { class: 'prompt' },
+      el('button', { class: `btn${on ? ' primary' : ''}`, onclick: (e) => { e.stopPropagation(); holdAction('tasks', t.id, !on); } }, on ? '恢复领取' : '暂停领取'),
+      holdError ? el('span', { class: 'hint' }, holdError) : null),
+  ];
+}
 // ---------- 审卡意见 ----------
 const CRITIQUE_STATUS = {
   open: '等 leader 回复', proposed: 'leader 同意，等你确认', disputed: 'leader 不同意，等你决定',

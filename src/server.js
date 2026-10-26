@@ -203,9 +203,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const runs = result.task.runs ?? [];
       out.script.mode = runs[runs.length - 1]?.mode ?? 'show';
       out.script.only = runs[runs.length - 1]?.steps ?? null;
-      // 目标视口：预演按当前设置录；演播沿用这张卡预演时记下的尺寸。legacy：旧的按坐标录的记录，要整段重写
+      // 目标视口：预演用开始时选的尺寸；演播沿用这张卡预演时记下的尺寸。legacy：旧的按坐标录的记录，要整段重写
       const ops = parseOps(out.script.text);
-      out.script.viewport = out.script.mode === 'rehearsal' ? store.config().demoViewport : (ops.viewport ?? store.config().demoViewport);
+      const fallback = store.config().demoViewport;
+      out.script.viewport = out.script.mode === 'rehearsal' ? (runs[runs.length - 1]?.viewport ?? fallback) : (ops.viewport ?? fallback);
       out.script.legacy = ops.legacy;
     }
     return out;
@@ -332,7 +333,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       if ((b.mode ?? 'show') === 'show' && text != null && parseOps(text).legacy) {
         throw new AteamError('BAD_STATE', `${id} 的操作记录是旧格式（按坐标录的），请先重新预演一次。`);
       }
-      return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total) };
+      return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total, b.viewport ?? null) };
     },
     'GET /api/demo/ops': (_b, url) => {
       const task = store.getTask(url.searchParams.get('id') ?? '');

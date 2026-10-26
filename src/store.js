@@ -1412,7 +1412,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   const modeLabel = (run) => DEMO_MODES[run?.mode] ?? '演播';
 
   // steps：演播只演这几步（步骤编号数组）；totalSteps：脚本总步数，由服务读脚本得出。预演不能选步骤
-  function startDemo(taskId, mode = 'show', steps = null, totalSteps = null) {
+  // viewport：预演这次用的视口（不传就用上次预演选的）；演播不能选，沿用这张卡预演时录的
+  function startDemo(taskId, mode = 'show', steps = null, totalSteps = null, viewport = null) {
     const task = getTask(taskId);
     if (!isDemo(task)) throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);
     if (!DEMO_MODES[mode]) throw new AteamError('INVALID', '开始方式只能是 rehearsal（预演）或 show（演播）。');
@@ -1429,8 +1430,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (task.status !== 'ready') throw new AteamError('BAD_STATE', `演播卡 ${task.id} 当前状态是 ${task.status}，只有待演播时可以开始。`);
     if (mode === 'show' && !task.rehearsedAt) throw new AteamError('BAD_STATE', `演播卡 ${task.id} 还没预演过，请先开始预演。`);
+    if (mode === 'show' && viewport != null) throw new AteamError('INVALID', '演播沿用这张卡预演时录的视口，不能另选；想换尺寸就重新预演。');
     const blockers = demoBlockers(task.id);
     if (blockers.length) throw new AteamError('BAD_STATE', `现在不能开始演播：${blockers.join('；')}。`);
+    // 记成「上次预演选的」，下次弹框默认选它；同时校验格式
+    if (mode === 'rehearsal' && viewport != null) setSettings({ demoViewport: viewport });
+    if (mode === 'rehearsal') task.pendingViewport = config().demoViewport;
+    else delete task.pendingViewport;
     task.status = 'queued';
     task.queuedAt = now();
     task.pendingMode = mode;
@@ -1451,6 +1457,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const run = { startedAt: now(), by: agent.id, mode };
     if (task.pendingSteps) run.steps = task.pendingSteps;
     delete task.pendingSteps;
+    if (task.pendingViewport) run.viewport = task.pendingViewport;
+    delete task.pendingViewport;
     task.runs.push(run);
     addHistory(task, 'claimed', agent.id, `开始${DEMO_MODES[mode]}${run.steps ? `（${stepsLabel(run.steps)}）` : ''}`);
     emit('demo_started', { taskId: task.id, agentId: agent.id, text: `${agent.id} 开始${DEMO_MODES[mode]} ${task.id}` });

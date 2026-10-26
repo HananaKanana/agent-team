@@ -198,14 +198,20 @@ input[type="checkbox"]:not(.switch):checked::after {
 .switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
 .switch:checked { background: var(--brand); }
 .switch:checked::after { transform: translateX(16px); }
-.vp-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 12px 0 10px; }
+.vp-opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 14px 0 10px; }
+@media (max-width: 560px) { .vp-opts { grid-template-columns: repeat(2, 1fr); } }
 .vp-opt { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .vp-opt b { font-size: 14px; font-variant-numeric: tabular-nums; }
 .vp-opt span { font-size: 12px; color: var(--muted); }
-.vp-opt em { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 11px; color: var(--muted); }
-.vp-opt:hover { border-color: var(--brand); }
-.vp-opt.on { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); background: var(--brand-soft); }
-.vp-custom { width: 100%; height: 34px; padding: 0 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
+.vp-opt em, .vp-custom-row em { font-style: normal; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 8px; background: var(--sunken); color: var(--muted); }
+.vp-opt em { position: absolute; top: 8px; right: 8px; }
+.vp-opt:hover, .vp-custom-row:hover { border-color: var(--brand); }
+.vp-opt.on, .vp-custom-row.on { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); background: var(--brand-soft); }
+.vp-custom-row { display: flex; align-items: center; gap: 10px; padding: 6px 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); cursor: text; }
+.vp-custom-label { font-weight: 600; font-size: 14px; }
+.vp-custom { width: 140px; height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; }
+.vp-custom:focus { outline: none; border-color: var(--brand); }
+.vp-custom-row em { margin-left: auto; }
 .setting-select { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; }
 .warn-text { color: var(--rework); }
 .install-done { color: var(--approved); font-weight: 600; }
@@ -2363,7 +2369,9 @@ function renderRehearsalDialog(box, t) {
   };
   const opt = (v, label) => el('button', { class: `vp-opt${d.pick === v ? ' on' : ''}`, onclick: stop(() => { Object.assign(d, { pick: v, error: null }); renderShowDialog(); }) },
     el('b', null, label[0]), label[1] ? el('span', null, label[1]) : null, recorded === v ? el('em', null, '上次') : null);
-  const custom = el('input', { type: 'text', class: 'vp-custom', value: d.custom, placeholder: '宽x高，比如 1440x900' });
+  const custom = el('input', { type: 'text', class: 'vp-custom', value: d.custom, placeholder: '比如 1440x900' });
+  // 点进自定义框就切到自定义；重画后把光标放回框里
+  custom.addEventListener('focus', () => { if (d.pick !== 'custom') { Object.assign(d, { pick: 'custom', error: null, refocus: true }); renderShowDialog(); } });
   custom.addEventListener('input', () => { d.custom = custom.value; d.error = null; const b = box.querySelector('.modal-foot .primary'); const v = norm(custom.value).match(/^(\d{3,4})x(\d{3,4})$/); if (b) b.disabled = blockers.length > 0 || !v || ![v[1], v[2]].every((n) => Number(n) >= 320 && Number(n) <= 7680); });
   custom.addEventListener('click', (e) => e.stopPropagation());
   box.classList.toggle('again', !box.hidden);
@@ -2372,11 +2380,10 @@ function renderRehearsalDialog(box, t) {
     modalHead(`开始预演：${t.title}`, closeShowDialog),
     el('div', { class: 'modal-body' },
       el('p', { class: 'lead' }, '选这次的浏览器视口。worker 开始前把浏览器调到这个尺寸，按它录操作记录；以后演播都沿用这个尺寸。'),
-      el('div', { class: 'vp-opts' },
-        VIEWPORT_PRESETS.map(([v, label]) => opt(v, label)),
-        opt('custom', ['自定义', '']),
-      ),
-      d.pick === 'custom' ? custom : null,
+      el('div', { class: 'vp-opts' }, VIEWPORT_PRESETS.map(([v, label]) => opt(v, label))),
+      el('label', { class: `vp-custom-row${d.pick === 'custom' ? ' on' : ''}`, onclick: (e) => e.stopPropagation() },
+        el('span', { class: 'vp-custom-label' }, '自定义'), custom, el('span', { class: 'hint' }, '宽x高'),
+        recorded && !VIEWPORT_PRESETS.some(([v]) => v === recorded) ? el('em', null, '上次') : null),
       el('p', { class: 'hint' }, '窗口要比视口再大一圈（标签栏、地址栏），超过屏幕的尺寸 worker 调不出来，会停住。'),
       d.pick === 'custom' && d.custom && !valid ? el('p', { class: 'hint', style: 'color: var(--rework)' }, '要写成 宽x高，宽高在 320 到 7680 之间。') : null,
       d.error ? el('p', { class: 'hint', style: 'color: var(--rework)' }, d.error) : null),
@@ -2385,7 +2392,7 @@ function renderRehearsalDialog(box, t) {
       el('button', { class: 'btn', onclick: stop(closeShowDialog) }, '取消'),
       el('button', { class: 'btn primary', disabled: blockers.length > 0 || !valid, onclick: stop(go) }, '开始预演'))));
   box.hidden = false;
-  if (d.pick === 'custom' && !d.custom) custom.focus();
+  if (d.refocus) { d.refocus = false; custom.focus(); custom.setSelectionRange(custom.value.length, custom.value.length); }
 }
 function renderShowDialog() {
   const box = document.getElementById('show-dialog');

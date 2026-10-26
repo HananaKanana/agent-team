@@ -93,8 +93,8 @@
   - 删掉 `demo viewport` 命令、USAGE 里那一行、`chrome-frame.json` 的读写，以及只给它用的 osascript 辅助函数（先 grep 确认没有别处在用）。
   - `ateam settings` 如果有列出设置的地方，加上 `demoViewport`。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测（`createStore` + 临时 git 仓库 + 真服务）：
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测（`createStore` + 临时 git 仓库 + 真服务）：
   - `setSettings({demoViewport:'1920x1080'})` 成功；`'1600*800'`、`'100x100'`、`'abc'` 报 `INVALID`；
   - 旧 cua 记录的卡（已预演）：`start {mode:'show'}` 报错，含「旧格式」；`start {mode:'rehearsal'}` 成功；领取后的预演指令里含「旧的操作记录是按坐标录的」，视口是当前设置；
   - 新格式、记录写着 `视口：1280x720`：把设置改成 1920x1080 后开始演播，指令里的视口是 1280x720；
@@ -102,7 +102,7 @@
   - 指令文本里不出现 `cua_execute`、`osascript`、`demo viewport`。
 
   Run: `node --check src/store.js src/server.js src/format.js bin/ateam.js && node <scratchpad>/probe-demo-neutral.mjs <scratchpad>` → `ALL PASS`，删除脚本和临时目录。
-- [ ] **Step 3: Commit** `demo: viewport setting, legacy records need re-rehearsal, tool-neutral worker rules; drop demo viewport command`
+- [x] **Step 3: Commit** `demo: viewport setting, legacy records need re-rehearsal, tool-neutral worker rules; drop demo viewport command`
 
 ### Task 3: 看板
 

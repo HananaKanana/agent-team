@@ -173,6 +173,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const runs = result.task.runs ?? [];
       out.script.mode = runs[runs.length - 1]?.mode ?? 'show';
       out.script.only = runs[runs.length - 1]?.steps ?? null;
+      // 目标视口：预演按当前设置录；演播沿用这张卡预演时记下的尺寸。legacy：旧的按坐标录的记录，要整段重写
+      const ops = parseOps(out.script.text);
+      out.script.viewport = out.script.mode === 'rehearsal' ? store.config().demoViewport : (ops.viewport ?? store.config().demoViewport);
+      out.script.legacy = ops.legacy;
     }
     return out;
   }
@@ -291,8 +295,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/demo/start': (b) => {
       const id = requireId(b);
       let total = null;
-      if (b.steps != null) {
-        try { total = stepCount(readFileSync(join(root, store.getTask(id).script), 'utf8')); } catch {}
+      let text = null;
+      try { text = readFileSync(join(root, store.getTask(id).script), 'utf8'); } catch {}
+      if (b.steps != null && text != null) total = stepCount(text);
+      // 旧的按坐标录的操作记录不能直接演播，要先按新格式重新预演
+      if ((b.mode ?? 'show') === 'show' && text != null && parseOps(text).legacy) {
+        throw new AteamError('BAD_STATE', `${id} 的操作记录是旧格式（按坐标录的），请先重新预演一次。`);
       }
       return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total) };
     },
@@ -303,8 +311,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       try {
         const text = readFileSync(join(root, task.script), 'utf8');
         const parsed = parseOps(text);
-        // recorded：录好了合法动作块的步骤号，看板标「已录」
-        return { ops: opsSection(text), steps: parseSteps(text), viewport: parsed.viewport, recorded: [...parsed.steps].filter(([, v]) => !v.problem).map(([n]) => n) };
+        // recorded：动作块和预期都录好了的步骤号，看板标「已录」；legacy：旧的按坐标录的记录
+        return { ops: opsSection(text), steps: parseSteps(text), viewport: parsed.viewport, legacy: parsed.legacy, recorded: [...parsed.steps].filter(([, v]) => !v.problem).map(([n]) => n) };
       } catch (err) {
         return { ops: '', steps: [], error: `读不到脚本文件 ${task.script}：${err.message}` };
       }
@@ -334,7 +342,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         let text = '';
         try { text = readFileSync(join(root, task.script), 'utf8'); } catch {}
         const problems = checkOps(text, { all: true });
-        if (problems.length) throw new AteamError('INVALID', `预演还不能算跑完，「## 操作记录」没录全：\n${problems.map((p) => `- ${p}`).join('\n')}\n\n把这些步补上（每步「### N.」条目 + \`\`\`cua 动作块），再运行 ateam demo end。实在走不通的步骤用 --stuck 结束。`);
+        if (problems.length) throw new AteamError('INVALID', `预演还不能算跑完，「## 操作记录」没录全：\n${problems.map((p) => `- ${p}`).join('\n')}\n\n把这些补上（开头「视口：宽x高」；每步「### N.」条目、\`\`\`actions 动作块和「预期：」行），再运行 ateam demo end。实在走不通的步骤用 --stuck 结束。`);
       }
       return { task: store.demoEnd(b.as, b.result, !!b.stuck) };
     },

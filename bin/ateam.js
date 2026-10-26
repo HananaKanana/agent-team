@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 // ateam 命令行：leader 和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -47,7 +45,6 @@ worker
   ateam demo step --as <ID> 3/12 "<这一步做什么>" [--slow]
   ateam demo end --as <ID> "<结果>" [--stuck]
   ateam demo save --as <ID> "<改了哪些操作记录>" [--no-changes]
-  ateam demo viewport T5 [--now 1600x760]   把 Chrome 窗口调到预演时的视口尺寸（用户也能直接运行）
 
 leader
   ateam job new "<标题>" [--desc-file f.md] [--origin-file 用户原话.md] [--demo]
@@ -615,82 +612,6 @@ const commands = {
     const summary = requireArg(positional[0], '总结', `ateam demo save --as ${as} "写了 12 步的操作记录"`);
     const { task, commit } = await request('POST', '/api/demo/save', { as, summary, noChanges: !!flags['no-changes'] });
     return `演播卡 ${task.id} 收尾完成（${commit ? `操作记录已提交 ${commit}` : '操作记录没有改动'}），已回到待演播。请运行：ateam wait --as ${as}`;
-  },
-
-  // 动作块的坐标按预演时的视口录的；视口不一致时按差值调 Chrome 最前面窗口的大小。
-  // 当前视口：--now 给出（worker 从截图结果读），否则用 AppleScript 在页面里读 innerWidth/innerHeight
-  // （要在 Chrome「查看 > 开发者 > 允许 Apple 事件中的 JavaScript」打开一次）。
-  async 'demo viewport'({ flags, positional }) {
-    const arg = requireArg(positional[0], '演播卡编号或目标尺寸', 'ateam demo viewport T5（或 ateam demo viewport 1694x808）');
-    const size = (v) => { const m = String(v).match(/^(\d{3,5})\s*[x×*]\s*(\d{3,5})$/); return m ? [Number(m[1]), Number(m[2])] : null; };
-    let target = size(arg);
-    if (!target) {
-      const ops = await request('GET', `/api/demo/ops?id=${encodeURIComponent(arg)}`);
-      if (!ops.viewport) fail(`${arg} 的操作记录里还没有「视口：」行（没预演过，或预演没录全），没法知道该调成多大。`);
-      target = size(ops.viewport);
-    }
-    if (process.platform !== 'darwin') fail('这个命令只支持 macOS（用 osascript 调 Chrome 窗口）。');
-    const osa = (script) => execFileSync('osascript', ['-e', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-    const getBounds = 'tell application "Google Chrome" to get bounds of front window';
-    const readJs = `tell application "Google Chrome" to execute active tab of front window javascript "innerWidth + 'x' + innerHeight + 'x' + outerWidth"`;
-    const readViewport = () => { try { return osa(readJs).split('x').map(Number); } catch { return null; } };
-    let bounds;
-    try { bounds = osa(getBounds).split(',').map((n) => Number(n.trim())); }
-    catch (err) { fail(`读不到 Chrome 窗口（Chrome 没开，或终端没有控制 Chrome 的权限：系统设置 > 隐私与安全性 > 自动化 里允许）。\n${err.stderr || err.message}`); }
-
-    let now = flags.now ? size(flags.now) : null;
-    if (flags.now && !now) fail(`--now 的格式是 宽x高，比如 --now 1600x760`);
-    const fromJs = now ? null : readViewport();
-    if (!now && fromJs) now = fromJs.slice(0, 2);
-    // 窗口外框比视口多出的宽高（标签栏、地址栏、提示条）：量到过一次就记在本机，
-    // 以后读不到视口时按「窗口大小 − 这个差」推算，不用每次都量
-    const frameFile = join(homedir(), '.ateam', 'chrome-frame.json');
-    let guessed = false;
-    if (now) {
-      try { mkdirSync(dirname(frameFile), { recursive: true }); writeFileSync(frameFile, JSON.stringify({ w: bounds[2] - bounds[0] - now[0], h: bounds[3] - bounds[1] - now[1] })); } catch {}
-    } else {
-      try {
-        const f = JSON.parse(readFileSync(frameFile, 'utf8'));
-        if (Number.isInteger(f.w) && Number.isInteger(f.h)) { now = [bounds[2] - bounds[0] - f.w, bounds[3] - bounds[1] - f.h]; guessed = true; }
-      } catch {}
-    }
-    const want = `${target[0]}x${target[1]}`;
-    if (!now) {
-      return [
-        `目标视口 ${want}，但还不知道现在的视口多大（本机第一次用，需要量一次）：`,
-        '',
-        `在演播页面按 Cmd+Option+J 打开控制台，手打 innerWidth+'x'+innerHeight 回车，得到比如 1600x760；关掉控制台再运行：`,
-        `  ateam demo viewport ${arg} --now 1600x760`,
-        '量过一次之后本机会记住 Chrome 工具栏的高度，以后直接运行本命令就能推算。',
-        '（也可以在 Chrome 菜单「显示 > 开发者 > 允许 Apple 事件中的 JavaScript」打勾，命令会自动读取；有的 Chrome 上这个开关点不动，那就用上面的办法。）',
-      ].join('\n');
-    }
-    const lines = [];
-    if (fromJs && fromJs[2] && Math.abs(fromJs[2] / fromJs[0] - 1) > 0.02 && Math.abs(fromJs[2] / fromJs[0] - 1) < 0.6) {
-      lines.push(`⚠ 网页好像被缩放了（不是 100%），先在 Chrome 里按 Cmd+0 恢复，再运行一次本命令。`);
-    }
-    const [dw, dh] = [target[0] - now[0], target[1] - now[1]];
-    if (guessed) lines.push('（当前视口是按上次量的 Chrome 工具栏高度推算的；书签栏、调试提示条的显示和上次不同会有偏差，worker 截图会再核对。）');
-    if (!dw && !dh) return [`视口已经是 ${want}，不用调。`, ...lines].join('\n');
-    const [x1, y1, x2, y2] = bounds;
-    const next = [x1, y1, x2 + dw, y2 + dh];
-    const setBounds = `tell application "Google Chrome" to set bounds of front window to {${next.join(', ')}}`;
-    osa(setBounds);
-    const after = osa(getBounds).split(',').map((n) => Number(n.trim()));
-    const checked = readViewport();
-    lines.unshift(
-      `现在视口 ${now.join('x')} → 目标 ${want}（宽 ${dw >= 0 ? '+' : ''}${dw}，高 ${dh >= 0 ? '+' : ''}${dh}）`,
-      `Chrome 窗口 {${bounds.join(', ')}} → {${after.join(', ')}}`,
-    );
-    if (after.join() !== next.join()) {
-      lines.push(`✗ 窗口没能调到 {${next.join(', ')}}，多半是屏幕放不下这么大。换到预演时用的屏幕，或在当前屏幕上重新预演。`);
-    } else if (checked) {
-      lines.push(checked[0] === target[0] && checked[1] === target[1] ? `✓ 已核对：视口现在是 ${want}` : `✗ 调整后视口是 ${checked[0]}x${checked[1]}，还不是 ${want}，再运行一次本命令`);
-    } else {
-      lines.push('窗口已调整；截一张图确认视口尺寸。');
-    }
-    lines.push('', '手动调整用的命令（可以复制）：', `  ${'osascript -e \''}${getBounds}'`, `  ${'osascript -e \''}${setBounds}'`);
-    return lines.join('\n');
   },
 
   async report({ flags }) {

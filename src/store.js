@@ -1,6 +1,6 @@
 // 纯逻辑状态机：需求、任务、worker、事件。不碰网络和磁盘，时钟可注入。
 import { AteamError } from './errors.js';
-import { stepsLabel } from './demo.js';
+import { stepsLabel, VIEWPORT_RE } from './demo.js';
 
 const KEEP_DELIVERED_EVENTS = 200;
 
@@ -26,6 +26,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     leaseMin: { type: 'num', min: 1, max: 240, def: () => defaultLeaseMs / 60000 },
     idleMin: { type: 'num', min: 1, max: 240, def: () => defaultIdleMs / 60000 },
     rejectLimit: { type: 'int', min: 1, max: 10, def: () => 3 },
+    // 演播视口：预演按它录，演播沿用这张卡预演时记下的尺寸
+    demoViewport: { type: 'size', def: () => '1600x800' },
   };
 
   function config() {
@@ -678,6 +680,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!spec) continue;
       if (value === null) { delete state.settings[key]; continue; }
       if (spec.type === 'bool') { state.settings[key] = !!value; continue; }
+      if (spec.type === 'size') {
+        const m = String(value).trim().toLowerCase().match(VIEWPORT_RE);
+        if (!m || [m[1], m[2]].some((v) => Number(v) < 320 || Number(v) > 7680)) throw new AteamError('INVALID', `${key} 要写成 宽x高，比如 1600x800（宽高在 320 到 7680 之间）。`);
+        state.settings[key] = `${Number(m[1])}x${Number(m[2])}`;
+        continue;
+      }
       const n = Number(value);
       if (!Number.isFinite(n) || n < spec.min || n > spec.max || (spec.type === 'int' && !Number.isInteger(n))) {
         throw new AteamError('INVALID', `${key} 必须是 ${spec.min} 到 ${spec.max} 之间的${spec.type === 'int' ? '整数' : '数'}。`);

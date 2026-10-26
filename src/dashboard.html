@@ -3750,12 +3750,15 @@ if (new URLSearchParams(location.search).has('inputlog')) {
   document.body.append(box);
   const lines = [];
   const desc = (t) => t && t.nodeType === 1 ? `${t.tagName.toLowerCase()}${t.className && typeof t.className === 'string' ? '.' + t.className.trim().split(/\s+/).join('.') : ''}` : String(t);
-  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click']) {
+  // 只记按下、抬起、点击，行数少一点好对照；另外标出「展开全部说明」按钮的位置
+  const where = () => { const b = document.querySelector('.job-head .more')?.getBoundingClientRect(); return b ? `展开按钮 x ${Math.round(b.left)}–${Math.round(b.right)}, y ${Math.round(b.top)}–${Math.round(b.bottom)}` : ''; };
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'click']) {
     addEventListener(type, (e) => {
       setTimeout(() => {
-        lines.push(`${new Date().toLocaleTimeString()} ${type}${e.pointerType ? ` [${e.pointerType}]` : ''} ${e.defaultPrevented ? '(拦下) ' : ''}${desc(e.target).slice(0, 60)}`);
+        const at = e.clientX != null ? ` @${Math.round(e.clientX)},${Math.round(e.clientY)}` : '';
+        lines.push(`${new Date().toLocaleTimeString()} ${type}${e.pointerType ? ` [${e.pointerType}]` : ''}${at} ${e.defaultPrevented ? '(拦下) ' : ''}${desc(e.target).slice(0, 50)}`);
         while (lines.length > 14) lines.shift();
-        box.textContent = lines.join('\n');
+        box.textContent = `${where()}\n${lines.join('\n')}`;
       }, 0);
     }, true);
   }

@@ -565,6 +565,7 @@ main.job-dropped .card .t { text-decoration: line-through; text-decoration-color
   color: var(--muted); font-size: 13px; font-weight: 600; text-align: left;
 }
 .accepted-toggle:hover { color: var(--ink); }
+.accepted-toggle .tag.live { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
 /* 已作废需求的提示条 */
 .job-cancelled { padding: 8px 12px; border-radius: 6px; font-size: 13px; line-height: 1.6; color: var(--muted);
   background: color-mix(in srgb, var(--faint) 10%, var(--surface)); box-shadow: inset 3px 0 0 var(--faint); }
@@ -2006,6 +2007,9 @@ function setNavCollapsed(on) {
   try { localStorage.setItem('ateam.navCollapsed', on ? '1' : '0'); } catch {}
   renderJobs();
 }
+// 演播需求一直是进行中，不和开发需求混在一起：单独一组，默认收起
+let demoJobsOpen = false;
+try { demoJobsOpen = localStorage.getItem('ateam.demoJobsOpen') === '1'; } catch {}
 // 已作废的需求：单独一组，默认收起
 let cancelledJobsOpen = false;
 try { cancelledJobsOpen = localStorage.getItem('ateam.cancelledJobsOpen') === '1'; } catch {}
@@ -2034,9 +2038,23 @@ function renderJobs() {
     jt.length ? strip(jt, false) : null);
   };
   const newest = jobs.slice().reverse();
-  const open = newest.filter((j) => j.status !== 'accepted' && j.status !== 'cancelled');
+  const open = newest.filter((j) => !j.demo && j.status !== 'accepted' && j.status !== 'cancelled');
+  const demos = newest.filter((j) => j.demo && j.status !== 'accepted' && j.status !== 'cancelled');
   const done = newest.filter((j) => j.status === 'accepted');
   const dropped = newest.filter((j) => j.status === 'cancelled');
+  // 收起时也提示正在预演 / 演播的
+  const liveDemo = demos.some((j) => tasks.some((t) => t.jobId === j.id && (t.status === 'queued' || t.status === 'demoing' || t.status === 'wrapping')));
+  const demoGroup = demos.length ? [
+    el('button', {
+      class: 'accepted-toggle', 'aria-expanded': demoJobsOpen ? 'true' : 'false',
+      onclick: () => {
+        demoJobsOpen = !demoJobsOpen;
+        try { localStorage.setItem('ateam.demoJobsOpen', demoJobsOpen ? '1' : '0'); } catch {}
+        renderJobs();
+      },
+    }, el('span', null, demoJobsOpen ? '▾' : '▸'), `演播（${demos.length}）`, liveDemo && !demoJobsOpen ? el('span', { class: 'tag live' }, '进行中') : null),
+    demoJobsOpen ? demos.map(jobItem) : null,
+  ] : [];
   const droppedGroup = dropped.length ? [
     el('button', {
       class: 'accepted-toggle', 'aria-expanded': cancelledJobsOpen ? 'true' : 'false',
@@ -2059,7 +2077,7 @@ function renderJobs() {
     }, el('span', null, acceptedOpen ? '▾' : '▸'), `已验收（${done.length}）`),
     acceptedOpen ? done.map(jobItem) : null,
   ] : [];
-  const empty = jobs.length ? (open.length ? [] : [emptyState('done', '需求都验收完了', '有新需求时直接跟 leader 说。')])
+  const empty = jobs.length ? (open.length || demos.length ? [] : [emptyState('done', '需求都验收完了', '有新需求时直接跟 leader 说。')])
     : [emptyState('inbox', '还没有需求', '对 leader 说出你的需求，它会在这里建立任务。')];
   document.querySelector('.layout').classList.toggle('nav-collapsed', navCollapsed);
   const toggle = el('button', {
@@ -2068,7 +2086,7 @@ function renderJobs() {
   }, icon('sidebar'));
   if (navCollapsed) {
     // 窄栏：进行中的需求 + 当前看的那个（可能在已验收里），只显示编号和进度，悬停看标题
-    const shown = open.slice();
+    const shown = [...open, ...demos.filter((j) => tasks.some((t) => t.jobId === j.id && ['queued', 'demoing', 'wrapping'].includes(t.status)))];
     const cur = jobs.find((j) => j.id === view.job);
     if (cur && !shown.includes(cur)) shown.push(cur);
     fill(nav, el('div', { class: 'nav-head' }, toggle), shown.map((j) => {
@@ -2080,10 +2098,10 @@ function renderJobs() {
         title: `${j.id} ${j.title}\n${j.demo ? `${jt.length} 张演播卡` : `${doneN}/${jt.length} 已通过`}`,
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
       }, j.id, el('i', { class: j.demo || !jt.length ? 'none' : '' }, el('i', { style: `width:${jt.length ? Math.round((doneN / jt.length) * 100) : 0}%` })));
-    }), done.length || dropped.length ? el('button', { class: 'job-mini more', title: `展开查看已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
+    }), done.length || dropped.length || demos.length ? el('button', { class: 'job-mini more', title: `展开查看演播 ${demos.length}、已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
     return;
   }
-  fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), open.map(jobItem), empty, doneGroup, droppedGroup);
+  fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), open.map(jobItem), empty, demoGroup, doneGroup, droppedGroup);
 }
 
 function renderMain() {

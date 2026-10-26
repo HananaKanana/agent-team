@@ -2022,7 +2022,7 @@ function setNavCollapsed(on) {
   try { localStorage.setItem('ateam.navCollapsed', on ? '1' : '0'); } catch {}
   renderJobs();
 }
-// 进行中的需求（规划中、进行中、待验收）：第一组，默认展开
+// 开发中的需求（规划中、进行中、待验收）：第一组，默认展开
 let openJobsOpen = true;
 try { openJobsOpen = localStorage.getItem('ateam.openJobsOpen') !== '0'; } catch {}
 // 演播需求一直是进行中，不和开发需求混在一起：单独一组，默认收起
@@ -2070,7 +2070,7 @@ function renderJobs() {
         try { localStorage.setItem('ateam.openJobsOpen', openJobsOpen ? '1' : '0'); } catch {}
         renderJobs();
       },
-    }, el('span', null, openJobsOpen ? '▾' : '▸'), `进行中（${open.length}）`),
+    }, el('span', null, openJobsOpen ? '▾' : '▸'), `开发中（${open.length}）`),
     openJobsOpen ? open.map(jobItem) : null,
   ] : [];
   const demoGroup = demos.length ? [

@@ -507,11 +507,12 @@ html.prompter-only .prompter-strip > .say { flex: 0 1 auto; min-height: 0; displ
 .nav-collapsed nav.jobs { padding: 12px 8px; align-items: center; gap: 4px; }
 .nav-collapsed .nav-head { justify-content: center; margin: 0 0 6px; }
 .job-mini {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; width: 48px; padding: 8px 0 7px; border: 0; border-radius: 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 46px; height: 40px; padding: 0; border: 0; border-radius: 6px;
   background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .job-mini:hover { background: var(--sunken); color: var(--ink); }
 .job-mini[aria-current="true"] { background: var(--raised); color: var(--brand-ink); box-shadow: inset 3px 0 0 var(--brand), 0 0 0 1px color-mix(in srgb, var(--brand) 45%, transparent); }
+.job-mini > i.none { visibility: hidden; }
 .job-mini > i { display: block; width: 28px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--faint) 25%, transparent); overflow: hidden; }
 .job-mini > i > i { display: block; height: 100%; background: var(--working); }
 .job-mini.ok > i > i { background: var(--approved); }
@@ -648,8 +649,26 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .acts .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .acts .what .key { color: var(--muted); margin-right: 6px; }
 .acts .what .who { color: var(--faint); font-size: 12px; margin-left: 8px; }
+/* 说明 + 展开：宽屏照常上下排 */
+.desc-row { display: contents; }
+.side-strip { display: none; }
+.side-strip .strip { margin: 0; }
 /* 窄屏：概览卡挪到说明下面，自己撑高；数字和角色进度并排 */
 @media (max-width: 1180px) {
+  .job-head h2.job-title { font-size: 19px; }
+  /* 说明收起时只露一行，「展开全部说明」接在行尾 */
+  .job-head .desc-row:has(.desc.clamped) { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .job-head .desc-row .desc.clamped { flex: 1; min-width: 0; max-height: 1.7em; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .job-head .desc-row .desc.clamped > * { margin: 0; }
+  .job-head .desc-row:has(.desc.clamped) .more { flex: none; white-space: nowrap; }
+  /* 任务进度条进概览卡，下面那条不显示 */
+  .side-strip { display: block; flex: 1 1 100%; }
+  main > .progress { display: none; }
+  /* 顶部 worker：只留头像和任务号，名字在悬停提示里；放不下横向滑，不换行 */
+  .workers { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
+  .workers::-webkit-scrollbar { display: none; }
+  .worker > b, .worker .wid, .worker > .role-text { display: none; }
+  .worker { gap: 6px; padding-right: 10px; }
   .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .job-side { min-height: 0; }
   /* 高度由内容撑开（不能跟宽屏一样 height:100%，Safari 会按旧高度算，把下面裁掉）；
@@ -830,7 +849,7 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .link-btn { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--brand); cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
 .side-hold {
-  position: absolute; top: 10px; right: 10px; z-index: 1; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 8px;
+  position: absolute; top: -12px; right: 14px; z-index: 2; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 8px;
   border: 0; border-radius: 12px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted);
   font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; opacity: 0; transition: opacity .15s ease, background-color .15s ease, color .15s ease;
 }
@@ -845,7 +864,8 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .lane.held h3::before { background: var(--asking); }
 .lane.held .card { opacity: .62; }
 .lane.held .card:hover { opacity: 1; }
-.tag.hold svg { width: 9px; height: 9px; margin-right: 3px; }
+.tag.hold { width: 18px; justify-content: center; padding: 0; }
+.tag.hold svg { width: 9px; height: 9px; }
 .tag.paused { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); font-weight: 600; }
 .btn.pause-btn svg { width: 13px; height: 13px; flex: none; }
 .prompter-strip .head .strip-pause {
@@ -1411,7 +1431,7 @@ function renderWorkers() {
     el('span', { class: 'av' }, avText(a.name || a.id)),
     // 新编号本身带角色（frontend-2），就不再单独写角色，只按角色上色；老编号（fr-cbb7）照旧显示角色
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
-    a.name ? el('span', { class: 'task' }, a.id) : null,
+    a.name ? el('span', { class: 'task wid' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     el('span', { class: 'task' }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
   );
@@ -1979,7 +1999,7 @@ function renderJobs() {
         'aria-current': view.job === j.id ? 'true' : 'false',
         title: `${j.id} ${j.title}\n${j.demo ? `${jt.length} 张演播卡` : `${doneN}/${jt.length} 已通过`}`,
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
-      }, j.id, j.demo || !jt.length ? null : el('i', null, el('i', { style: `width:${Math.round((doneN / jt.length) * 100)}%` })));
+      }, j.id, el('i', { class: j.demo || !jt.length ? 'none' : '' }, el('i', { style: `width:${jt.length ? Math.round((doneN / jt.length) * 100) : 0}%` })));
     }), done.length || dropped.length ? el('button', { class: 'job-mini more', title: `展开查看已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
     return;
   }
@@ -2016,12 +2036,14 @@ function renderMain() {
       el('button', { class: 'link-btn', onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, false); } }, '恢复领取')) : null,
     job.status === 'cancelled' ? el('div', { class: 'job-cancelled' },
       `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的卡和代码保留，没做完的卡已作废。`) : null,
-    job.description ? (() => {
-      const box = el('div', { class: `desc md${longDesc && !descOpen ? ' clamped' : ''}` });
-      box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
-      return box;
-    })() : null,
-    longDesc ? el('button', { class: 'more', onclick: () => { descOpenJob = descOpen ? null : job.id; renderMain(); } }, descOpen ? '收起说明' : '展开全部说明') : null,
+    // 说明和「展开」放一组：宽屏上下排（desc-row 是 display: contents）；窄屏收起时只露一行，「展开」接在行尾
+    el('div', { class: 'desc-row' },
+      job.description ? (() => {
+        const box = el('div', { class: `desc md${longDesc && !descOpen ? ' clamped' : ''}` });
+        box.innerHTML = renderMarkdown(job.description); // renderMarkdown 先转义了 HTML
+        return box;
+      })() : null,
+      longDesc ? el('button', { class: 'more', onclick: () => { descOpenJob = descOpen ? null : job.id; renderMain(); } }, descOpen ? '收起说明' : '展开全部说明') : null),
     job.origin ? el('details', { class: 'origin-box' },
       el('summary', null, '你提需求时的原话'),
       (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null];
@@ -2115,8 +2137,10 @@ function jobSide(job, tasks, collapsed) {
     title: job.onHold ? '这个需求待领取的卡暂停派发中。点一下恢复' : '这个需求待领取的卡（包括之后新加的）先不派发，正在做的不受影响',
     onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
   }, icon(job.onHold ? 'play' : 'pause'), job.onHold ? '已暂停 · 恢复' : '暂停领取');
-  return el('aside', { class: `job-side${shown.length ? '' : ' bare'}`, 'aria-label': '概览和最近动态' },
-    el('div', { class: 'inner' }, holdBtn,
+  return el('aside', { class: `job-side${shown.length ? '' : ' bare'}`, 'aria-label': '概览和最近动态' }, holdBtn,
+    el('div', { class: 'inner' },
+      // 窄屏：任务进度条放进概览卡底部，不在下面单独占一行（宽屏隐藏，用卡片下面那条）
+      tasks.length ? el('div', { class: 'side-strip' }, strip(tasks, true)) : null,
       el('div', { class: 'kpis' },
         kpi([`${st.approved}`, el('small', null, `/${tasks.length}`)], '已通过'),
         kpi(`${st.reviews}`, 'review'),
@@ -2204,7 +2228,7 @@ function card(t, lane) {
   },
     el('div', { class: 't' }, t.title),
     el('div', { class: 'flags' },
-      waiting && t.onHold ? el('span', { class: 'tag hold', title: `这张卡暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}` }, icon('pause'), '暂停领取') : null,
+      waiting && t.onHold ? el('span', { class: 'tag hold', title: `这张卡暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,

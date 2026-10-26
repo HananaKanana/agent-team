@@ -839,6 +839,7 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .card .flags > .tags { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
 .card .flags > .tags:empty { display: none; }
 .card .flags > .tags > * { flex: none; }
+.card .flags > .tags.tight .opt { display: none; }
 .card .flags > .tags.clip { -webkit-mask-image: linear-gradient(to left, transparent 0, #000 14px); mask-image: linear-gradient(to left, transparent 0, #000 14px); }
 .card .foot { flex: none; margin-top: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); min-width: 0; }
 .card .key { font-weight: 600; color: var(--muted); }
@@ -2382,12 +2383,12 @@ function card(t, lane) {
         const to = t.parkedFor || lastClaimSince(t.assignee, t.parked);
         const gone = to && data.state.tasks.find((x) => x.id === to)?.status === 'cancelled';
         return el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先放下这张卡、转去做${to ? ` ${to}${gone ? '（已作废）' : ''}` : '别的卡'}了；leader 回来处理后交回给它` },
-          '转做', to ? el('span', { class: gone ? 'gone' : '' }, ` ${to}`) : null);
+          '转做', to ? [el('span', { class: 'opt' }, ' '), el('span', { class: gone ? 'gone' : '' }, to)] : null);
       })() : null,
       !t.parked && data.leader?.away && (t.status === 'asking' || t.status === 'submitted')
         ? el('span', { class: 'tag leader-wait', title: `无 leader 模式：等 leader 回来${t.status === 'asking' ? '答复' : ' review'}。${agentName(t.assignee)} 现在没有别的卡能做（同角色的卡都在等依赖，或者和这张改同一批文件），所以还拿着它；一有能做的卡就放下这张、转做那张` }, '等 leader') : null,
       t.returnTo && waiting ? el('span', { class: 'tag assigned', title: `挂起后被 leader 处理，留给原来的 ${t.returnTo} 接着做（它不在线就谁都能领）` }, `留给 ${agentName(t.returnTo)}`) : null,
-      t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,
+      t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount}`, el('span', { class: 'opt' }, ' 次')) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
       critiqueTag(t)),
       lane === 'cancelled' ? null : laneTime(t, lane)),
@@ -3527,9 +3528,15 @@ themeBtn.addEventListener('click', () => {
   try { localStorage.setItem('ateam.theme', next); } catch {}
 });
 
-// 卡片的标签一行放不下时才加渐隐（没溢出时不该把最后一个标签的右边淡掉）
+// 卡片的标签一行放不下时：先压缩（去掉「次」和多余空格），还放不下才加渐隐。放得下就照常显示全
 function clipCardTags() {
-  for (const n of document.querySelectorAll('.card .flags > .tags')) n.classList.toggle('clip', n.scrollWidth > n.clientWidth + 1);
+  const over = (n) => n.scrollWidth > n.clientWidth + 1;
+  for (const n of document.querySelectorAll('.card .flags > .tags')) {
+    n.classList.remove('tight', 'clip');
+    if (!over(n)) continue;
+    n.classList.add('tight');
+    if (over(n)) n.classList.add('clip');
+  }
 }
 addEventListener('resize', () => clipCardTags());
 

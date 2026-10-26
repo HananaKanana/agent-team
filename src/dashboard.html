@@ -3240,9 +3240,11 @@ function rolesNeedingWorkers() {
   const { tasks, agents } = data.state;
   const approved = new Set(tasks.filter((t) => t.status === 'approved').map((t) => t.id));
   const onlineRoles = new Set(agents.filter((a) => a.status === 'online').map((a) => a.role.trim().toLowerCase()));
+  // 暂停领取的卡（单张或整个需求）不派发，不算缺人
+  const heldJobs = new Set(data.state.jobs.filter((j) => j.onHold).map((j) => j.id));
   const byRole = new Map();
   for (const t of tasks) {
-    if (t.status !== 'pending' || !t.dependsOn.every((d) => approved.has(d))) continue;
+    if (t.status !== 'pending' || t.onHold || heldJobs.has(t.jobId) || !t.dependsOn.every((d) => approved.has(d))) continue;
     if (onlineRoles.has(t.role.trim().toLowerCase())) continue;
     if (!byRole.has(t.role)) byRole.set(t.role, []);
     byRole.get(t.role).push(t);

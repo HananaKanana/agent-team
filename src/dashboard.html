@@ -1186,7 +1186,7 @@ const HISTORY = {
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
   demo_ended: ['运行结束', 'approved'], demo_saved: ['操作记录', 'approved'],
-  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['暂放', 'held'],
+  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做别的卡', 'held'],
 };
 // 演播卡的状态：名称、lozenge 颜色
 const DEMO_STATUS = { ready: ['待演播', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演播中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
@@ -1446,7 +1446,7 @@ function renderWorkers() {
     title: leader.online && !leader.away
       ? (leader.watching ? 'leader 在线，正在监听事件。点击查看 leader 的提示词' : `leader ${ago(leader.lastSeenAt)}操作过，但没有在监听事件。点击查看提示词`)
       : leader.away
-        ? `无 leader 模式（${fmtTime(leader.away.since)} 起，${leader.away.by === 'user' ? '你宣布 leader 下线' : 'leader 掉线了'}）：等答复、待 review 的卡暂放，worker 先做没有依赖的卡；leader 回来后自动恢复。点击查看加入的提示词`
+        ? `无 leader 模式（${fmtTime(leader.away.since)} 起，${leader.away.by === 'user' ? '你宣布 leader 下线' : 'leader 掉线了'}）：等答复、待 review 的卡先放下，worker 转做没有依赖的卡；leader 回来后自动恢复。点击查看加入的提示词`
         : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
     onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
   }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: 'task' }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
@@ -1524,10 +1524,10 @@ function leaderCard() {
     el('div', { class: 'wcard-head' },
       el('span', { class: 'av' }, 'L'),
       el('span', { class: 'grow' }, el('span', { class: 'who-line' }, el('b', null, 'leader'), el('span', { class: 'hint' }, state))),
-      el('button', { class: 'btn ghost sm', title: away ? '退出无 leader 模式，暂放的卡等 leader 处理' : '进入无 leader 模式', onclick: (e) => { e.stopPropagation(); setLeaderAway(!away); } }, away ? '恢复' : '下线')),
+      el('button', { class: 'btn ghost sm', title: away ? '退出无 leader 模式，放下的卡等 leader 处理' : '进入无 leader 模式', onclick: (e) => { e.stopPropagation(); setLeaderAway(!away); } }, away ? '恢复' : '下线')),
     el('p', { class: 'hint' }, away
       ? `等答复、待 review 的卡挂起，worker 先做没有依赖、不改同一批文件的卡。${away.by === 'user' ? 'leader 执行任何命令（后台监听不算）' : 'leader 重新挂上监听或执行命令'}会自动恢复。`
-      : 'leader 的 token 用完、暂时回不来时点「下线」：进入无 leader 模式，worker 不再干等，把等答复、待 review 的卡暂放，先去做没有依赖、不改同一批文件的卡。leader 回来执行任何命令就自动恢复，按顺序答复和 review，卡交回原来的 worker。设置里可以打开「掉线时自动进入」。'),
+      : 'leader 的 token 用完、暂时回不来时点「下线」：进入无 leader 模式，worker 不再干等，先放下等答复、待 review 的卡，转做没有依赖、不改同一批文件的卡。leader 回来执行任何命令就自动恢复，按顺序答复和 review，卡交回原来的 worker。设置里可以打开「掉线时自动进入」。'),
     leader.online || away ? promptBlock(leadWakePrompt(), renderHelper) : el('p', { class: 'hint' }, 'leader 没有连接：用 ① 里那句话重新开一个。'));
 }
 function leadWakePrompt() {
@@ -2363,9 +2363,13 @@ function card(t, lane) {
       waiting && t.onHold ? el('span', { class: 'tag hold icon-only', title: `这张卡暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
-      t.parked ? el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先把这张卡暂放、去做别的卡了；leader 回来处理后交回给它` }, '暂放') : null,
+      t.parked ? (() => {
+        // 先放下这张、转去做别的卡：标出它现在在做哪张；它手上没卡（空闲、掉线）就只写「转做别的」
+        const now = data.state.agents.find((a) => a.id === t.assignee)?.currentTask;
+        return el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先放下这张卡、转去做${now ? ` ${now}` : '别的卡'}了；leader 回来处理后交回给它` }, now ? `转做 ${now}` : '转做别的');
+      })() : null,
       !t.parked && data.leader?.away && (t.status === 'asking' || t.status === 'submitted')
-        ? el('span', { class: 'tag leader-wait', title: `无 leader 模式：等 leader 回来${t.status === 'asking' ? '答复' : ' review'}。${agentName(t.assignee)} 现在没有别的卡能做（同角色的卡都在等依赖，或者和这张改同一批文件），所以还拿着它；一有能做的卡就暂放这张、先去做那张` }, '等 leader') : null,
+        ? el('span', { class: 'tag leader-wait', title: `无 leader 模式：等 leader 回来${t.status === 'asking' ? '答复' : ' review'}。${agentName(t.assignee)} 现在没有别的卡能做（同角色的卡都在等依赖，或者和这张改同一批文件），所以还拿着它；一有能做的卡就放下这张、转做那张` }, '等 leader') : null,
       t.returnTo && waiting ? el('span', { class: 'tag assigned', title: `挂起后被 leader 处理，留给原来的 ${t.returnTo} 接着做（它不在线就谁都能领）` }, `留给 ${agentName(t.returnTo)}`) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
@@ -3643,7 +3647,7 @@ function attentionItems() {
   const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
   if (busy && data.leader && (data.leader.away || !data.leader.online)) {
     items.push(data.leader.away
-      ? { key: 'leader', text: '无 leader 模式', body: 'leader 不在线：等答复、待 review 的卡暂放，worker 先做没有依赖的卡。leader 回来后会按顺序处理' }
+      ? { key: 'leader', text: '无 leader 模式', body: 'leader 不在线：等答复、待 review 的卡先放下，worker 转做没有依赖的卡。leader 回来后会按顺序处理' }
       : { key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
   }
   return items;

@@ -244,8 +244,8 @@ export function formatWait(result, agentId, waiting, round = 0) {
       break;
     case 'back': {
       const rejected = delivery?.kind === 'rejected';
-      out = `# 暂放的任务回来了 ${title}\n\n`
-        + `leader 不在线时你把这张卡暂放、先去做了别的卡；现在 leader ${rejected ? '打回了它' : '答复了你的提问'}，交回给你接着做。`
+      out = `# 转做前放下的任务回来了 ${title}\n\n`
+        + `leader 不在线时你放下这张卡、转做了别的卡；现在 leader ${rejected ? '打回了它' : '答复了你的提问'}，交回给你接着做。`
         + '你中间做过别的卡：先在任务路径所在的仓库里 git status、git log --oneline -5 看清现状，只改这张卡的路径。\n\n'
         + (rejected ? `## 修改意见（第 ${task.rejectCount} 次打回）\n\n${delivery.text}\n\n逐条修改后再次提交。\n\n` : `## 答复\n\n${delivery?.text ?? ''}\n\n按答复继续。\n\n`)
         + `## 任务\n\n${formatTask(task)}`;
@@ -263,7 +263,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
       out = `# ${kind} ${title}\n\n${formatTask(task)}`;
   }
   if (result.parked?.length) {
-    out += `\n\n## 你暂放的卡：${result.parked.join('、')}\n\nleader 现在不在线，这些卡在等答复或 review，先放着，**不要再改它们的文件**。leader 回来处理后，答复或打回会作为新任务交回给你；通过了就不用管。`;
+    out += `\n\n## 你转做前放下的卡：${result.parked.join('、')}\n\nleader 现在不在线，这些卡在等答复或 review，先放着，**不要再改它们的文件**。leader 回来处理后，答复或打回会作为新任务交回给你；通过了就不用管。`;
   }
   if (result.job) {
     out += `\n\n## 所属需求 ${result.job.id}：${result.job.title}\n\n${result.job.description}`;
@@ -564,7 +564,7 @@ export function formatStatus(state, pending, jobId, root, repos, showAll = false
     for (const t of live) {
       const named = state.agents.find((a) => a.id === t.assignee)?.name;
       const who = t.assignee ? `，${named ? `${named}（${t.assignee}）` : t.assignee}` : '';
-      const flags = [t.assignTo && (t.status === 'pending' || t.status === 'held') ? `用户指派给 ${t.assignTo}` : '', t.priority && t.status === 'pending' ? '优先' : '', t.onHold && (t.status === 'pending' || t.status === 'held') ? `暂停领取${t.onHold.reason ? `（${t.onHold.reason}）` : ''}` : '', t.parked ? `暂放（${t.assignee} 先去做别的卡了，处理后交回它）` : '', t.returnTo && t.status === 'pending' ? `留给 ${t.returnTo}` : '', t.handoff && !t.returnTo ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
+      const flags = [t.assignTo && (t.status === 'pending' || t.status === 'held') ? `用户指派给 ${t.assignTo}` : '', t.priority && t.status === 'pending' ? '优先' : '', t.onHold && (t.status === 'pending' || t.status === 'held') ? `暂停领取${t.onHold.reason ? `（${t.onHold.reason}）` : ''}` : '', t.parked ? `${t.assignee} 转做别的卡了（处理后交回它）` : '', t.returnTo && t.status === 'pending' ? `留给 ${t.returnTo}` : '', t.handoff && !t.returnTo ? '待接手' : '', t.rejectCount ? `打回 ${t.rejectCount} 次` : ''].filter(Boolean).join('，');
       lines.push(`- ${t.id} [${statusLabel(t.status)}] ${t.title}（${t.role}${who}）${flags ? ` ${flags}` : ''}`);
     }
     const cancelled = tasks.filter((t) => t.status === 'cancelled');

@@ -834,11 +834,12 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   flex: none; font-size: 13.5px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.card .flags {
-  flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin-top: 6px; min-height: 18px; overflow: hidden;
-  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 14px); mask-image: linear-gradient(to left, transparent 0, #000 14px);
-}
+.card .flags { flex: none; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin-top: 6px; min-height: 18px; overflow: hidden; }
 .card .flags > * { flex: none; }
+.card .flags > .tags { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.card .flags > .tags:empty { display: none; }
+.card .flags > .tags > * { flex: none; }
+.card .flags > .tags.clip { -webkit-mask-image: linear-gradient(to left, transparent 0, #000 14px); mask-image: linear-gradient(to left, transparent 0, #000 14px); }
 .card .foot { flex: none; margin-top: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); min-width: 0; }
 .card .key { font-weight: 600; color: var(--muted); }
 .card.c-approved .key { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
@@ -2145,6 +2146,7 @@ function renderJobs() {
 }
 
 function renderMain() {
+  requestAnimationFrame(clipCardTags); // 画完再量标签有没有溢出
   const main = document.getElementById('main');
   const job = data.state.jobs.find((j) => j.id === view.job);
   // 已作废的需求：代码还在、但需求不算了。卡片状态照实保留，整页置灰、卡片标题划掉
@@ -2370,6 +2372,8 @@ function card(t, lane) {
   },
     el('div', { class: 't' }, t.title),
     el('div', { class: 'flags' },
+      // 标签放不下时只裁标签（右边渐隐），后面的计时始终完整显示
+      el('span', { class: 'tags' },
       waiting && t.onHold ? el('span', { class: 'tag hold icon-only', title: `这张卡暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
@@ -2385,7 +2389,7 @@ function card(t, lane) {
       t.returnTo && waiting ? el('span', { class: 'tag assigned', title: `挂起后被 leader 处理，留给原来的 ${t.returnTo} 接着做（它不在线就谁都能领）` }, `留给 ${agentName(t.returnTo)}`) : null,
       t.rejectCount ? el('span', { class: 'tag warn' }, `打回 ${t.rejectCount} 次`) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
-      critiqueTag(t),
+      critiqueTag(t)),
       lane === 'cancelled' ? null : laneTime(t, lane)),
     el('div', { class: 'foot' },
       top ? icon('top', 'top') : null,
@@ -3522,6 +3526,12 @@ themeBtn.addEventListener('click', () => {
   applyTheme(next);
   try { localStorage.setItem('ateam.theme', next); } catch {}
 });
+
+// 卡片的标签一行放不下时才加渐隐（没溢出时不该把最后一个标签的右边淡掉）
+function clipCardTags() {
+  for (const n of document.querySelectorAll('.card .flags > .tags')) n.classList.toggle('clip', n.scrollWidth > n.clientWidth + 1);
+}
+addEventListener('resize', () => clipCardTags());
 
 function render() {
   if (!data) return;

@@ -25,6 +25,13 @@ export function withoutOps(markdown) {
     .join('\n');
 }
 
+// 清空 worker 段：保留「## 操作记录」标题，正文换成空；老的「## 经验」段并进来。没有就在末尾加一段
+export function clearOps(markdown) {
+  const secs = sections(markdown);
+  const kept = secs.filter((s) => !OPS_TITLES.has(s.title)).map((s) => s.lines.join('\n').replace(/\s+$/, '')).filter(Boolean);
+  return `${kept.join('\n\n')}\n\n## 操作记录\n`;
+}
+
 // worker 段的正文（不含标题），没有则空串
 export function opsSection(markdown) {
   return sections(markdown).filter((s) => OPS_TITLES.has(s.title))

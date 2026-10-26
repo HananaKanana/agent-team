@@ -1673,6 +1673,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
+  // 预演开始时服务清空了操作记录（opsCleared）。跑完并提交 → 去掉标记；没跑完 → 服务从 git 还原后去掉标记
+  function markOpsCleared(taskId, on) {
+    const task = getTask(taskId);
+    if (on) task.opsCleared = now();
+    else delete task.opsCleared;
+    changed();
+    return task;
+  }
+
   // 用户在看板上「结束收尾」：worker 迟迟不收尾（卡住、窗口没了）时，卡直接回到待演播，不等它。
   // worker 下次调用演播命令时被告知停手（demoReleased）
   function releaseDemo(taskId) {
@@ -1740,6 +1749,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
     pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
-    addDemo, demoBlockers, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
+    addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };
 }

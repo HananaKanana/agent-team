@@ -610,8 +610,9 @@ const commands = {
   async 'demo save'({ flags, positional }) {
     const as = requireAs(flags);
     const summary = requireArg(positional[0], '总结', `ateam demo save --as ${as} "写了 12 步的操作记录"`);
-    const { task, commit } = await request('POST', '/api/demo/save', { as, summary, noChanges: !!flags['no-changes'] });
-    return `演播卡 ${task.id} 收尾完成（${commit ? `操作记录已提交 ${commit}` : '操作记录没有改动'}），已回到待演播。请运行：ateam wait --as ${as}`;
+    const { task, commit, restored } = await request('POST', '/api/demo/save', { as, summary, noChanges: !!flags['no-changes'] });
+    const what = restored ? '预演没跑完，这次写的操作记录不保存，已还原成上一版' : commit ? `操作记录已提交 ${commit}` : '操作记录没有改动';
+    return `演播卡 ${task.id} 收尾完成（${what}），已回到待演播。请运行：ateam wait --as ${as}`;
   },
 
   async report({ flags }) {

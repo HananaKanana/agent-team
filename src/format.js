@@ -315,15 +315,13 @@ function formatDemoWait(result, agentId) {
       '',
       ...[
         viewportRule(script?.viewport ?? '1600x800', agentId),
-        script?.legacy
-          ? '先按「## 准备」段检查状态（有上次残留的「演示-」数据，按准备段处理）。**「## 操作记录」里是旧格式（按坐标录的），作废**：这次按下面的新格式整段重写。'
-          : '先按「## 准备」段检查状态（有上次残留的「演示-」数据，按准备段处理）。「## 操作记录」里已有内容（以前预演过），可以参考，但这次要重新走一遍、核实并改正。',
+        `先按「## 准备」段检查状态（有上次残留的「演示-」数据，按准备段处理）。**「## 操作记录」已经清空**，这次从头写，每一步都要在 ${script?.viewport ?? '1600x800'} 下实际走通、核对过才写进去。${script?.oldViewport && !script?.legacy ? `上一版（视口 ${script.oldViewport}）可以用 git show HEAD:${script.path} 看，只作参考，不要照抄。` : ''}预演跑完才提交新记录；没跑完（走不通、被叫停）服务会把操作记录还原成上一版。`,
         report,
         '每一步都确认走通了（预期对得上），再做下一步。每步之间按脚本写的秒数停留。',
-        '**每走通一步，就马上把这一步写进「## 操作记录」**（不要等到最后，中途停下也要留下已走通的）：',
+        '**每走通一步，就马上把这一步写进「## 操作记录」**（不要等到最后）：',
         ...OPS_FORMAT.map((l) => `   ${l}`),
         ...common,
-        `某一步怎么也走不通（功能没了、页面报错、数据不对）：把已走通的写好，停在当前页面，ateam demo end --as ${agentId} --stuck "<卡在第几步、为什么>"。`,
+        `某一步怎么也走不通（功能没了、页面报错、数据不对）：停在当前页面，ateam demo end --as ${agentId} --stuck "<卡在第几步、为什么>"。`,
         `全部走通：ateam demo end --as ${agentId} "<结果>"，然后按收到的「# 预演收尾」做。`,
       ].map(((n) => (l) => (l.startsWith('   ') ? l : `${++n}. ${l}`))(0)),
     ].join('\n') + scriptBlock;
@@ -368,9 +366,9 @@ function formatDemoWait(result, agentId) {
       '',
       `用户叫停了${word}。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。`,
       '',
-      rehearsal ? '把这次已经走通的步骤写进「## 操作记录」（格式见下）。' : '这次走了慢档的步骤，把新做法更新进「## 操作记录」；没有就不用改。',
-      ...(rehearsal ? OPS_FORMAT : []),
-      ...commitLines,
+      ...(rehearsal
+        ? ['预演没跑完，这次写的操作记录不保存，服务会还原成上一版，你不用再写。', `直接运行 ateam demo save --as ${agentId} "预演被叫停"，然后回到 ateam wait。`]
+        : ['这次走了慢档的步骤，把新做法更新进「## 操作记录」；没有就不用改。', ...commitLines]),
     ].join('\n') + scriptBlock;
   } else {
     const done = result.outcome === 'done';
@@ -386,11 +384,15 @@ function formatDemoWait(result, agentId) {
         ? `${word}已经跑完。先执行脚本的「## 清理」段：只删名称以「演示-」开头、且标了【数据：清理】的数据，别的一概不动。${only ? '这一场是从中间开始演的，有的数据这一场没造过，找不到就跳过。' : ''}`
         : `这次${word}${result.outcome === 'interrupted' ? '没走通，停住了' : '被叫停了'}，**不要清理数据**，残留留给下次的「## 准备」段处理。`,
       '',
-      rehearsal
-        ? (done ? '确认「## 操作记录」每一步都写全了（格式见下），有遗漏补上。' : '确认已走通的步骤都写进了「## 操作记录」（格式见下）。')
-        : '把走了慢档的步骤的新做法和新动作块更新进「## 操作记录」（覆盖原来那条，动作块格式见预演规则）；没有走慢档就不用改，直接 --no-changes。',
-      ...(rehearsal ? OPS_FORMAT : []),
-      ...commitLines,
+      ...(rehearsal && !done
+        ? ['预演没跑完，这次写的操作记录不保存，服务会还原成上一版，你不用再写。', `直接运行 ateam demo save --as ${agentId} "<没走通的原因>"，然后回到 ateam wait。`]
+        : [
+          rehearsal
+            ? '确认「## 操作记录」每一步都写全了（格式见下），有遗漏补上。'
+            : '把走了慢档的步骤的新做法和新动作块更新进「## 操作记录」（覆盖原来那条，动作块格式见预演规则）；没有走慢档就不用改，直接 --no-changes。',
+          ...(rehearsal ? OPS_FORMAT : []),
+          ...commitLines,
+        ]),
     ].join('\n') + scriptBlock;
   }
   if (result.rules) out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;

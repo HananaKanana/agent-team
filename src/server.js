@@ -12,7 +12,7 @@ import { createStore } from './store.js';
 import { addRule, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
-import { checkOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
+import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
 const PROMPTER_JXA = join(dirname(fileURLToPath(import.meta.url)), 'prompter.jxa');
@@ -183,6 +183,18 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   }
   // 会领卡的角色。审卡 worker（critic）不收项目规则，不算在内：写了 ## critic 段会被提示没人收到
   const knownRoles = () => [...new Set([...store.state.tasks, ...store.state.agents].map((x) => x.role).filter(Boolean).map((r) => r.trim().toLowerCase()))].filter((r) => r !== 'critic').sort();
+  // 预演开始时清空的操作记录：预演没跑完（走不通、叫停、结束收尾）卡回到待演播时，从 git 还原成上一版
+  async function restoreOps(task) {
+    const head = await headContent(root, task.script);
+    if (head !== null) writeFileSync(join(root, task.script), head);
+    store.markOpsCleared(task.id, false);
+  }
+  const settleOps = () => serial(async () => {
+    for (const t of store.state.tasks) {
+      if (t.kind === 'demo' && t.opsCleared && t.status === 'ready') await restoreOps(t);
+    }
+  });
+
   // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
   // 和项目规则（长期有效的约定）
   function withRules(result) {
@@ -205,6 +217,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       out.script.only = runs[runs.length - 1]?.steps ?? null;
       // 目标视口：预演用开始时选的尺寸；演播沿用这张卡预演时记下的尺寸。legacy：旧的按坐标录的记录，要整段重写
       const ops = parseOps(out.script.text);
+      // 预演一开始就清空操作记录，worker 从头写；上一版留在 git 里，预演没跑完时还原（见 settleOps）
+      if (out.script.mode === 'rehearsal' && result.kind === 'demo' && !result.task.opsCleared && !out.script.error) {
+        out.script.text = clearOps(out.script.text);
+        writeFileSync(join(root, result.task.script), out.script.text);
+        store.markOpsCleared(result.task.id, true);
+        out.script.hasOps = false;
+        out.script.cleared = true;
+        out.script.oldViewport = ops.viewport;
+      }
       const fallback = store.config().demoViewport;
       out.script.viewport = out.script.mode === 'rehearsal' ? (runs[runs.length - 1]?.viewport ?? fallback) : (ops.viewport ?? fallback);
       out.script.legacy = ops.legacy;
@@ -323,8 +344,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return { task: store.addDemo({ jobId: b.jobId, title: b.title, script, role: b.role }) };
     },
     // steps：演播只演这几步。总步数从脚本读，读不到就交给 store 拒绝
-    'POST /api/demo/start': (b) => {
+    'POST /api/demo/start': async (b) => {
       const id = requireId(b);
+      await settleOps();
       let total = null;
       let text = null;
       try { text = readFileSync(join(root, store.getTask(id).script), 'utf8'); } catch {}
@@ -335,7 +357,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total, b.viewport ?? null) };
     },
-    'GET /api/demo/ops': (_b, url) => {
+    'GET /api/demo/ops': async (_b, url) => {
+      await settleOps();
       const task = store.getTask(url.searchParams.get('id') ?? '');
       if (task.kind !== 'demo') throw new AteamError('INVALID', `任务 ${task.id} 不是演播卡。`);
       // ops：worker 写的操作记录；steps：脚本的步骤列表（编号、做什么、讲解），看板右栏的步骤大纲用
@@ -348,8 +371,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         return { ops: '', steps: [], error: `读不到脚本文件 ${task.script}：${err.message}` };
       }
     },
-    'POST /api/demo/stop': (b) => ({ task: store.stopDemo(requireId(b)) }),
-    'POST /api/demo/release': (b) => ({ task: store.releaseDemo(requireId(b)) }),
+    'POST /api/demo/stop': async (b) => { const task = store.stopDemo(requireId(b)); await settleOps(); return { task }; },
+    'POST /api/demo/release': async (b) => { const task = store.releaseDemo(requireId(b)); await settleOps(); return { task }; },
     // 提词悬浮窗（只有 macOS）：服务替看板起一个系统窗口，没有浏览器边框、浮在最上层。
     // 同一时间只留一个；再点就关掉旧的重开（跳到最前）。其他系统返回错误，看板改用普通弹窗
     'POST /api/prompter/open': () => {
@@ -373,6 +396,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         let text = '';
         try { text = readFileSync(join(root, task.script), 'utf8'); } catch {}
         const problems = checkOps(text, { all: true });
+        const vp = parseOps(text).viewport;
+        if (run.viewport && vp && vp !== run.viewport) problems.unshift(`开头的视口写的是 ${vp}，这次预演选的是 ${run.viewport}：要在 ${run.viewport} 下走通，并把这一行改成「视口：${run.viewport}」`);
         if (problems.length) throw new AteamError('INVALID', `预演还不能算跑完，「## 操作记录」没录全：\n${problems.map((p) => `- ${p}`).join('\n')}\n\n把这些补上（开头「视口：宽x高」；每步「### N.」条目、\`\`\`actions 动作块和「预期：」行），再运行 ateam demo end。实在走不通的步骤用 --stuck 结束。`);
       }
       return { task: store.demoEnd(b.as, b.result, !!b.stuck) };
@@ -386,13 +411,20 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       const head = await headContent(root, task.script);
       if (head === null) throw new AteamError('INVALID', `脚本文件 ${task.script} 还没有提交过，请通知用户让 leader 先提交脚本。`);
+      const run = task.runs?.[task.runs.length - 1];
+      // 预演没跑完：这次写的不提交，操作记录还原成上一版
+      if (run?.mode === 'rehearsal' && run.outcome !== 'done') {
+        writeFileSync(join(root, task.script), head);
+        if (task.opsCleared) store.markOpsCleared(task.id, false);
+        return { task: store.recordDemoSave(b.as, b.summary, null), commit: null, restored: true };
+      }
       if (b.noChanges) {
         // 写了操作记录却加 --no-changes，记录会丢：拒绝
         if (current !== head) throw new AteamError('INVALID', `脚本 ${task.script} 有没提交的改动，不能加 --no-changes。去掉 --no-changes 重新运行，服务会提交它。`);
+        if (task.opsCleared) store.markOpsCleared(task.id, false);
         return { task: store.recordDemoSave(b.as, b.summary, null), commit: null };
       }
       // 预演跑完的收尾：每步都要有合法动作块；其他情况只检查已写的动作块格式
-      const run = task.runs?.[task.runs.length - 1];
       const problems = checkOps(current, { all: run?.mode === 'rehearsal' && run?.outcome === 'done' });
       if (problems.length) throw new AteamError('INVALID', `「## 操作记录」有问题，先改好再 demo save：\n${problems.map((p) => `- ${p}`).join('\n')}`);
       if (withoutOps(current) !== withoutOps(head)) {
@@ -400,6 +432,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       const result = await commitPaths(root, [task.script], `[${task.id}] 操作记录：${b.summary.trim()}`);
       if (result.nothing) throw new AteamError('INVALID', `脚本 ${task.script} 没有改动。操作记录没有改动就加 --no-changes。`);
+      if (task.opsCleared) store.markOpsCleared(task.id, false);
       return { task: store.recordDemoSave(b.as, b.summary, result.commits), commit: result.commits.join('、') };
     }),
     'POST /api/jobs/edit': (b) => {

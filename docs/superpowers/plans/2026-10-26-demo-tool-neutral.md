@@ -52,8 +52,8 @@
   - `all` 为假时，只检查已经写了的条目，规则同上。
 - `export const VIEWPORT_RE = /^(\d{3,4})x(\d{3,4})$/`，供 store 和 server 共用。
 
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2:** scratchpad 探测：
+- [x] **Step 1:** 实现。
+- [x] **Step 2:** scratchpad 探测：
   - 3 步脚本，全部录好（视口行 + 每步 actions 块 + 预期行）：`checkOps(all)` 返回空；
   - 第 2 步去掉预期行：报「第 2 步：没有预期行」；
   - 去掉视口行：报缺视口；
@@ -61,7 +61,7 @@
   - 同时有 cua 块和 actions 块：`legacy === false`。
 
   Run: `node --check src/demo.js && node <scratchpad>/probe-ops.mjs` → `ALL PASS`，删除脚本。
-- [ ] **Step 3: Commit** `demo: tool-neutral ops format (actions block + 预期), detect legacy cua records`
+- [x] **Step 3: Commit** `demo: tool-neutral ops format (actions block + 预期), detect legacy cua records`
 
 ### Task 2: store 设置、server、命令行、worker 规则
 

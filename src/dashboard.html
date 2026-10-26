@@ -810,17 +810,18 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-hold { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .link-btn { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--brand); cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
-.lane-act {
-  display: inline-flex; align-items: center; gap: 4px; height: 20px; margin: -2px 0; padding: 0 8px 0 6px; border: 0; border-radius: 10px;
-  background: none; color: var(--faint); font: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer;
-  opacity: 0; transition: opacity .15s ease, background-color .15s ease, color .15s ease;
+.side-hold {
+  position: absolute; top: 10px; right: 10px; z-index: 1; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 10px 0 8px;
+  border: 0; border-radius: 12px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; opacity: 0; transition: opacity .15s ease, background-color .15s ease, color .15s ease;
 }
-.lane-act svg { width: 10px; height: 10px; }
-.lane:hover .lane-act, .lane-act:focus-visible { opacity: 1; }
-@media (hover: none) { .lane-act { opacity: 1; } } /* 触屏没有悬停，一直显示 */
-.lane-act:hover { color: var(--ink); background: color-mix(in srgb, var(--faint) 16%, transparent); }
-.lane-act.on { opacity: 1; color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, transparent); font-weight: 600; }
-.lane-act.on:hover { background: color-mix(in srgb, var(--asking) 24%, transparent); color: var(--asking); }
+.side-hold svg { width: 10px; height: 10px; }
+.job-side:hover .side-hold, .side-hold:focus-visible { opacity: 1; }
+@media (hover: none) { .side-hold { opacity: 1; } } /* 触屏没有悬停，一直显示 */
+.side-hold:hover { color: var(--ink); background: var(--raised-hover); }
+.side-hold.on { opacity: 1; color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asking) 45%, transparent); font-weight: 600; }
+.side-hold.on:hover { background: color-mix(in srgb, var(--asking) 24%, var(--surface)); color: var(--asking); }
+.lane-held { padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 600; color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, transparent); }
 .lane.held { background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 5%, transparent) 10px 20px); }
 .lane.held h3::before { background: var(--asking); }
 .lane.held .card { opacity: .62; }
@@ -2020,14 +2021,7 @@ function renderMain() {
     if (lane.key === 'approved') cards.sort((a, b) => (approvedAt(b) - approvedAt(a)) || (Number(b.id.slice(1)) - Number(a.id.slice(1))));
     return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ''}${lane.key === 'pending' && job.onHold ? ' held' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key },
       el('h3', null, el('span', { class: 'label' }, lane.label),
-        // 待领取一列的表头：整个需求暂停 / 恢复领取。平时鼠标移到这一列才出现，暂停中一直显示
-        lane.key === 'pending' && !job.demo && job.status !== 'accepted' && job.status !== 'cancelled'
-          ? el('button', {
-            class: `lane-act${job.onHold ? ' on' : ''}`,
-            title: job.onHold ? '这一列的卡暂停派发中。点一下恢复' : '这一列的卡（包括之后新加的）先不派发，正在做的不受影响',
-            onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
-          }, icon(job.onHold ? 'play' : 'pause'), job.onHold ? '已暂停 · 恢复' : '暂停领取')
-          : null,
+        lane.key === 'pending' && job.onHold ? el('span', { class: 'lane-held' }, '已暂停') : null,
         el('span', { class: 'n' }, cards.length)),
       el('div', { class: 'cards' }, cards.length ? cards.map((t) => card(t, lane.key)) : el('div', { class: 'empty-hint' }, '暂无')));
   }));
@@ -2062,8 +2056,14 @@ function jobSide(job, tasks, collapsed) {
   const shown = collapsed ? [] : acts.slice(0, 30);
   const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
   const kpi = (value, label, cls = '', title) => el('div', { class: `kpi ${cls}`, title }, el('b', null, value), el('span', null, label));
+  // 整个需求暂停 / 恢复领取：概览卡右上角，平时鼠标移入卡片才出现，暂停中一直显示
+  const holdBtn = job.demo || job.status === 'accepted' || job.status === 'cancelled' ? null : el('button', {
+    class: `side-hold${job.onHold ? ' on' : ''}`,
+    title: job.onHold ? '这个需求待领取的卡暂停派发中。点一下恢复' : '这个需求待领取的卡（包括之后新加的）先不派发，正在做的不受影响',
+    onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
+  }, icon(job.onHold ? 'play' : 'pause'), job.onHold ? '已暂停 · 恢复' : '暂停领取');
   return el('aside', { class: `job-side${shown.length ? '' : ' bare'}`, 'aria-label': '概览和最近动态' },
-    el('div', { class: 'inner' },
+    el('div', { class: 'inner' }, holdBtn,
       el('div', { class: 'kpis' },
         kpi([`${st.approved}`, el('small', null, `/${tasks.length}`)], '已通过'),
         kpi(`${st.reviews}`, 'review'),

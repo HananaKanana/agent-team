@@ -780,7 +780,12 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 @media (max-width: 700px) { .report-wrap { padding: 0; } .report-sheet { border-radius: 0; box-shadow: none; padding: 20px 16px 40px; } }
 
 /* 看板：七列等宽，铺满剩余高度，列内各自滚动（参考 Jira） */
-.board { flex: 1 0 0; min-height: 420px; display: grid; grid-template-columns: repeat(7, minmax(188px, 1fr)); gap: 8px; overflow-x: auto; }
+.board { flex: 1 0 0; min-height: 420px; display: grid; grid-template-columns: var(--cols, repeat(7, minmax(188px, 1fr))); gap: 8px; overflow-x: auto; }
+/* 空列：窄竖条，圆点、数字在上，列名竖排 */
+.lane.slim h3 { flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; }
+.lane.slim h3 .label { margin: 0; writing-mode: vertical-rl; letter-spacing: 2px; }
+.lane.slim h3 .n { order: -1; }
+.lane.slim .cards { display: none; }
 /* 窄屏时七列放不下要横向滚动；Mac 默认滚动条不显示，用户不知道右边还有列。给看板一条常显的滚动条 */
 .board::-webkit-scrollbar { height: 10px; }
 .board::-webkit-scrollbar-track { background: transparent; }
@@ -1046,6 +1051,10 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   nav.jobs { border-right: none; border-bottom: 1px solid var(--line); }
   main { padding: 16px; }
   .board { flex: none; min-height: 0; grid-template-columns: 1fr; overflow-x: visible; }
+  /* 上下排列时空列不竖排，只留一行表头 */
+  .lane.slim h3 { flex-direction: row; padding: 10px 12px 8px; }
+  .lane.slim h3 .label { writing-mode: horizontal-tb; letter-spacing: 0; margin-right: auto; }
+  .lane.slim h3 .n { order: 0; }
   .lane .cards { overflow: visible; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2089,13 +2098,16 @@ function renderMain() {
       el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'));
   }
 
-  const board = el('div', { class: 'board' }, LANES.map((lane) => {
+  // 没有卡的列收成一条窄竖条（列名竖排），宽度让给有卡的列；有卡进来自动展开
+  const laneCount = (key) => tasks.filter((t) => laneOf(t) === key).length;
+  const cols = LANES.map((lane) => (laneCount(lane.key) ? 'minmax(188px, 1fr)' : '40px')).join(' ');
+  const board = el('div', { class: 'board', style: `--cols: ${cols}` }, LANES.map((lane) => {
     const cards = tasks.filter((t) => laneOf(t) === lane.key);
     // 待领取一列按派发顺序排：优先的在最上面（与服务端 dispatchOrder 一致）
     if (lane.key === 'pending') cards.sort((a, b) => ((b.priority ?? 0) - (a.priority ?? 0)) || (b.handoff - a.handoff) || (Number(a.id.slice(1)) - Number(b.id.slice(1))));
     // 已通过一列：越新通过的越靠上
     if (lane.key === 'approved') cards.sort((a, b) => (approvedAt(b) - approvedAt(a)) || (Number(b.id.slice(1)) - Number(a.id.slice(1))));
-    return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ''}${lane.key === 'pending' && job.onHold ? ' held' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key },
+    return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ' slim'}${lane.key === 'pending' && job.onHold ? ' held' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key, title: cards.length ? null : `${lane.label}：暂无` },
       el('h3', null, el('span', { class: 'label' }, lane.label),
         lane.key === 'pending' && job.onHold ? el('span', { class: 'lane-held' }, '已暂停') : null,
         el('span', { class: 'n' }, cards.length)),

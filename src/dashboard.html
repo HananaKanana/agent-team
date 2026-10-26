@@ -863,6 +863,7 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .side-hold svg { width: 10px; height: 10px; }
 .job-side:hover .side-hold, .side-hold:focus-visible { opacity: 1; }
 @media (hover: none) { .side-hold { opacity: 1; } } /* 触屏没有悬停，一直显示 */
+html.touch-mode .side-hold { opacity: 1; }
 .side-hold:hover { color: var(--ink); background: var(--raised-hover); }
 .side-hold.on { opacity: 1; color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asking) 45%, transparent); font-weight: 600; }
 .side-hold.on:hover { background: color-mix(in srgb, var(--asking) 24%, var(--surface)); color: var(--asking); }
@@ -1582,6 +1583,8 @@ let settingsMsg = '';
 // 触屏模式：只对这台设备的这个浏览器生效（存在本地），默认关闭。开了以后按住拖动就滚动，但拖选文字会变成滚动
 let touchScroll = false;
 try { touchScroll = localStorage.getItem('ateam.touchScroll') === '1'; } catch {}
+// 触屏模式下没有悬停，靠悬停才出现的按钮（概览卡的「暂停领取」等）一直显示
+document.documentElement.classList.toggle('touch-mode', touchScroll);
 // 看板空列收窄：没有卡的列收成窄竖条。只对这台设备的这个浏览器生效，默认开启
 let slimLanes = true;
 try { slimLanes = localStorage.getItem('ateam.slimLanes') !== '0'; } catch {}
@@ -1624,6 +1627,7 @@ function settingsPage() {
       input.addEventListener('click', (e) => e.stopPropagation());
       input.addEventListener('change', () => {
         touchScroll = input.checked;
+        document.documentElement.classList.toggle('touch-mode', touchScroll);
         try { localStorage.setItem('ateam.touchScroll', touchScroll ? '1' : '0'); } catch {}
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '触屏模式'),
@@ -3743,7 +3747,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) poll
 // 松手带一点惯性；拖过之后的那次点击吞掉，不误开卡片。输入框、代码块不接管，照常能选中文字
 (() => {
   if (PROMPTER_ONLY) return;
-  const SKIP = 'input, textarea, select, pre, code, .pblock, [contenteditable]';
+  // 按在按钮、链接上不接管：手指点按时难免挪动几像素，被当成拖动后这次点击会被吞掉，按钮就点不动了。
+  // 卡片、需求列表这类整块的按钮除外，按住它们要能拖动滚动
+  const SKIP = 'input, textarea, select, pre, code, .pblock, [contenteditable], a, summary, label, button:not(.card):not(.job):not(.job-mini):not(.worker)';
   // 往上找能在这个方向滚动的容器：y 上下（主区、列内），x 左右（顶部 worker 一排、看板各列）
   const scroller = (node, axis) => {
     for (let n = node; n && n !== document.documentElement; n = n.parentElement) {

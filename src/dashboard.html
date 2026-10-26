@@ -807,8 +807,14 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .tag.warn, .tag.urgent { color: var(--rework); background: color-mix(in srgb, var(--rework) 13%, transparent); }
 .tag.hold { color: var(--muted); background: color-mix(in srgb, var(--faint) 18%, transparent); }
 .job-hold { box-shadow: inset 3px 0 0 var(--asking); background: color-mix(in srgb, var(--asking) 8%, var(--surface)); }
-.btn.hold-btn svg { width: 13px; height: 13px; }
-.btn.hold-btn.on { color: var(--asking); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asking) 50%, transparent); background: color-mix(in srgb, var(--asking) 12%, transparent); font-weight: 600; }
+.job-hold { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.link-btn { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--brand); cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.lane h3 .label { display: inline-flex; align-items: center; gap: 6px; }
+.lane-act { display: grid; place-items: center; width: 22px; height: 22px; margin: -2px -4px -2px 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); cursor: pointer; }
+.lane-act svg { width: 12px; height: 12px; }
+.lane-act:hover { color: var(--ink); background: color-mix(in srgb, var(--faint) 16%, transparent); }
+.lane-act.on { color: var(--asking); }
 .tag.paused { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); font-weight: 600; }
 .btn.pause-btn svg { width: 13px; height: 13px; flex: none; }
 .prompter-strip .head .strip-pause {
@@ -1939,15 +1945,10 @@ function renderMain() {
     el('div', { class: 'crumbs' }, `需求 / ${job.id}`,
       job.demo ? null : el('span', { class: `lozenge c-${JOB_LOZENGE[job.status] || 'pending'}` }, JOB_STATUS[job.status] || job.status)),
     el('h2', { class: `job-title${job.status === 'cancelled' ? ' dropped' : ''}` }, job.title),
-    job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求'))
-      : job.status === 'accepted' || job.status === 'cancelled' ? null
-      : el('div', { class: 'head-acts' }, el('button', {
-        class: `btn sm hold-btn${job.onHold ? ' on' : ''}`,
-        title: job.onHold ? '恢复后，这个需求待领取的卡照常派发' : '这个需求下待领取的卡（包括之后新加的）都先不派发；正在做的卡不受影响',
-        onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
-      }, icon(job.onHold ? 'play' : 'pause'), job.onHold ? '恢复领取' : '暂停领取')),
+    job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
     job.onHold && job.status !== 'cancelled' ? el('div', { class: 'job-cancelled job-hold' },
-      `${fmtTime(job.onHold.at)} ${job.onHold.by === 'user' ? '你' : 'leader'}暂停了领取${job.onHold.reason ? `：${job.onHold.reason}` : ''}。待领取的卡都不会派发，正在做的照常做完。`) : null,
+      `${fmtTime(job.onHold.at)} ${job.onHold.by === 'user' ? '你' : 'leader'}暂停了领取${job.onHold.reason ? `：${job.onHold.reason}` : ''}。待领取的卡都不会派发，正在做的照常做完。`,
+      el('button', { class: 'link-btn', onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, false); } }, '恢复领取')) : null,
     job.status === 'cancelled' ? el('div', { class: 'job-cancelled' },
       `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的卡和代码保留，没做完的卡已作废。`) : null,
     job.description ? (() => {
@@ -2007,7 +2008,18 @@ function renderMain() {
     // 已通过一列：越新通过的越靠上
     if (lane.key === 'approved') cards.sort((a, b) => (approvedAt(b) - approvedAt(a)) || (Number(b.id.slice(1)) - Number(a.id.slice(1))));
     return el('section', { class: `lane c-${lane.key}${cards.length ? ' has' : ''}`, 'aria-label': lane.label, 'data-lane': lane.key },
-      el('h3', null, el('span', { class: 'label' }, lane.label), el('span', { class: 'n' }, cards.length)),
+      el('h3', null, el('span', { class: 'label' }, lane.label,
+        lane.key === 'pending' && job.onHold ? el('span', { class: 'tag paused' }, '已暂停') : null),
+        el('span', { class: 'n' }, cards.length),
+        // 待领取一列的表头：整个需求暂停 / 恢复领取
+        lane.key === 'pending' && !job.demo && job.status !== 'accepted' && job.status !== 'cancelled'
+          ? el('button', {
+            class: `lane-act${job.onHold ? ' on' : ''}`,
+            title: job.onHold ? '恢复领取：这一列的卡照常派发' : '暂停领取：这一列的卡（包括之后新加的）先不派发，正在做的不受影响',
+            'aria-label': job.onHold ? '恢复领取' : '暂停领取',
+            onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
+          }, icon(job.onHold ? 'play' : 'pause'))
+          : null),
       el('div', { class: 'cards' }, cards.length ? cards.map((t) => card(t, lane.key)) : el('div', { class: 'empty-hint' }, '暂无')));
   }));
 
@@ -2769,7 +2781,7 @@ function holdBox(t) {
   const job = data.state.jobs.find((j) => j.id === t.jobId);
   const on = !!t.onHold;
   let hint;
-  if (job?.onHold) hint = `整个需求 ${job.id} 暂停了领取，这张卡也不会派发。到需求页点「恢复领取」。`;
+  if (job?.onHold) hint = `整个需求 ${job.id} 暂停了领取，这张卡也不会派发。在需求页的提示里点「恢复领取」。`;
   else if (on) hint = `已暂停${t.onHold.reason ? `（${t.onHold.reason}）` : ''}：卡留在待领取，worker 不会领到它。恢复后按上面的派发顺序派发。`;
   else hint = '先不想让 worker 领这张卡（比如等确认、等别的事），可以暂停领取。依赖它的卡也会跟着等。';
   return [

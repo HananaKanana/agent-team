@@ -422,7 +422,7 @@ html.prompter-native .prompter-strip::before { content: ""; position: absolute; 
 /* 悬浮窗里 :hover 不可靠（鼠标从顶部原生拖动条离开时网页收不到离开事件，按钮会一直显示），改由脚本控制：动了鼠标才显示，停 2.5 秒自动收起 */
 html.prompter-native .prompter-strip:hover .head .tools { opacity: 0; }
 html.prompter-native .prompter-strip.show-tools .head .tools { opacity: 1; }
-/* 工具条放右上角：prompter.jxa 的拖动条在顶部只盖到离右边 230px 处，这里的按钮点得到 */
+/* 工具条放右上角：prompter.jxa 的拖动条在顶部只盖到离右边 270px 处，这里的按钮点得到 */
 html.prompter-native .prompter-strip .head .tools { position: absolute; right: 6px; top: 3px; z-index: 1; padding: 3px; gap: 4px; border-radius: 8px; background: rgba(14, 17, 20, .88); }
 html.prompter-native .prompter-strip .head .tools button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; }
 html.prompter-native .prompter-strip .head .tools button svg { width: 15px; height: 15px; }
@@ -810,6 +810,8 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 }
 .prompter-strip .head .strip-pause:hover { background: rgba(168, 127, 14, .3); color: #fff; }
 .prompter-strip .head .strip-pause svg { width: 13px; height: 13px; }
+html.prompter-native .prompter-strip .head .tools button.pz { color: #f2d27a; }
+html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; border-color: #c99a1a; background: rgba(201, 154, 26, .45); }
 .tag.handoff { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); }
 .tag.assigned { color: var(--working); background: color-mix(in srgb, var(--working) 13%, transparent); }
 .tag.critique { color: var(--role-5); background: color-mix(in srgb, var(--role-5) 15%, transparent); }
@@ -2392,7 +2394,12 @@ function renderPrompterStrip() {
     ? tasks.find((x) => isDemoTask(x) && x.status === 'demoing') || tasks.find((x) => isDemoTask(x) && (x.status === 'queued' || x.status === 'wrapping'))
     : tasks.find((x) => x.id === PROMPTER_ONLY);
   document.title = t ? `提词 · ${t.title}` : '提词';
-  const tools = el('span', { class: 'tools' }, PROMPTER_NATIVE ? nativeTools() : [
+  // 暂停 / 继续放在右上角控制键的最前面；原生悬浮窗里是图标按钮
+  const canPause = t?.status === 'demoing' && !t.stopRequested;
+  const pause = !canPause ? null : PROMPTER_NATIVE
+    ? el('button', { class: `pz${t.paused ? ' on' : ''}`, title: t.paused ? '已暂停。点一下让 worker 接着做下一步' : '暂停：当前这一步做完后停住', onclick: () => demoAction(t.paused ? 'resume' : 'pause', t) }, icon(t.paused ? 'play' : 'pause'))
+    : pauseButton(t, 'strip-pause');
+  const tools = el('span', { class: 'tools' }, pause, PROMPTER_NATIVE ? nativeTools() : [
     el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
     el('button', { onclick: () => window.close() }, '关闭')]);
   if (!t || t.status !== 'demoing') {
@@ -2412,8 +2419,7 @@ function renderPrompterStrip() {
       s ? el('span', { class: 'count' }, String(s.n), el('small', null, `/${s.total}`)) : null,
       sceneOf(t) ? el('span', { class: 'scene' }, sceneOf(t)) : null,
       el('b', null, s ? s.text : c.head), runSince(t),
-      s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null,
-      t.stopRequested ? null : pauseButton(t, 'strip-pause'), tools),
+      s?.slow ? el('span', { class: 'tag warn' }, '慢档') : null, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null, tools),
     el('div', { class: `say${changed ? ' enter' : ''}` }, c.say),
     c.next ? el('div', { class: 'next' }, el('span', { class: 'lbl' }, '下一步'), el('span', null, c.next)) : null);
   fitSay();

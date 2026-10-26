@@ -668,8 +668,9 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   /* 顶部 worker：只留头像和任务号，名字在悬停提示里；放不下横向滑，不换行 */
   .workers { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
   .workers::-webkit-scrollbar { display: none; }
-  .worker > b, .worker .wid, .worker > .role-text { display: none; }
-  .worker { gap: 6px; padding-right: 10px; }
+  /* 放不下时（fitWorkers 加 compact）才只留头像和任务号 */
+  .workers.compact .worker > b, .workers.compact .worker .wid, .workers.compact .worker > .role-text { display: none; }
+  .workers.compact .worker { gap: 6px; padding-right: 10px; }
   .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .job-side { min-height: 0; }
   /* 高度由内容撑开（不能跟宽屏一样 height:100%，Safari 会按旧高度算，把下面裁掉）；
@@ -1454,8 +1455,18 @@ function renderWorkers() {
   }
   if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '还没有 worker 加入，点右边「使用说明」开 worker'));
   box.replaceChildren(...chips);
+  fitWorkers();
   renderHelper();
 }
+
+// 顶部 worker 一排：先按完整样子（名字 + 任务）排，放不下才收成只有头像和任务号
+function fitWorkers() {
+  const box = document.getElementById('workers');
+  if (!box) return;
+  box.classList.remove('compact');
+  if (box.scrollWidth > box.clientWidth + 1) box.classList.add('compact');
+}
+addEventListener('resize', () => fitWorkers());
 
 // 在线 worker 超过 3 分钟没有任何动静（挂着 wait 的 worker 最多 90 秒就会刷新一次心跳）→ 多半停住了
 const STALE_MS = 3 * 60 * 1000;

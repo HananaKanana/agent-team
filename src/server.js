@@ -346,14 +346,16 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         throw new AteamError('INVALID', '提交总结不能为空。请写明做了什么、怎么验证的。');
       }
       let commits = null;
+      let leftover = [];
       if (!b.noChanges) {
         const result = await commitPaths(root, task.paths, `[${task.id}] ${b.summary.trim()}`);
         if (result.nothing) {
           throw new AteamError('INVALID', `指定路径（${task.paths.join('、')}）下没有改动。服务的项目目录是 ${root}，路径相对于这个目录：如果你的改动在别的目录，说明服务起错了目录，请通知用户，不要挪动改动；如确实无需改代码，请加 --no-changes。`);
         }
         commits = result.commits;
+        leftover = result.leftover ?? [];
       }
-      return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null };
+      return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null, leftover };
     }),
     'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description, origin: b.origin, demo: !!b.demo }) }),
     'POST /api/demo/add': (b) => {

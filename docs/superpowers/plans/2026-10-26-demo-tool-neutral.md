@@ -137,5 +137,5 @@
   - 旧格式的卡不能开始演播，提示重新预演；
   - 预演缺预期行时 `demo end` 被拒；
   - 演播中改动页面，让某一步的预期对不上：worker 切慢档补救，并写回新的动作块。
-- [ ] **Step 1:** 实现。
-- [ ] **Step 2: Commit** `skills: demo via the worker's own browser tool (browser-cdp); checklist`
+- [x] **Step 1:** 实现。
+- [x] **Step 2: Commit** `skills: demo via the worker's own browser tool (browser-cdp); checklist`

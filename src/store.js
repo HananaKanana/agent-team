@@ -638,7 +638,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!!state.noLeader === !!on) return state.noLeader ?? null;
     if (on) {
       state.noLeader = { since: now(), by };
-      const why = by === 'user' ? '用户宣布 leader 下线' : `有卡等 leader 处理，leader 超过 ${config().leaderAwayMin} 分钟没有任何操作（可能 token 用完了）`;
+      const why = by === 'user' ? '用户宣布 leader 下线' : `leader 超过 ${config().leaderAwayMin} 分钟没有监听、也没有操作（掉线了，可能 token 用完）`;
       emit('no_leader', { text: `${why}，进入无 leader 模式：等答复、待 review 的卡挂起，worker 先做没有依赖的卡` });
     } else {
       delete state.noLeader;

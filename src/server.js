@@ -233,23 +233,23 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return out;
   }
 
-  // 无 leader 模式：看 leader 有没有在处理事，不看它挂没挂着监听（token 用完后，后台的 watch --follow 照样挂着）。
-  // 有卡在等 leader（提问、待 review），而 leader 从那时起超过设置的分钟数没执行过任何命令（watch 不算），就进入；
-  // leader 执行任何命令就退出。服务刚启动从启动时算起；状态存在 store 里，重启后保留到 leader 真回来
+  // 无 leader 模式。自动进入（设置里打开时）：leader 超过设置的分钟数既没挂着 watch、也没用命令行
+  // （服务刚启动从启动时算起）。token 用完后后台的 watch --follow 还会挂到 Monitor 到期（最多半小时），这段算容错。
+  // 退出：自动进入的，leader 重新挂上 watch 或执行命令就退出；用户手动宣布下线的，只认 leader 执行 watch 以外的命令
+  // （token 用完的 leader 后台 watch 还在重连，不能让它把用户的宣布顶掉）。状态存在 store 里，重启后保留到 leader 真回来
   const serverStart = Date.now();
   let leaderActedAt = null;
-  const waitedOn = (t) => t.history.findLast((h) => h.type === 'asked' || h.type === 'submitted')?.ts ?? Date.now();
+  let lastWatchEnd = 0;
   function checkLeader() {
     const t = Date.now();
-    if (store.state.noLeader) {
-      if (leaderActedAt !== null && leaderActedAt >= store.state.noLeader.since) store.setLeaderAway(false);
+    const away = store.state.noLeader;
+    if (away) {
+      const acted = leaderActedAt !== null && leaderActedAt >= away.since;
+      if (acted || (away.by !== 'user' && watchers.size > 0)) store.setLeaderAway(false);
       return;
     }
-    if (!store.config().autoNoLeader) return;
-    const waiting = store.state.tasks.filter((x) => x.status === 'asking' || x.status === 'submitted');
-    if (!waiting.length) return;
-    const since = Math.min(...waiting.map(waitedOn));
-    if (t - Math.max(since, serverStart, leaderActedAt ?? 0) > store.config().leaderAwayMin * 60000) store.setLeaderAway(true);
+    if (!store.config().autoNoLeader || watchers.size > 0) return;
+    if (t - Math.max(serverStart, leaderSeenAt ?? 0, lastWatchEnd) > store.config().leaderAwayMin * 60000) store.setLeaderAway(true);
   }
 
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
@@ -314,6 +314,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   function finishWatcher(watcher, body) {
     clearTimeout(watcher.timer);
     watchers.delete(watcher);
+    lastWatchEnd = Date.now();
     send(watcher.res, 200, body);
   }
 
@@ -612,9 +613,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     const watcher = { res, timer: null };
     watcher.timer = setTimeout(() => finishWatcher(watcher, { ok: true, events: [] }), holdMs(body.timeout));
     watchers.add(watcher);
+    checkLeader(); // 自动进入的无 leader 模式：leader 重新挂上监听就退出
     res.on('close', () => {
       clearTimeout(watcher.timer);
-      watchers.delete(watcher);
+      if (watchers.delete(watcher)) lastWatchEnd = Date.now();
     });
   }
 
@@ -646,10 +648,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 命令行发来、且不带 --as 的请求都是 leader 的（worker 的命令都带 --as）
       if (req.headers['x-ateam-cli'] && !body.as && key !== 'POST /api/join') {
         leaderSeenAt = Date.now();
-        if (key !== 'POST /api/watch') {
-          leaderActedAt = leaderSeenAt;
-          checkLeader();
-        }
+        if (key !== 'POST /api/watch') leaderActedAt = leaderSeenAt;
+        checkLeader();
       }
       if (key === 'GET /api/stream') {
         res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' });

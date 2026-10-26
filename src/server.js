@@ -346,16 +346,22 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         throw new AteamError('INVALID', '提交总结不能为空。请写明做了什么、怎么验证的。');
       }
       let commits = null;
-      let leftover = [];
       if (!b.noChanges) {
         const result = await commitPaths(root, task.paths, `[${task.id}] ${b.summary.trim()}`);
+        if (result.nothing && result.leftover?.length) {
+          throw new AteamError('INVALID', `任务路径里有改动，但一个都没能暂存提交：\n${result.leftover.map((p) => `- ${p}`).join('\n')}\n\n不要自己 git commit，用 ateam ask 告诉 leader（这是 ateam 的问题）。`);
+        }
         if (result.nothing) {
           throw new AteamError('INVALID', `指定路径（${task.paths.join('、')}）下没有改动。服务的项目目录是 ${root}，路径相对于这个目录：如果你的改动在别的目录，说明服务起错了目录，请通知用户，不要挪动改动；如确实无需改代码，请加 --no-changes。`);
         }
         commits = result.commits;
-        leftover = result.leftover ?? [];
+        // 提交后任务路径里还有改动（比如新文件没被暂存）：不算提交成功，列出来让 worker 重新提交
+        if (result.leftover?.length) {
+          store.addCommits(b.as, commits);
+          throw new AteamError('INVALID', `已提交 ${commits.join('、')}，但任务路径里还有这些改动没进提交：\n${result.leftover.map((p) => `- ${p}`).join('\n')}\n\n先确认它们是这个任务的改动，再原样运行一次 ateam submit（服务会把它们补进新的提交）。不要自己 git commit。如果重交后还是这样，用 ateam ask 告诉 leader。`);
+        }
       }
-      return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null, leftover };
+      return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null };
     }),
     'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description, origin: b.origin, demo: !!b.demo }) }),
     'POST /api/demo/add': (b) => {

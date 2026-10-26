@@ -291,10 +291,9 @@ const commands = {
   async submit({ flags, positional }) {
     const as = requireAs(flags);
     const summary = requireArg(positional[0], '提交总结', `ateam submit --as ${as} "完成登录页，手工验证了表单校验"`);
-    const { task, commit, leftover } = await request('POST', '/api/submit', { as, summary, noChanges: !!flags['no-changes'] });
+    const { task, commit } = await request('POST', '/api/submit', { as, summary, noChanges: !!flags['no-changes'] });
     const what = commit ? `提交 ${commit}` : '无代码改动';
-    const left = leftover?.length ? `\n\n⚠ 任务路径里还有这些改动没进提交（不该发生）：\n${leftover.map((p) => `- ${p}`).join('\n')}\n不要自己 git commit。用 ateam ask --as ${as} "${task.id} 提交后还剩 ${leftover.length} 个文件没进提交" 告诉 leader，再 ateam wait。` : '';
-    return `已提交 ${task.id}（${what}），等待 leader review。请运行：ateam wait --as ${as}${left}`;
+    return `已提交 ${task.id}（${what}），等待 leader review。请运行：ateam wait --as ${as}`;
   },
 
   async 'job new'({ flags, positional }) {

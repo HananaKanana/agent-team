@@ -909,6 +909,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
+  // 提交了一部分、但路径里还有改动没进提交（submit 报错让 worker 重交）：已经提交的先记到卡上，免得丢
+  function addCommits(agentId, commits) {
+    const { agent, task } = workingTaskOf(agentId);
+    task.commits.push(...commits);
+    addHistory(task, 'progress', agent.id, `提交了 ${commits.join('、')}，但任务路径里还有改动没进提交，等重新提交`);
+    changed();
+    return task;
+  }
+
   // commit：一个提交号、多个提交号（多仓库时每个仓库一个，如 api@a1b2c3d），或 null（无代码改动）
   function recordSubmit(agentId, summary, commit) {
     summary = requireText(summary, '提交总结');
@@ -1829,7 +1838,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     config,
     createJob, editJob, addTask, editTask,
     join, touch,
-    nextFor, waitingInfo, progress, ask, taskForSubmit, recordSubmit,
+    nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
     pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,

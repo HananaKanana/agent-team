@@ -115,8 +115,9 @@ async function groupByRepo(root, paths) {
     const realTop = realpathSync(top);
     // 真实路径：existing 部分取 realpath，剩下还不存在的部分原样接上
     const realAbs = join(realpathSync(existing), relative(existing, abs));
-    let rel = relative(realTop, realAbs) || '.';
-    if (p.endsWith('/') && rel !== '.') rel += '/';
+    const rel = relative(realTop, realAbs) || '.';
+    // 不保留结尾的「/」：目录写成「dir/」再配上 :(exclude) 排除时，git 会漏掉里面的新文件
+    // （git 2.54 实测，有的仓库 :(exclude,top) 也不行）；不带斜杠的「dir」一样只匹配这个目录
     if (rel.startsWith('..')) continue;
     if (!groups.has(realTop)) {
       const label = relative(realRoot, realTop);
@@ -130,14 +131,9 @@ async function groupByRepo(root, paths) {
 // 在一个仓库里只提交 paths 内的改动，返回短提交号或 null（没有改动）
 async function commitInRepo(top, paths, message, exclude = []) {
   const valid = [];
-  // .ateam 原来有没有暂存的改动（leader 自己暂存的）：有就不碰，没有的话下面 add 带进来的再撤掉
-  const ateam = exclude.length ? exclude[0].replace(':(exclude)', '') : null;
-  const ateamStaged = ateam ? await git(top, ['diff', '--cached', '--quiet', '--', ateam]).then(() => false, () => true) : true;
   for (const p of paths) {
     try {
-      // git add 不带 :(exclude)：带了以后，目录路径写成「xxx/」（结尾带斜杠）时 git 会漏掉里面的新文件
-      // （git 2.54 实测：git add -A -- dir/ ':(exclude).ateam' 不加未跟踪文件）。.ateam 在下面单独撤出暂存区
-      await git(top, ['add', '-A', '--', p]);
+      await git(top, ['add', '-A', '--', p, ...exclude]);
       valid.push(p);
     } catch (err) {
       // 找不到文件不一定是没改动：worker 用 git rm 删掉的路径，磁盘和暂存区里都没有了，git add 会报
@@ -149,7 +145,6 @@ async function commitInRepo(top, paths, message, exclude = []) {
       throw gitError('git add', err);
     }
   }
-  if (!ateamStaged) await git(top, ['reset', '-q', '--', ateam]).catch(() => {});
   // 只保留确实有暂存改动的路径：空目录、只含被忽略文件的目录 git add 不报错，
   // 但放进 git commit 的路径参数会报 pathspec 不匹配
   const changed = [];
@@ -183,7 +178,7 @@ export async function commitPaths(root, paths, message) {
   const leftover = [];
   for (const [top, { label, paths: repoPaths }] of groups) {
     const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
-    const exclude = rel && !rel.startsWith('..') ? [`:(exclude)${rel}`] : [];
+    const exclude = rel && !rel.startsWith('..') ? [`:(exclude,top)${rel}`] : [];
     const sha = await commitInRepo(top, repoPaths, message, exclude);
     if (sha) commits.push(label ? `${label}@${sha}` : sha);
     // 提交后路径里还有没进提交的改动（不该有）：列出来，让 worker 和 leader 知道，别悄悄漏掉
@@ -203,7 +198,7 @@ export async function latestChangeTime(root, paths) {
   for (const [top, { paths: repoPaths }] of groups) {
     // 看板状态文件一直在变，不算 worker 的活动
     const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
-    const exclude = rel && !rel.startsWith('..') ? [`:(exclude)${rel}`] : [];
+    const exclude = rel && !rel.startsWith('..') ? [`:(exclude,top)${rel}`] : [];
     const { stdout } = await run(top, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...repoPaths, ...exclude]);
     const entries = stdout.split('\0');
     for (let i = 0; i < entries.length; i++) {

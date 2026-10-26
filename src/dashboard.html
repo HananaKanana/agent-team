@@ -890,6 +890,7 @@ html.touch-mode .side-hold { opacity: 1; }
 .lane.held .card { opacity: .62; }
 .lane.held .card:hover { opacity: 1; }
 .tag.hold.icon-only { width: 18px; justify-content: center; padding: 0; }
+.tag .gone { text-decoration: line-through; }
 .tag.leader-wait { color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, transparent); }
 .tag.hold svg { width: 9px; height: 9px; }
 .tag.paused { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); font-weight: 600; }
@@ -1532,6 +1533,15 @@ function leaderCard() {
 }
 function leadWakePrompt() {
   return '继续。你是 ateam leader。先运行 ateam status，按「待你处理」继续（先答复，再 review）；如果后台的 ateam watch --follow 监听停了，用 Monitor 重新启动它。中途不要停下来等我。';
+}
+
+// worker 在 since 之后最近领的一张卡（老数据没记 parkedFor 时，从历史里找它转做了哪张）
+function lastClaimSince(agentId, since) {
+  let best = null;
+  for (const x of data.state.tasks) {
+    for (const h of x.history) if (h.type === 'claimed' && h.actor === agentId && h.ts >= since && (!best || h.ts > best.ts)) best = { id: x.id, ts: h.ts };
+  }
+  return best?.id ?? null;
 }
 
 function dismissButtons(a) {
@@ -2364,9 +2374,11 @@ function card(t, lane) {
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
       t.parked ? (() => {
-        // 先放下这张、转去做别的卡：标出它现在在做哪张；它手上没卡（空闲、掉线）就只写「转做别的」
-        const now = data.state.agents.find((a) => a.id === t.assignee)?.currentTask;
-        return el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先放下这张卡、转去做${now ? ` ${now}` : '别的卡'}了；leader 回来处理后交回给它` }, now ? `转做 ${now}` : '转做别的');
+        // 先放下这张、转去做的那张卡（最近一次领的）；那张作废了就把编号划掉
+        const to = t.parkedFor || lastClaimSince(t.assignee, t.parked);
+        const gone = to && data.state.tasks.find((x) => x.id === to)?.status === 'cancelled';
+        return el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先放下这张卡、转去做${to ? ` ${to}${gone ? '（已作废）' : ''}` : '别的卡'}了；leader 回来处理后交回给它` },
+          '转做', to ? el('span', { class: gone ? 'gone' : '' }, ` ${to}`) : null);
       })() : null,
       !t.parked && data.leader?.away && (t.status === 'asking' || t.status === 'submitted')
         ? el('span', { class: 'tag leader-wait', title: `无 leader 模式：等 leader 回来${t.status === 'asking' ? '答复' : ' review'}。${agentName(t.assignee)} 现在没有别的卡能做（同角色的卡都在等依赖，或者和这张改同一批文件），所以还拿着它；一有能做的卡就放下这张、转做那张` }, '等 leader') : null,

@@ -561,7 +561,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const own = (t) => t.handoff && t.prevAssignee === agent.id;
     const task = candidatesFor(agent)[0];
     if (!task) return null;
-    const parked = state.tasks.filter((t) => t.parked && t.assignee === agent.id).map((t) => t.id);
+    // 先放下的卡记下 worker 转做了哪张（看板上标「转做 T?」）
+    const parkedTasks = state.tasks.filter((t) => t.parked && t.assignee === agent.id);
+    for (const p of parkedTasks) p.parkedFor = task.id;
+    const parked = parkedTasks.map((t) => t.id);
     const back = task.backFromPark;
     delete task.backFromPark;
     delete task.returnTo;
@@ -625,6 +628,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 先放下的卡被答复或打回：退回待领取，留给原 worker
   function unpark(task) {
     delete task.parked;
+    delete task.parkedFor;
     if (task.assignee) task.prevAssignee = task.assignee;
     task.returnTo = task.prevAssignee;
     task.backFromPark = true;
@@ -1122,6 +1126,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.handoff = false;
     task.pendingDelivery = null;
     delete task.parked;
+    delete task.parkedFor;
     releaseAgentOf(task);
     addHistory(task, 'approved', 'lead', note ?? '');
     // 有新代码进来了：预演过的演播卡，页面可能已经变了
@@ -1142,6 +1147,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (task.rejectCount >= config().rejectLimit) {
       task.status = 'held';
       delete task.parked;
+      delete task.parkedFor;
       releaseAgentOf(task);
       emit('task_held', { taskId: task.id, text: `${task.id} 已被打回 ${task.rejectCount} 次，转为挂起，等你处理（task edit + release，或自己修改后 approve）` });
     } else {
@@ -1221,6 +1227,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     releaseAgentOf(task);
     task.status = 'cancelled';
     delete task.parked;
+    delete task.parkedFor;
     delete task.returnTo;
     delete task.backFromPark;
     task.handoff = false;
@@ -1318,6 +1325,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // 先放下的卡：原 worker 正在做别的卡，只收回卡，不动它
     const agent = !task.parked && task.assignee && findAgent(task.assignee);
     delete task.parked;
+    delete task.parkedFor;
     const who = task.assignee ?? '原 worker';
     if (agent) {
       agent.status = 'offline';

@@ -243,6 +243,15 @@ curl -s -X POST "$U?cmd=click" -H "$H" -d "{\"tabId\":\"$T\",\"selector\":\"#go\
   带登录态
 - 不再用的 tab 要 `close`，遗留的标签是用户可见的变化；但自己常用的那一个留着、停在 `about:blank`，免得下次再 `open`（见 5.1）
 
+### 5.0 只关自己的标签页，不关浏览器
+
+Chrome 是几个 agent 和用户共用的：
+
+- `close` 只用于**本会话 `open` 出来的**标签页（`cmd=tabs` 里 `owned: true`），以及自己
+  页面弹出来的新标签页。别人的、用户的标签页不关，不按「全部页面」批量清场
+- 不退出、不杀、不重启 Chrome（`pkill` / `killall` / `osascript ... quit` 都不行），也不关
+  浏览器窗口。浏览器卡死、连不上就停下来问
+
 ### 5.1 不要抢用户的焦点、不要占满连接：只 `open` 一次、闲着停在空白页，`activate` 不用
 
 插件的 `open` 和 `activate` 会调 `Page.bringToFront`，在 macOS 上会把整个 Chrome

@@ -154,7 +154,7 @@ function formatDemoTask(task) {
   return lines.join('\n');
 }
 
-const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复', note: 'leader 补充说明' };
+const DELIVERY_LABEL = { rejected: '打回意见', answer: 'leader 答复', note: '补充说明' };
 
 const CRITIQUE_STATUS = {
   open: '等 leader 回复', proposed: 'leader 同意，等用户确认', disputed: 'leader 不同意，等用户裁决',
@@ -177,7 +177,8 @@ function footer(agentId) {
 
 function deliverySection(delivery) {
   if (!delivery) return '';
-  return `\n\n## 未送达的消息\n\n**${DELIVERY_LABEL[delivery.kind] ?? delivery.kind}**：\n\n${delivery.text}`;
+  const label = delivery.by === 'user' && delivery.kind === 'answer' ? '用户直接答复（用户本人说的，以它为准）' : (DELIVERY_LABEL[delivery.kind] ?? delivery.kind);
+  return `\n\n## 未送达的消息\n\n**${label}**：\n\n${delivery.text}`;
 }
 
 const HOLDING_REASON = {
@@ -266,7 +267,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
       out = `# 转做前放下的任务回来了 ${title}\n\n`
         + `leader 不在线时你放下这张卡、转做了别的卡；现在 leader ${rejected ? '打回了它' : '答复了你的提问'}，交回给你接着做。`
         + '你中间做过别的卡：先在任务路径所在的仓库里 git status、git log --oneline -5 看清现状，只改这张卡的路径。\n\n'
-        + (rejected ? `## 修改意见（第 ${task.rejectCount} 次打回）\n\n${delivery.text}\n\n逐条修改后再次提交。\n\n` : `## 答复\n\n${delivery?.text ?? ''}\n\n按答复继续。\n\n`)
+        + (rejected ? `## 修改意见（第 ${task.rejectCount} 次打回）\n\n${delivery.text}\n\n逐条修改后再次提交。\n\n` : `## 答复${delivery?.by === 'user' ? '（用户直接答复）' : ''}\n\n${delivery?.text ?? ''}\n\n按答复继续。\n\n`)
         + `## 任务\n\n${formatTask(task)}`;
       break;
     }
@@ -276,7 +277,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
         + `## 任务 ${title}\n\n${formatTask(task)}`;
       break;
     case 'answer':
-      out = `# 答复 ${task.id}\n\n${delivery?.text ?? ''}\n\n按答复继续完成任务 ${title}。`;
+      out = `# 答复 ${task.id}${delivery?.by === 'user' ? '（用户直接答复，以它为准）' : ''}\n\n${delivery?.text ?? ''}\n\n按答复继续完成任务 ${title}。`;
       break;
     default:
       out = `# ${kind} ${title}\n\n${formatTask(task)}`;
@@ -469,6 +470,9 @@ const EVENT_HINT = {
   critique: (e) => `先不要改卡。ateam show ${e.taskId} 看意见和依据，想清楚后回复，都要带依据：同意就 ateam critique agree ${e.taskId} "<打算怎么改>" --basis "<依据>"，不同意就 ateam critique dispute ${e.taskId} "<理由>" --basis "<依据>"。由用户在看板上决定`,
   critique_ruling: (e) => `用户已决定，照做：待领取/已挂起的卡 ateam task edit ${e.taskId} ... 改；进行中的 ateam note ${e.taskId} "<补充说明>" 告诉 worker；已完成的加修复任务。做完 ateam critique done ${e.taskId} "<改了什么>"`,
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
+  user_reply: (e) => (e.kind === 'answer'
+    ? `用户已经直接答复，worker 会收到，你不用再 answer。用户的答复改变了任务要求的话，同步改卡（ateam task edit）或 ateam note ${e.taskId} 补充`
+    : `已送给 worker（它下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
   leader_back: () => '这些卡的 worker 多半已经在做别的卡了。答复或打回后卡会自动交回原 worker（它不在线就换人接手），你照常 answer / approve / reject 就行',
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,

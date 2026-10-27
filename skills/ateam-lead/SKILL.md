@@ -98,6 +98,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
+| `user_reply` | 用户在看板上直接回复了某张卡：卡在等答复的，用户的话已经作为答复送给 worker，**你不要再 `answer`**；卡在做的，作为补充说明送给 worker。用户的话改变了任务要求，就同步改卡或 `ateam note` 补充；和你之前的安排冲突时以用户为准 |
 | `critique` | 审卡意见，先别改卡，按「审卡意见」一节回复 agree 或 dispute |
 | `critique_ruling` | 用户决定了审卡意见怎么改：照做后 `ateam critique done T5 "<改了什么>"` |
 | `no_leader` | 用户在看板上点了 leader 卡片的「下线」，或者（用户开了自动开关时）你超过设定时间既没挂着监听、也没执行命令，被判定掉线（通常是 token 用完了），进入**无 leader 模式**：worker 先放下等答复、待 review 的卡，转做没有依赖、不改同一批文件的卡；依赖待 review 卡的卡继续等。你执行任何命令就自动退出（自动进入的，重新挂上监听也会退出） |

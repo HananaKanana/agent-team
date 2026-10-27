@@ -247,6 +247,16 @@ input[type="checkbox"]:not(.switch):checked::after {
   font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .rules-editor:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--focus); }
+.reply-box { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); }
+.reply-box.asking { box-shadow: inset 3px 0 0 var(--asking), inset 0 0 0 1px color-mix(in srgb, var(--asking) 30%, transparent); }
+.reply-box h4 { margin: 0 0 6px; }
+.reply-box .q { margin: 0 0 10px; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--asking) 9%, transparent); font-size: 13px; line-height: 1.65; white-space: pre-wrap; max-height: 220px; overflow: auto; }
+.reply-box .q .who { display: block; margin-bottom: 2px; font-size: 12px; color: var(--faint); }
+.reply-input { display: block; width: 100%; min-height: 72px; padding: 9px 11px; resize: vertical; border: 0; border-radius: 6px; background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); font-family: inherit; font-size: 13px; line-height: 1.6; }
+.reply-input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--focus); }
+.reply-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.reply-foot .hint { flex: 1; min-width: 0; font-size: 12px; }
+.reply-foot .err { color: var(--rework); }
 .rules-view { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-height: 460px; overflow: auto; }
 .rules-sec { padding: 10px 14px 8px; border-radius: 6px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); }
 .rules-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: var(--faint); }
@@ -281,6 +291,10 @@ input[type="checkbox"]:not(.switch):checked::after {
 .wcard .who-line .hint { font-size: 12px; }
 .wcard.focus { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); background: color-mix(in srgb, var(--brand-soft) 50%, transparent); }
 .wcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.wcard-acts { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; margin-left: auto; }
+.wcard-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; padding: 8px 10px 8px 12px; border-radius: 6px; background: color-mix(in srgb, var(--rework) 8%, transparent); }
+.wcard-confirm .q { display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; }
+.wcard-confirm .q .hint { font-weight: 400; font-size: 12px; }
 .wcard-head .grow { margin-right: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
 .pill { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 3px; font-size: 11.5px; font-weight: 700; background: color-mix(in srgb, var(--asking) 16%, transparent); color: var(--asking); }
 
@@ -1194,6 +1208,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <symbol id="i-text-up" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4M12.5 6v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
   <symbol id="i-bg-less" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
   <symbol id="i-bg-more" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".55" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
   <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 6.3a1.9 1.9 0 0 1 3.7.5c0 1.3-1.9 1.6-1.9 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".9" fill="currentColor"/></symbol>
   <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13.5 2.5v11M2.5 8h8M7.5 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -1664,7 +1679,6 @@ function dismissButtons(a) {
     }, '下线');
   }
   const cancel = el('button', { class: 'btn ghost sm', onclick: stop(() => { dismissArm = null; renderHelper(); }) }, '取消');
-  const suffix = last ? `（${a.role} 最后一个）` : '';
   if (critic) {
     return [
       cancel,
@@ -1682,7 +1696,7 @@ function dismissButtons(a) {
     return [cancel, el('button', {
       class: 'btn warn sm', title: lastTip,
       onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
-    }, `确认下线${suffix}`)];
+    }, '确认下线')];
   }
   return [
     cancel,
@@ -1693,7 +1707,7 @@ function dismissButtons(a) {
     el('button', {
       class: 'btn warn sm', title: `马上停下，${a.currentTask} 若还在进行中就退回待领取。${lastTip}`,
       onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
-    }, `立即下线${suffix}`),
+    }, '立即下线'),
   ];
 }
 
@@ -2100,7 +2114,11 @@ function renderHelper(force = false) {
           a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null,
           a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审完待审的卡后下线' : '做完手上的任务后下线，不再领新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完下线' : '做完下线') : null,
           pendingCancel(a) ? el('span', { class: 'pill', title: '它还在做一个已作废的任务' }, `${pendingCancel(a).id} 已作废，它还不知道`) : null),
-        dismissButtons(a)),
+        dismissArm === a.id ? null : el('span', { class: 'wcard-acts' }, dismissButtons(a))),
+      // 点了「下线」要选怎么下线：单独一条确认栏，按钮不挤在名字那一行里折行
+      dismissArm === a.id ? el('div', { class: 'wcard-confirm' },
+        el('span', { class: 'q' }, `让 ${agentLabel(a.id)} 怎么下线？`, isLastOfRole(a) ? el('span', { class: 'hint' }, `${a.role} 只剩它一个，下线后这个角色的新任务没人领`) : null),
+        el('span', { class: 'wcard-acts' }, dismissButtons(a))) : null,
       pendingCancel(a) ? [
         el('p', { class: 'hint' }, `${pendingCancel(a).id} 已被作废，但它正在干活，要等下一次调用 ateam 命令才会知道。想让它马上停：在它的 agent 窗口里点停止，把下面这句话发过去。`),
         promptBlock(stopPrompt(a, pendingCancel(a)), renderHelper),
@@ -3056,6 +3074,8 @@ function renderDrawer(fresh) {
   const drawer = document.getElementById('drawer');
   const t = view.task && data.state.tasks.find((x) => x.id === view.task);
   if (!t) { drawer.hidden = true; drawer.replaceChildren(); assignOpen = null; return; }
+  // 正在写回复：轮询刷新不重画，免得打字被打断
+  if (!fresh && document.activeElement?.classList?.contains('reply-input') && drawer.contains(document.activeElement) && document.activeElement.dataset.id === t.id) return;
   const scroll = fresh ? 0 : drawer.scrollTop;
   const lane = laneOf(t);
   // 子节点里有条件出现的数组和 null：走 fill，与 el() 一样展开并过滤
@@ -3097,6 +3117,7 @@ function renderDrawer(fresh) {
     el('h2', null, t.title),
     facts,
     demo ? demoDrawerBody(t) : [
+    replyBox(t),
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
     t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t), holdBox(t)] : null,
     critiqueBox(t),
@@ -3257,6 +3278,7 @@ function openCardMenu(id, x, y) {
   fill(m,
     el('div', { class: 'ctx-head' }, el('span', { class: 'id' }, t.id), el('span', { class: 't' }, t.title)),
     item('popout', '打开详情', () => { view.task = t.id; saveView(); renderDrawer(true); }),
+    t.kind !== 'demo' && (t.status === 'asking' || t.status === 'working') ? item('reply', t.status === 'asking' ? '回复提问…' : '给 worker 留言…', () => focusReply(t.id)) : null,
     jumps.length ? [sep(), jumps] : null,
     actions.length ? [sep(), actions] : null,
     dangers.length ? [sep(), dangers] : null,
@@ -3518,6 +3540,51 @@ async function holdAction(kind, id, on) {
   renderDrawer(false);
 }
 
+// ---------- 直接回复 ----------
+// 用户在卡片详情里直接回复：卡在等答复就当答复交给 worker，在做就当补充说明；leader 都会收到通知
+const replyDrafts = new Map(); // 卡号 → 没发出去的草稿，重画抽屉时不丢
+let replyState = { id: null, sending: false, error: '', sent: '' };
+function replyBox(t) {
+  if (t.status !== 'asking' && t.status !== 'working') return null;
+  const asking = t.status === 'asking';
+  const q = asking ? [...t.history].reverse().find((h) => h.type === 'asked') : null;
+  const mine = replyState.id === t.id ? replyState : { error: '', sent: '', sending: false };
+  const area = el('textarea', {
+    class: 'reply-input', rows: '3', 'data-id': t.id,
+    placeholder: asking ? '直接回答它的问题，worker 收到后接着做' : `有话要告诉 ${t.assignee ? agentLabel(t.assignee) : 'worker'}（比如「别关别人的标签页」）`,
+  });
+  area.value = replyDrafts.get(t.id) || '';
+  const send = async () => {
+    const text = area.value.trim();
+    if (!text || replyState.sending) return;
+    area.blur(); // 输入框有焦点时抽屉不重画，先放开，才看得到「发送中」和结果
+    replyState = { id: t.id, sending: true, error: '', sent: '' };
+    renderDrawer(false);
+    const out = await post('/api/reply', { id: t.id, text });
+    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发给 worker，leader 也收到了。' : '已发出：worker 下一次调用 ateam 命令时收到（提交前一定会看到），leader 也收到了。' }; }
+    else replyState = { id: t.id, sending: false, error: out.message || '没发出去。', sent: '' };
+    await poll();
+    render();
+    renderDrawer(false);
+  };
+  area.addEventListener('input', () => { replyDrafts.set(t.id, area.value); if (replyState.id === t.id && replyState.sent) replyState.sent = ''; });
+  area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
+  const foot = mine.error ? el('span', { class: 'hint err' }, mine.error)
+    : mine.sent ? el('span', { class: 'hint' }, mine.sent)
+    : el('span', { class: 'hint' }, asking ? 'worker 和 leader 都会收到，leader 不会再重复答复。⌘↩ 发送' : 'worker 和 leader 都会收到。⌘↩ 发送');
+  return el('div', { class: `reply-box${asking ? ' asking' : ''}` },
+    el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : '给 worker 留言'),
+    q ? el('div', { class: 'q' }, el('span', { class: 'who' }, `${agentLabel(q.actor)} · ${fmtTime(q.ts)}`), q.text) : null,
+    area,
+    el('div', { class: 'reply-foot' }, foot,
+      el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送')));
+}
+function focusReply(id) {
+  view.task = id; saveView(); renderDrawer(true);
+  const area = document.querySelector(`#drawer .reply-input[data-id="${id}"]`);
+  if (area) { area.scrollIntoView({ block: 'center' }); area.focus(); }
+}
+
 function holdBox(t) {
   const job = data.state.jobs.find((j) => j.id === t.jobId);
   const on = !!t.onHold;
@@ -3762,6 +3829,7 @@ function agentName(id) {
   return data.state.agents.find((a) => a.id === id)?.name || id;
 }
 function agentLabel(id) {
+  if (id === 'user') return '你';
   const name = data.state.agents.find((a) => a.id === id)?.name;
   return name ? `${name}（${id}）` : id;
 }

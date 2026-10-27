@@ -499,6 +499,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/approve': (b) => ({ task: store.approve(requireId(b), b.text ?? '') }),
     'POST /api/reject': (b) => ({ task: store.reject(requireId(b), b.text) }),
     'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
+    'POST /api/reply': (b) => ({ task: store.userReply(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
     'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),
     'POST /api/agents/hide': (b) => ({ hidden: store.hideAgents(b.ids) }),

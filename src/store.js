@@ -927,7 +927,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // leader 的补充说明还没看到：先给它看，按说明检查完再提交
     const note = takeNote(task);
     if (note) {
-      throw new AteamError('BAD_STATE', `提交前先看 leader 对 ${task.id} 的补充说明：\n\n${note}\n\n按说明检查、需要的话修改后，再运行 ateam submit。`);
+      throw new AteamError('BAD_STATE', `提交前先看对 ${task.id} 的补充说明（标着「用户直接说」的是用户本人说的）：\n\n${note}\n\n按说明检查、需要的话修改后，再运行 ateam submit。`);
     }
     return task;
   }
@@ -1122,14 +1122,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // leader 给正在做的 worker 补充说明（比如审卡发现描述有误）。worker 下一次 progress、wait 或 submit 时收到
-  function noteTask(taskId, text) {
+  // by 为 'user'：用户在看板上直接留言，worker 收到时标明来自用户
+  function noteTask(taskId, text, by = 'lead') {
     text = requireText(text, '补充说明');
     const task = getTask(taskId);
     if (task.status !== 'working' && task.status !== 'asking') {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中的任务能补充说明；待领取的直接 ateam task edit 改卡。`);
     }
-    task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${text}` : text;
-    addHistory(task, 'note', 'lead', text);
+    const line = by === 'user' ? `（用户直接说）${text}` : text;
+    task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${line}` : line;
+    addHistory(task, 'note', by, text);
     changed();
     return task;
   }
@@ -1199,7 +1201,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
-  function answer(taskId, text) {
+  function answer(taskId, text, by = 'lead') {
     text = requireText(text, '答复');
     const task = getTask(taskId);
     if (task.status === 'asking' && task.parked) {
@@ -1209,8 +1211,23 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     } else if (!(task.status === 'pending' && task.handoff)) {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，没有待回答的提问。`);
     }
-    task.pendingDelivery = { kind: 'answer', text };
-    addHistory(task, 'answered', 'lead', text);
+    task.pendingDelivery = by === 'user' ? { kind: 'answer', text, by } : { kind: 'answer', text };
+    addHistory(task, 'answered', by, text);
+    changed();
+    return task;
+  }
+
+  // 用户在看板上直接回复：卡在等答复就当答复送给 worker，在做就当补充说明；都通知 leader
+  function userReply(taskId, text) {
+    const task = getTask(taskId);
+    let kind;
+    if (task.status === 'asking') { answer(taskId, text, 'user'); kind = 'answer'; }
+    else if (task.status === 'working') { noteTask(taskId, text, 'user'); kind = 'note'; }
+    else throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中、等答复的卡能直接回复。`);
+    emit('user_reply', {
+      taskId: task.id, agentId: task.assignee ?? undefined, kind,
+      text: kind === 'answer' ? `用户直接答复了 ${task.id} 的提问：${text.trim()}` : `用户给正在做 ${task.id} 的 worker 留言：${text.trim()}`,
+    });
     changed();
     return task;
   }
@@ -1862,7 +1879,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

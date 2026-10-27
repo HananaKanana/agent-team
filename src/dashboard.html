@@ -247,16 +247,17 @@ input[type="checkbox"]:not(.switch):checked::after {
   font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .rules-editor:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--focus); }
-.reply-box { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); }
-.reply-box.asking { box-shadow: inset 3px 0 0 var(--asking), inset 0 0 0 1px color-mix(in srgb, var(--asking) 30%, transparent); }
-.reply-box h4 { margin: 0 0 6px; }
-.reply-box .q { margin: 0 0 10px; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--asking) 9%, transparent); font-size: 13px; line-height: 1.65; white-space: pre-wrap; max-height: 220px; overflow: auto; }
-.reply-box .q .who { display: block; margin-bottom: 2px; font-size: 12px; color: var(--faint); }
-.reply-input { display: block; width: 100%; min-height: 72px; padding: 9px 11px; resize: vertical; border: 0; border-radius: 6px; background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); font-family: inherit; font-size: 13px; line-height: 1.6; }
-.reply-input:focus { outline: none; box-shadow: inset 0 0 0 1.5px var(--focus); }
-.reply-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.reply-box .composer { border-radius: 8px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line); transition: box-shadow .12s; }
+.reply-box .composer:focus-within { box-shadow: inset 0 0 0 1.5px var(--focus); }
+.reply-box.asking .composer { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--asking) 55%, var(--line)); }
+.reply-box.asking .composer:focus-within { box-shadow: inset 0 0 0 1.5px var(--focus); }
+.reply-input { display: block; width: 100%; min-height: 64px; max-height: 320px; padding: 10px 12px 4px; resize: none; border: 0; background: transparent; color: var(--ink); font-family: inherit; font-size: 13.5px; line-height: 1.6; field-sizing: content; }
+.reply-input:focus { outline: none; }
+.reply-input::placeholder { color: var(--faint); }
+.reply-foot { display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px 12px; }
 .reply-foot .hint { flex: 1; min-width: 0; font-size: 12px; }
 .reply-foot .err { color: var(--rework); }
+.reply-foot kbd { font: inherit; font-size: 11px; padding: 0 4px; border-radius: 3px; background: var(--sunken); color: var(--muted); }
 .rules-view { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; max-height: 460px; overflow: auto; }
 .rules-sec { padding: 10px 14px 8px; border-radius: 6px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); }
 .rules-sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; color: var(--faint); }
@@ -3117,7 +3118,6 @@ function renderDrawer(fresh) {
     el('h2', null, t.title),
     facts,
     demo ? demoDrawerBody(t) : [
-    replyBox(t),
     (t.status === 'working' || t.status === 'asking') && t.assignee ? reclaimBox(t) : null,
     t.status === 'pending' || t.status === 'held' ? [assignBox(t), priorityBox(t), holdBox(t)] : null,
     critiqueBox(t),
@@ -3154,7 +3154,8 @@ function renderDrawer(fresh) {
         el('div', null, el('span', { class: 'what' }, label), ' ', el('span', { class: 'when' }, `${fmtTime(h.ts)}  ${agentLabel(h.actor)}`)),
         h.text ? el('div', { class: 'text' }, h.text) : null,
         h.commit ? el('div', { class: 'when' }, '提交 ', el('code', null, h.commit)) : null);
-    }))));
+    })),
+    demo ? null : replyBox(t)));
   drawer.hidden = false;
   drawer.scrollTop = scroll;
   drawer.classList.toggle('wide', drawerWide);
@@ -3547,11 +3548,10 @@ let replyState = { id: null, sending: false, error: '', sent: '' };
 function replyBox(t) {
   if (t.status !== 'asking' && t.status !== 'working') return null;
   const asking = t.status === 'asking';
-  const q = asking ? [...t.history].reverse().find((h) => h.type === 'asked') : null;
   const mine = replyState.id === t.id ? replyState : { error: '', sent: '', sending: false };
   const area = el('textarea', {
     class: 'reply-input', rows: '3', 'data-id': t.id,
-    placeholder: asking ? '直接回答它的问题，worker 收到后接着做' : `有话要告诉 ${t.assignee ? agentLabel(t.assignee) : 'worker'}（比如「别关别人的标签页」）`,
+    placeholder: asking ? '直接回答上面的提问，worker 收到后接着做…' : `写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的话…`,
   });
   area.value = replyDrafts.get(t.id) || '';
   const send = async () => {
@@ -3571,13 +3571,12 @@ function replyBox(t) {
   area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
   const foot = mine.error ? el('span', { class: 'hint err' }, mine.error)
     : mine.sent ? el('span', { class: 'hint' }, mine.sent)
-    : el('span', { class: 'hint' }, asking ? 'worker 和 leader 都会收到，leader 不会再重复答复。⌘↩ 发送' : 'worker 和 leader 都会收到。⌘↩ 发送');
+    : el('span', { class: 'hint' }, asking ? 'worker 和 leader 都会收到，leader 不会再重复答复 · ' : 'worker 下次调用 ateam 时收到，leader 也会收到 · ', el('kbd', null, '⌘↩'), ' 发送');
   return el('div', { class: `reply-box${asking ? ' asking' : ''}` },
     el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : '给 worker 留言'),
-    q ? el('div', { class: 'q' }, el('span', { class: 'who' }, `${agentLabel(q.actor)} · ${fmtTime(q.ts)}`), q.text) : null,
-    area,
-    el('div', { class: 'reply-foot' }, foot,
-      el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送')));
+    el('div', { class: 'composer', onclick: () => area.focus() }, area,
+      el('div', { class: 'reply-foot' }, foot,
+        el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送'))));
 }
 function focusReply(id) {
   view.task = id; saveView(); renderDrawer(true);

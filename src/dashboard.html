@@ -2091,15 +2091,17 @@ function renderJobs() {
     if (j.demo) {
       const live = jt.find((t) => t.status === 'queued' || t.status === 'demoing');
       return el('button', {
-        class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'aria-current': view.job === j.id ? 'true' : 'false',
+        class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id, 'aria-current': view.job === j.id ? 'true' : 'false',
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
+        oncontextmenu: (e) => { e.preventDefault(); openJobMenu(j.id, e.clientX, e.clientY); },
       },
       el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
       el('div', { class: 'sub' }, el('span', { class: 'tag' }, '演播'), el('span', null, live ? (live.status === 'demoing' ? `${modeWord(live)}中` : DEMO_STATUS[live.status][0]) : `${jt.length} 张演播卡`)));
     }
     return el('button', {
-      class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'aria-current': view.job === j.id ? 'true' : 'false',
+      class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id, 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
+      oncontextmenu: (e) => { e.preventDefault(); openJobMenu(j.id, e.clientX, e.clientY); },
     },
     el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
     el('div', { class: 'sub' }, j.status === 'accepted' ? el('span', { class: 'accepted' }, '✓ 已验收') : el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
@@ -2172,10 +2174,11 @@ function renderJobs() {
       const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
       const doneN = jt.filter((t) => t.status === 'approved').length;
       return el('button', {
-        class: `job-mini${j.status === 'accepted' ? ' ok' : ''}${j.status === 'cancelled' ? ' dropped' : ''}`,
+        class: `job-mini${j.status === 'accepted' ? ' ok' : ''}${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id,
         'aria-current': view.job === j.id ? 'true' : 'false',
         title: `${j.id} ${j.title}\n${j.demo ? `${jt.length} 张演播卡` : `${doneN}/${jt.length} 已通过`}`,
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
+        oncontextmenu: (e) => { e.preventDefault(); openJobMenu(j.id, e.clientX, e.clientY); },
       }, j.id, el('i', { class: j.demo || !jt.length ? 'none' : '' }, el('i', { style: `width:${jt.length ? Math.round((doneN / jt.length) * 100) : 0}%` })));
     }), done.length || dropped.length || demos.length ? el('button', { class: 'job-mini more', title: `展开查看演播 ${demos.length}、已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
     return;
@@ -3184,12 +3187,71 @@ function openCardMenu(id, x, y) {
     actions.length ? [sep(), actions] : null,
     dangers.length ? [sep(), dangers] : null,
     sep(), copies);
+  placeMenu(m, x, y);
+}
+// 贴着鼠标打开，碰到屏幕边就往里收
+function placeMenu(m, x, y) {
   m.hidden = false;
-  // 贴着鼠标打开，碰到屏幕边就往里收
   const r = m.getBoundingClientRect();
   m.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
   m.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
   m.querySelector('button')?.focus();
+}
+// 左侧需求的右键菜单：查看、验收 / 汇报、暂停领取、跳到需要处理的卡、作废、复制
+function openJobMenu(id, x, y) {
+  const j = data.state.jobs.find((q) => q.id === id);
+  if (!j) return;
+  const m = document.getElementById('card-menu');
+  const tasks = data.state.tasks.filter((t) => t.jobId === j.id);
+  const act = (fn) => (e) => { e.stopPropagation(); closeCardMenu(); fn(); };
+  const item = (ic, label, fn, cls = '') => el('button', { role: 'menuitem', class: cls, onclick: act(fn) }, icon(ic), el('span', { class: 't' }, label));
+  const go = () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); };
+  const sep = () => el('div', { class: 'sep' });
+  const open = j.status !== 'accepted' && j.status !== 'cancelled';
+
+  const main = [item('popout', '打开', go)];
+  if (j.report) main.push(item('inbox', j.status === 'awaiting_acceptance' ? '查看汇报（待你验收）' : '查看汇报', () => { go(); openReport(); }));
+  if (j.status === 'awaiting_acceptance') {
+    main.push(item('check', '验收通过…', () => openConfirm({
+      title: `验收 ${j.id}？`,
+      body: `「${j.title}」标为已验收，收进左侧「已验收」。之后还要改，在这个需求下加任务，它会回到进行中。`,
+      ok: '验收通过',
+      run: async () => { await acceptJob(j.id); return { ok: true }; },
+    })));
+  }
+  // 需要你看一眼的卡：等答复、待 review、挂起
+  const LABEL = { asking: '等待答复', submitted: '待 review', held: '已挂起' };
+  const notable = tasks.filter((t) => LABEL[t.status]);
+  const jumps = notable.length ? [sep(), el('div', { class: 'ctx-group' }, '要处理的卡'), notable.map((o) => el('button', { role: 'menuitem', title: `跳到 ${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
+    el('span', { class: `dot s-${laneOf(o)}` }), el('span', { class: 'k' }, o.id), el('span', { class: 't' }, o.title), el('span', { class: 'st' }, LABEL[o.status])))] : [];
+
+  const actions = [];
+  if (open && !j.demo) actions.push(item(j.onHold ? 'play' : 'pause', j.onHold ? '恢复领取' : '暂停领取（整个需求）', () => holdAction('jobs', j.id, !j.onHold)));
+  const dangers = [];
+  if (open) {
+    const left = tasks.filter((t) => t.status !== 'approved' && t.status !== 'cancelled');
+    dangers.push(item('ban', '作废需求…', () => openConfirm({
+      title: `作废 ${j.id}？`,
+      body: `「${j.title}」作废后不能恢复。${left.length ? `会连带作废没做完的 ${left.length} 张卡（${left.map((t) => t.id).join('、')}），正在做的 worker 会收到通知、停手。` : '没有没做完的卡。'}已通过的卡和已提交的代码保留。`,
+      reason: true,
+      ok: '确认作废',
+      run: (reason) => post('/api/jobs/cancel', { id: j.id, text: reason || '用户在看板上作废', userApproved: true }),
+    }), 'danger'));
+  }
+  const copyBtn = (label, text) => el('button', { onclick: async (e) => {
+    e.stopPropagation();
+    try { await navigator.clipboard.writeText(text); } catch {}
+    e.currentTarget.textContent = '已复制';
+    e.currentTarget.classList.add('done');
+    setTimeout(closeCardMenu, 450);
+  } }, label);
+  fill(m,
+    el('div', { class: 'ctx-head' }, el('span', { class: 'id' }, j.id), el('span', { class: 't' }, j.title)),
+    main, jumps,
+    actions.length ? [sep(), actions] : null,
+    dangers.length ? [sep(), dangers] : null,
+    sep(), el('div', { class: 'ctx-copy' }, icon('copy'), copyBtn('编号', j.id), copyBtn('编号 + 标题', `${j.id} ${j.title}`)));
+  placeMenu(m, x, y);
 }
 addEventListener('scroll', closeCardMenu, true);
 addEventListener('resize', closeCardMenu);
@@ -4282,12 +4344,12 @@ if (new URLSearchParams(location.search).has('inputlog')) {
   addEventListener('pointerdown', (e) => {
     clearTimeout(press);
     if (!touchScroll || e.button !== 0) return;
-    const c = e.target.closest('.card[data-id]');
+    const c = e.target.closest('.card[data-id], .job[data-job], .job-mini[data-job]');
     if (!c) return;
     const { clientX: x, clientY: y } = e;
     press = setTimeout(() => {
       st = null;
-      openCardMenu(c.dataset.id, x, y);
+      if (c.dataset.id) openCardMenu(c.dataset.id, x, y); else openJobMenu(c.dataset.job, x, y);
       const swallow = (ev) => { if (!ev.target.closest('#card-menu')) { ev.stopPropagation(); ev.preventDefault(); } };
       addEventListener('click', swallow, { capture: true, once: true });
       setTimeout(() => removeEventListener('click', swallow, true), 400);

@@ -128,16 +128,31 @@ async function groupByRepo(root, paths) {
   return groups;
 }
 
-// 在一个仓库里只提交 paths 内的改动，返回短提交号或 null（没有改动）
-async function commitInRepo(top, paths, message, exclude = []) {
+// git 命令一律不用 :(exclude) 排除写法：git 2.54 在「深层未跟踪新文件 + 排除写法」「目录写成 dir/ + 排除写法」
+// 等组合下会静默不暂存（退出码 0、没有输出），新建的文件就漏交了。.ateam 改在这里按路径前缀自己过滤
+const underAteam = (file, ateam) => !!ateam && (file === ateam || file.startsWith(`${ateam}/`));
+
+// paths 里的改动（含新文件、删除），路径相对仓库根，不含 .ateam。staged：只看已暂存的
+async function changedFiles(top, paths, ateam, staged = false) {
+  const args = staged
+    ? ['diff', '--cached', '--name-only', '--no-renames', '-z', '--', ...paths]
+    : ['status', '--porcelain=v1', '-z', '--no-renames', '--untracked-files=all', '--', ...paths];
+  const { stdout } = await git(top, args);
+  return stdout.split('\0').filter(Boolean).map((e) => (staged ? e : e.slice(3))).filter((p) => !underAteam(p, ateam));
+}
+
+// 在一个仓库里只提交 paths 内的改动，返回短提交号或 null（没有改动）。ateam：.ateam 相对仓库根的路径（不在这个仓库里为 null）
+async function commitInRepo(top, paths, message, ateam) {
+  // .ateam 原来就有暂存的改动（不是我们加的）就不碰；否则下面 add 带进来的再撤出暂存区
+  const ateamStaged = ateam ? (await git(top, ['diff', '--cached', '--name-only', '--', ateam])).stdout.trim() !== '' : true;
   const valid = [];
   for (const p of paths) {
     try {
-      await git(top, ['add', '-A', '--', p, ...exclude]);
+      await git(top, ['add', '-A', '--', p]);
       valid.push(p);
     } catch (err) {
       // 找不到文件不一定是没改动：worker 用 git rm 删掉的路径，磁盘和暂存区里都没有了，git add 会报
-      // did not match any files，但删除已经暂存好了。照样留下，交给下面的 diff --cached 判断有没有暂存改动
+      // did not match any files，但删除已经暂存好了。照样留下，交给下面判断有没有暂存改动
       if (/did not match any files|are ignored by one of your \.gitignore/.test(err.stderr ?? '')) {
         valid.push(p);
         continue;
@@ -145,21 +160,13 @@ async function commitInRepo(top, paths, message, exclude = []) {
       throw gitError('git add', err);
     }
   }
-  // 只保留确实有暂存改动的路径：空目录、只含被忽略文件的目录 git add 不报错，
-  // 但放进 git commit 的路径参数会报 pathspec 不匹配
-  const changed = [];
-  for (const p of valid) {
-    try {
-      await git(top, ['diff', '--cached', '--quiet', '--', p, ...exclude]);
-    } catch (err) {
-      if (err.code !== 1) throw gitError('git diff', err);
-      changed.push(p);
-    }
-  }
-  if (changed.length === 0) return null;
-
+  if (!ateamStaged) await git(top, ['reset', '-q', '--', ateam]).catch(() => {});
+  if (!valid.length) return null;
+  // 按文件逐个列出来提交（不用目录 + 排除写法），--only 只提交这些文件，别处已暂存的改动不带上
+  const files = await changedFiles(top, valid, ateam, true);
+  if (files.length === 0) return null;
   try {
-    await git(top, ['commit', '-m', message, '--', ...changed, ...exclude]);
+    await git(top, ['commit', '-m', message, '--only', '--', ...files]);
     const { stdout } = await git(top, ['rev-parse', '--short', 'HEAD']);
     return stdout.trim();
   } catch (err) {
@@ -167,8 +174,15 @@ async function commitInRepo(top, paths, message, exclude = []) {
   }
 }
 
+// .ateam 相对这个仓库根的路径；不在这个仓库里返回 null
+function ateamIn(top, realRoot) {
+  const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
+  return rel && !rel.startsWith('..') ? rel : null;
+}
+
 // 只提交 paths 内的改动，每个涉及的仓库各提交一次。
 // 返回 { commits: ['a1b2c3d'] }（单仓库）或 { commits: ['api@a1b2c3d', ...] }（多仓库）；都没有改动时返回 { nothing: true }。
+// 提交后路径里还有改动没进提交（不该有）：放在 leftover 里，调用方要报错，不能当成功。
 // worker 的提交永远不带上 .ateam/：用户可能把 .ateam/ 提交进仓库，任务路径写得宽（比如 .）时
 // 会把看板状态一起带进 worker 的提交
 export async function commitPaths(root, paths, message) {
@@ -177,13 +191,10 @@ export async function commitPaths(root, paths, message) {
   const commits = [];
   const leftover = [];
   for (const [top, { label, paths: repoPaths }] of groups) {
-    const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
-    const exclude = rel && !rel.startsWith('..') ? [`:(exclude,top)${rel}`] : [];
-    const sha = await commitInRepo(top, repoPaths, message, exclude);
+    const ateam = ateamIn(top, realRoot);
+    const sha = await commitInRepo(top, repoPaths, message, ateam);
     if (sha) commits.push(label ? `${label}@${sha}` : sha);
-    // 提交后路径里还有没进提交的改动（不该有）：列出来，让 worker 和 leader 知道，别悄悄漏掉
-    const { stdout } = await run(top, ['status', '--porcelain=v1', '--untracked-files=all', '--', ...repoPaths, ...exclude]);
-    for (const line of stdout.split('\n').filter(Boolean)) leftover.push((label ? `${label}/` : '') + line.slice(3));
+    for (const p of await changedFiles(top, repoPaths, ateam)) leftover.push((label ? `${label}/` : '') + p);
   }
   if (!commits.length) return { nothing: true, leftover };
   return leftover.length ? { commits, leftover } : { commits };
@@ -197,17 +208,9 @@ export async function latestChangeTime(root, paths) {
   let latest = null;
   for (const [top, { paths: repoPaths }] of groups) {
     // 看板状态文件一直在变，不算 worker 的活动
-    const rel = relative(top, join(realRoot, '.ateam')).split(sep).join('/');
-    const exclude = rel && !rel.startsWith('..') ? [`:(exclude,top)${rel}`] : [];
-    const { stdout } = await run(top, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', ...repoPaths, ...exclude]);
-    const entries = stdout.split('\0');
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      if (entry.length < 4) continue;
-      if (entry[0] === 'R' || entry[0] === 'C') i++; // 重命名后面跟着原路径
+    for (const file of await changedFiles(top, repoPaths, ateamIn(top, realRoot))) {
       try {
-        // porcelain 输出的路径相对于仓库根
-        const { mtimeMs } = await stat(join(top, entry.slice(3)));
+        const { mtimeMs } = await stat(join(top, file));
         if (latest === null || mtimeMs > latest) latest = mtimeMs;
       } catch {
         // 已删除的文件没有修改时间，忽略

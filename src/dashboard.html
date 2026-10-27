@@ -3377,10 +3377,12 @@ function spotResults(q) {
   const s = q.trim().toLowerCase();
   if (!s) return { tasks: [], jobs: [] };
   const idQ = s.replace(/^#/, '');
+  const numQ = /^\d+$/.test(idQ); // 只输数字：按卡号、需求号的数字部分找（248 → T248、J248）
   const score = (id, title) => {
     const i = id.toLowerCase();
-    if (i === idQ) return 0;
-    if (i.startsWith(idQ)) return 1;
+    const n = i.slice(1);
+    if (i === idQ || (numQ && n === idQ)) return 0;
+    if (i.startsWith(idQ) || (numQ && n.startsWith(idQ))) return 1;
     if (title.toLowerCase().includes(s)) return 2;
     return -1;
   };
@@ -3396,7 +3398,8 @@ function renderSpotlight(fresh) {
   if (!spot) return closeSpotlight();
   const { tasks, jobs } = spotResults(spot.q);
   // 卡号精确命中时卡排前面，否则需求排前面（需求少，一眼看完）
-  const tasksFirst = tasks.length && /^#?t\d/i.test(spot.q.trim());
+  const q0 = spot.q.trim().replace(/^#/, '');
+  const tasksFirst = tasks.length && (/^t\d/i.test(q0) || (/^\d+$/.test(q0) && !(jobs[0]?.id.slice(1) === q0 && tasks[0]?.id.slice(1) !== q0)));
   const rows = tasksFirst ? [...tasks.map((t) => ['t', t]), ...jobs.map((j) => ['j', j])] : [...jobs.map((j) => ['j', j]), ...tasks.map((t) => ['t', t])];
   spot.sel = Math.max(0, Math.min(spot.sel, rows.length - 1));
   const hl = (title) => {

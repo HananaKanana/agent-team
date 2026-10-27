@@ -786,13 +786,15 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .report-top .crumb { color: var(--faint); font-size: 13px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .report-top .crumb b { color: var(--ink); font-weight: 600; }
 .report-top .btn svg { width: 16px; height: 16px; }
-/* 正文居中，宽屏时右边是目录 */
+/* 正文居中，宽屏时左边是目录；够宽时右边留一样宽的空列，正文仍在正中 */
 .report-wrap { display: grid; grid-template-columns: minmax(0, 780px); justify-content: center; gap: 32px; padding: 32px 20px 80px; }
-@media (min-width: 1180px) { .report-wrap.has-toc { grid-template-columns: minmax(0, 780px) 220px; } }
 .report-toc { display: none; }
 @media (min-width: 1180px) {
-  .report-wrap.has-toc .report-toc { display: block; position: sticky; top: 88px; align-self: start; font-size: 13px; }
+  .report-wrap.has-toc { grid-template-columns: 200px minmax(0, 780px); }
+  .report-wrap.has-toc .report-toc { display: block; grid-column: 1; grid-row: 1; position: sticky; top: 88px; align-self: start; font-size: 13px; }
+  .report-wrap.has-toc > :not(.report-toc) { grid-column: 2; }
 }
+@media (min-width: 1360px) { .report-wrap.has-toc { grid-template-columns: 200px minmax(0, 780px) 200px; } }
 .report-toc h5 { margin: 0 0 8px; font-size: 12px; color: var(--faint); font-weight: 600; }
 .report-toc a { display: block; padding: 4px 0 4px 12px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; line-height: 1.5; }
 .report-toc a:hover { color: var(--brand); border-left-color: var(--brand); }

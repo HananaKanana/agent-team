@@ -959,9 +959,6 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .ctx-menu .ctx-copy button.done { color: var(--approved); border-color: var(--approved); }
 /* 卡片、需求、演播行是点击 / 右键 / 拖动的对象，不让选中文字（双击、长按、拖动时不会出现一片蓝底） */
 .card, .job, .job-mini, .demo-row, .cancelled-row, .worker, .accepted-toggle { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.btn.search-btn { gap: 6px; padding: 0 8px 0 10px; }
-.btn.search-btn kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; font: 500 11px/16px inherit; color: var(--faint); background: var(--raised); }
-@media (max-width: 1180px) { .btn.search-btn span, .btn.search-btn kbd { display: none; } }
 /* 搜索：苹果聚焦搜索那样，顶部居中一个大输入框，下面是结果 */
 .spot-back { position: fixed; inset: 0; z-index: 45; display: flex; justify-content: center; align-items: flex-start; padding: 14vh 16px 16px; background: color-mix(in srgb, var(--backdrop) 60%, transparent); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 .spot-back[hidden] { display: none; }
@@ -1203,7 +1200,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn" id="notify-btn" type="button" hidden title="允许浏览器弹通知：有需求待验收、任务缺 worker、leader 掉线时提醒你">开启通知</button>
-  <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
+  <button class="btn head-btn icon search-btn" id="search-btn" type="button" title="搜索卡号或标题（⌘K 或 /）" aria-label="搜索"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
 </header>

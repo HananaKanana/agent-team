@@ -5,7 +5,7 @@
 // - 多仓库：项目目录不是仓库，但下面一层有若干仓库，比如 myapp/ 下的 web/、api/。
 // 任务路径都相对于项目目录写；提交时按路径找到它所属的仓库，在那个仓库里提交。
 import { execFile } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
@@ -76,23 +76,14 @@ export async function ensureGitRepo(root) {
 export function ensureGitignore(root) {
   const dir = join(root, '.ateam');
   mkdirSync(dir, { recursive: true });
+  // .ateam/ 自带的 .gitignore：卡和需求（board.json、archive/）、项目规则要提交；一直在变的运行状态、端口、临时文件、
+  // 老版本状态文件的备份不提交。老项目缺的行补上
   const own = join(dir, '.gitignore');
-  if (!existsSync(own)) writeFileSync(own, '# ateam 自动生成：端口和临时文件不提交\nport\n*.tmp\n');
-  const marker = join(dir, 'gitignore-added');
-  if (existsSync(marker)) return;
-  // 已经跑过 ateam 的老项目（有状态文件）：当年已经加过，用户现在没有这一行就是自己删的，尊重它
-  if (existsSync(join(dir, 'state.json'))) {
-    writeFileSync(marker, '已经把 .ateam/ 加过项目的 .gitignore。想提交 .ateam/ 就从 .gitignore 删掉那一行，ateam 不会再加回去。\n');
-    return;
-  }
-  const file = join(root, '.gitignore');
-  const content = existsSync(file) ? readFileSync(file, 'utf8') : '';
-  const lines = content.split(/\r?\n/).map((l) => l.trim());
-  if (!lines.includes('.ateam/') && !lines.includes('.ateam')) {
-    const prefix = content && !content.endsWith('\n') ? '\n' : '';
-    appendFileSync(file, `${prefix}.ateam/\n`);
-  }
-  writeFileSync(marker, '已经把 .ateam/ 加过项目的 .gitignore。想提交 .ateam/ 就从 .gitignore 删掉那一行，ateam 不会再加回去。\n');
+  const want = ['port', '*.tmp', 'runtime.json', 'state.json.bak'];
+  const have = existsSync(own) ? readFileSync(own, 'utf8') : '# ateam 自动生成：卡和需求（board.json、archive/）、项目规则提交；运行状态、端口、临时文件不提交\n';
+  const lines = have.split(/\r?\n/).map((l) => l.trim());
+  const missing = want.filter((w) => !lines.includes(w));
+  if (missing.length || !existsSync(own)) writeFileSync(own, `${have}${have.endsWith('\n') ? '' : '\n'}${missing.join('\n')}${missing.length ? '\n' : ''}`);
 }
 // 把任务路径（相对于项目目录）按所属仓库分组：Map<仓库根, { label, paths: 相对于仓库根的路径[] }>
 // 路径可能还不存在（首次提交前目录没建），就往上找最近的已存在目录来判断仓库。

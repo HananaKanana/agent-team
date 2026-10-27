@@ -133,9 +133,15 @@ ateam 服务已启动：http://127.0.0.1:7700（看板同地址）
 - 这个终端窗口**一直开着**，关掉服务就停了。
 - 7700 被占用（比如另一个项目的服务在跑）时会自动换成 7701、7702……第一行会写明实际端口，看板就开那个地址。这个项目里的 leader 和 worker 会自动找到它，不用设置什么。
 - 项目必须是 git 仓库（没有就先 `git init`），或者下面一层有 git 仓库（见下面「多仓库项目」）。worker 不自己提交，由服务在仓库里替它提交、并且只提交任务允许改动的路径，所以离不开 git。
-- 服务会在项目里建 `.ateam/` 存状态，第一次启动时把 `.ateam/` 加进 `.gitignore`（这个改动需要你自己提交），只加这一次。想把 `.ateam/` 提交进仓库，就从 `.gitignore` 删掉那一行，之后不会再加回来；`.ateam/` 里自带的 `.gitignore` 会排除端口文件和临时文件。
+- 服务会在项目里建 `.ateam/` 存状态，分成几个文件：
+  - `board.json`：没结束的需求和它们的卡、设置，**提交进 git**；
+  - `archive/J12.json`：已验收、已作废的需求连同它的卡，一个需求一个文件，**提交进 git**，结束后基本不再变；
+  - `rules.md`：项目规则，**提交进 git**；
+  - `runtime.json`：worker、事件这些一直在变的运行状态，**不提交**（`.ateam/` 自带的 `.gitignore` 排除了它、端口文件和临时文件）。
+  
+  老版本的 `state.json` 第一次启动时会自动拆成上面几个文件，原文件改名为 `state.json.bak`。如果 `state.json` 以前提交过，把它从 git 里删掉、提交新文件就行（`git rm --cached .ateam/state.json && git add .ateam`）。
 
-  **换电脑继续用看板**：把 `.ateam/` 提交进仓库（从 `.gitignore` 删掉那一行），另一台电脑拉下来就能接着安排工作。规则：**同一时间只在一台电脑上跑 `ateam serve`**。换电脑时先在原电脑停掉服务（Ctrl+C），提交并推送 `.ateam/`；在新电脑上拉取后再启动服务。原电脑上的 worker 会在新电脑上显示为掉线，它们手上的任务按掉线规则退回待领取，新电脑开 worker 接手即可。两台同时跑会各写各的 `state.json`，合并时冲突，只能保留一边。worker 的提交永远不会带上 `.ateam/`。重启服务状态不丢。
+  **换电脑继续用看板**：`.ateam/` 提交进仓库后，另一台电脑拉下来就能接着安排工作。规则：**同一时间只在一台电脑上跑 `ateam serve`**。换电脑时先在原电脑停掉服务（Ctrl+C），提交并推送 `.ateam/`；在新电脑上拉取后再启动服务。原电脑上的 worker 会在新电脑上显示为掉线，它们手上的任务按掉线规则退回待领取，新电脑开 worker 接手即可。两台同时跑会各写各的 `board.json`，合并时冲突，只能保留一边。worker 的提交永远不会带上 `.ateam/`。重启服务状态不丢。
 
 **多仓库项目**：比如前后端是两个仓库，放在同一个上级目录下：
 
@@ -281,7 +287,7 @@ worker 正在干活时没法被打断，要等它下一次调用 ateam 命令（
 # 1. 在服务窗口按 Ctrl+C 停掉
 # 2. 把状态搬到正确的项目（假设之前错起在 ~/code/agent-team）
 mkdir -p ~/code/apiloop/.ateam
-cp ~/code/agent-team/.ateam/state.json ~/code/apiloop/.ateam/
+cp -R ~/code/agent-team/.ateam/. ~/code/apiloop/.ateam/
 # 3. 在正确的目录重新启动，确认「项目目录」那一行
 cd ~/code/apiloop && ateam serve
 # 4. 对卡住的 worker 说「服务已重启，继续」

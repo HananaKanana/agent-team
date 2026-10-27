@@ -3366,7 +3366,7 @@ function renderSpotlight(fresh) {
   };
   let input = box.querySelector('input');
   if (fresh || !input) {
-    input = el('input', { type: 'text', placeholder: '搜卡号、需求编号或标题，比如 T225', autocomplete: 'off', spellcheck: 'false' });
+    input = el('input', { type: 'text', placeholder: '搜卡号、需求编号或标题', autocomplete: 'off', spellcheck: 'false' });
     input.addEventListener('input', () => { spot.q = input.value; spot.sel = 0; renderSpotlight(false); });
     input.addEventListener('keydown', (e) => {
       const n = box.querySelectorAll('.spot-row').length;

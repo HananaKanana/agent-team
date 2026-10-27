@@ -65,6 +65,23 @@ function oneLine(text) {
   return String(text ?? '').replace(/\s*\n\s*/g, ' / ');
 }
 
+// review 摘要：先看这张表决定细看哪几个文件，省得每个文件都打开
+export function formatReview(files) {
+  if (!files?.length) return '';
+  const add = files.reduce((n, f) => n + f.add, 0);
+  const del = files.reduce((n, f) => n + f.del, 0);
+  const outside = files.filter((f) => f.outside);
+  const lines = [`## review 摘要：${files.length} 个文件，+${add} −${del}`, ''];
+  for (const f of [...files].sort((a, b) => (b.add + b.del) - (a.add + a.del))) {
+    const n = f.binary ? '二进制' : `+${f.add} −${f.del}`;
+    const flag = `${f.created ? '  新文件' : ''}${f.outside ? '  ⚠ 不在任务路径里' : ''}`;
+    lines.push(`- \`${f.file}\`  ${n}${flag}`);
+  }
+  if (outside.length) lines.push('', `⚠ ${outside.length} 个文件不在任务路径里：先确认是不是该改的。`);
+  lines.push('', '先按这张表挑改动大的、关键的文件细看（git show <提交号> -- <文件>），小改动扫一眼就行。', '');
+  return lines.join('\n') + '\n';
+}
+
 export function formatTask(task) {
   if (task.kind === 'demo') return formatDemoTask(task);
   const lines = [];

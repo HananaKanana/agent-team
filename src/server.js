@@ -11,7 +11,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { addRule, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { loadState, saveState } from './persist.js';
-import { commitPaths, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
+import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
@@ -554,7 +554,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
       leader: { watching: watchers.size > 0, lastSeenAt: leaderSeenAt, online: leaderOnline(), away: store.state.noLeader ?? null },
     }),
-    'GET /api/task': (_b, url) => ({ task: store.getTask(url.searchParams.get('id') ?? '') }),
+    // 带 review 摘要：这张卡所有提交改了哪些文件、各几行；新文件、超出任务路径的文件标出来
+    'GET /api/task': async (_b, url) => {
+      const task = store.getTask(url.searchParams.get('id') ?? '');
+      if (!task.commits?.length || task.kind === 'demo') return { task };
+      const files = await commitStats(root, task.commits);
+      const norm = (p) => String(p).trim().replace(/^\.\//, '').replace(/\/+$/, '');
+      const inPaths = (f) => task.paths.map(norm).some((p) => p === '' || p === '.' || f === p || f.startsWith(`${p}/`));
+      return { task, review: files.map((f) => ({ ...f, outside: !inPaths(f.file) })) };
+    },
   };
 
   function handleWait(body, res) {

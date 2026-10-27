@@ -5,8 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import {
-  formatCards, formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait,
-} from '../src/format.js';
+  formatCards, formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait, formatReview } from '../src/format.js';
 
 // 服务地址：ATEAM_URL 优先；否则从当前目录往上找 .ateam/port（serve 启动时写下的实际端口，
 // 7700 被别的项目占用时会自动换成 7701、7702……）；都没有就用 7700。
@@ -562,8 +561,8 @@ const commands = {
 
   async show({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam show T3');
-    const { task } = await request('GET', `/api/task?id=${encodeURIComponent(id)}`);
-    return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatTask(task)}`;
+    const { task, review } = await request('GET', `/api/task?id=${encodeURIComponent(id)}`);
+    return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatReview(review)}${formatTask(task)}`;
   },
 
   async 'demo add'({ flags }) {

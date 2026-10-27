@@ -220,6 +220,36 @@ export async function latestChangeTime(root, paths) {
   return latest === null ? null : Math.floor(latest);
 }
 
+// 一组提交改了哪些文件、各改几行（review 摘要用）。commits 是 commitPaths 返回的提交号（多仓库带「仓库@」前缀）。
+// 返回 [{ file, add, del, binary, created（新建的文件） }]，文件路径相对项目目录；读不到的提交跳过
+export async function commitStats(root, commits) {
+  const realRoot = realpathSync(root);
+  const out = new Map();
+  for (const c of commits) {
+    const at = c.lastIndexOf('@');
+    const repo = at > 0 ? c.slice(0, at) : '';
+    const sha = at > 0 ? c.slice(at + 1) : c;
+    const top = join(realRoot, repo);
+    try {
+      const { stdout } = await run(top, ['show', '--numstat', '--format=', '--no-renames', sha]);
+      const { stdout: st } = await run(top, ['show', '--name-status', '--format=', '--no-renames', sha]);
+      const added = new Set(st.split('\n').filter((l) => l.startsWith('A\t')).map((l) => (repo ? `${repo}/` : '') + l.slice(2)));
+      for (const line of stdout.split('\n').filter(Boolean)) {
+        const [a, d, ...rest] = line.split('\t');
+        const file = (repo ? `${repo}/` : '') + rest.join('\t');
+        const prev = out.get(file) ?? { file, add: 0, del: 0, binary: false, created: false };
+        if (added.has(file)) prev.created = true;
+        if (a === '-') prev.binary = true;
+        else { prev.add += Number(a); prev.del += Number(d); }
+        out.set(file, prev);
+      }
+    } catch {
+      // 提交找不到（被改写过历史）：跳过
+    }
+  }
+  return [...out.values()];
+}
+
 // 文件在所属仓库 HEAD 里的内容（path 相对项目目录），没有提交过返回 null
 export async function headContent(root, path) {
   const [entry] = await groupByRepo(root, [path]);

@@ -957,6 +957,8 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .ctx-menu .ctx-copy button { width: auto; height: 24px; padding: 0 9px; border: 1px solid var(--line); border-radius: 99px; font-size: 12px; color: var(--muted); }
 .ctx-menu .ctx-copy button:hover { color: var(--ink); border-color: var(--brand); background: transparent; }
 .ctx-menu .ctx-copy button.done { color: var(--approved); border-color: var(--approved); }
+/* 卡片、需求、演播行是点击 / 右键 / 拖动的对象，不让选中文字（双击、长按、拖动时不会出现一片蓝底） */
+.card, .job, .job-mini, .demo-row, .cancelled-row, .worker, .accepted-toggle { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .card.flash { animation: card-flash 1.6s ease-out; }
 @keyframes card-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--brand); } 100% { box-shadow: 0 0 0 3px transparent; } }
 .confirm-reason { width: 100%; height: 34px; padding: 0 10px; margin-top: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }

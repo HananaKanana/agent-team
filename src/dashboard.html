@@ -101,6 +101,8 @@ header.top h1 { margin: 0; display: flex; align-items: center; gap: 9px; font-si
 .workers.tight .worker .task.idle { display: none; }
 .workers.compact .worker > b, .workers.compact .worker .wid, .workers.compact .worker > .role-text { display: none; }
 .workers.compact .worker { gap: 6px; padding-right: 10px; }
+/* 空闲的只剩头像：左右留一样的边，收成一个圆 */
+.workers.compact .worker:has(> .task.idle) { padding-right: 4px; }
 .worker {
   appearance: none; display: inline-flex; align-items: center; gap: 7px;
   height: 30px; padding: 0 11px 0 4px; border: 1px solid var(--line); border-radius: 999px;

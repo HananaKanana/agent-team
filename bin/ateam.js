@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // ateam 命令行：leader 和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
+import { formatDoctor } from '../src/doctor.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
@@ -65,6 +66,7 @@ leader
   ateam reject T3 "<修改意见>"
   ateam answer T3 "<答复>"
   ateam status [--job J1 | --all]
+  ateam doctor                     自检：git 提交、.ateam 提交范围、测试浏览器配置
   ateam cards [--job J1] [--todo]
   ateam critique --as <ID> ok T5 [T6 ...] ／ issue T5 "<问题和建议>" --basis "<依据>" [--because "<重新审的原因>"]
   ateam critique agree T5 "<打算怎么改>" --basis "<依据>" ／ dispute T5 "<为什么不改>" --basis "<依据>" ／ done T5 "<改了什么>"
@@ -503,6 +505,11 @@ const commands = {
       }
     }
     fail('用法：ateam rules [--role <角色>] ／ ateam rules add "<一条规则>" [--role a,b] [--user-approved] ／ ateam rules set --file rules.md [--user-approved]');
+  },
+
+  async doctor() {
+    const { checks } = await request('GET', '/api/doctor?fresh=1');
+    return formatDoctor(checks);
   },
 
   async status({ flags }) {

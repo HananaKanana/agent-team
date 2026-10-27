@@ -4110,6 +4110,7 @@ function attentionItems() {
       items.push({ key: `quiet:${a.id}`, text: `${a.id} 可能停了`, body: `${a.id} 很久没动静（手上 ${a.currentTask}），请确认窗口还在不在` });
     }
   }
+  for (const c of data.doctor ?? []) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, body: c.detail });
   // 演播需求一直是进行中，但不需要 leader 在线
   const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
   if (busy && data.leader && (data.leader.away || !data.leader.online)) {

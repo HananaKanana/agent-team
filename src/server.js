@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { addRule, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
+import { runDoctor } from './doctor.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -252,6 +253,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (t - Math.max(serverStart, leaderSeenAt ?? 0, lastWatchEnd) > store.config().leaderAwayMin * 60000) store.setLeaderAway(true);
   }
 
+  let doctor = null; // 自检结果，启动后在后台跑一次
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
 
   // 每次状态变化：落盘，并在下一轮事件循环唤醒挂起的请求。
@@ -524,6 +526,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     // 「安装」页用：本机 DeepSeek Harness 的 skill 目录和 profile、各项是否已经装好。都是现场读出来的，不写死
     'GET /api/install-info': () => installInfo(),
+    // 自检：启动时跑过一次，fresh=1 重跑
+    'GET /api/doctor': async (_b, url) => {
+      if (url.searchParams.get('fresh') === '1' || !doctor) doctor = await runDoctor({ root, install: installInfo() });
+      return { checks: doctor };
+    },
     'GET /api/rules': (_b, url) => {
       const rules = readRules();
       const role = url.searchParams.get('role');
@@ -547,6 +554,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       config: store.config(),
+      // 自检没过的项（看板顶部提示）
+      doctor: (doctor ?? []).filter((c) => !c.ok),
       // 被别人正在改的同一批文件挡住、暂时不派的卡：{ 卡号: 挡着它的卡号 }
       clash: store.clashes(),
       // 待演播的演播卡现在能不能开始、缺什么
@@ -738,5 +747,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(join(dataDir, 'port'), `${port}\n`);
   server.ateamLayout = layout;
+  runDoctor({ root, install: installInfo() }).then((r) => { doctor = r; pushSoon(); }).catch(() => {});
   return server;
 }

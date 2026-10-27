@@ -1747,6 +1747,9 @@ document.documentElement.classList.toggle('touch-mode', touchScroll);
 // 看板空列收窄：没有卡的列收成窄竖条。只对这台设备的这个浏览器生效，默认开启
 let slimLanes = true;
 try { slimLanes = localStorage.getItem('ateam.slimLanes') !== '0'; } catch {}
+// 悬停卡片时标出依赖关系：只对这台设备的这个浏览器生效，默认关闭（框和标签多了看着重）
+let showRelations = false;
+try { showRelations = localStorage.getItem('ateam.showRelations') === '1'; } catch {}
 
 async function saveSetting(key, value) {
   try {
@@ -1803,6 +1806,18 @@ function settingsPage() {
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '空列收窄'),
         el('span', { class: 'hint' }, '看板里没有卡的列收成一条窄竖条，宽度让给有卡的列；关掉后七列一样宽。只对这台设备的这个浏览器生效。')));
+    })(),
+    (() => {
+      const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
+      input.checked = showRelations;
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('change', () => {
+        showRelations = input.checked;
+        try { localStorage.setItem('ateam.showRelations', showRelations ? '1' : '0'); } catch {}
+        markRelated(null);
+      });
+      return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '悬停显示依赖关系'),
+        el('span', { class: 'hint' }, '鼠标停在卡上时，给它依赖的卡和在等它的卡加框、标上「在等」。关着时卡片上的「等依赖」和右键菜单里的相关卡照常可用。只对这台设备的这个浏览器生效。')));
     })(),
   ];
 }
@@ -3420,13 +3435,13 @@ addEventListener('keydown', (e) => {
   }
 });
 
-// 悬停卡片时把它依赖的卡（实线框）和依赖它的卡（虚线框）标出来
+// 悬停卡片时把它依赖的卡和依赖它的卡标出来（设置里开了「悬停显示依赖关系」才标）
 var relFor = null;
 function markRelated(id) {
   if (relFor === id) return;
   relFor = id;
   for (const n of document.querySelectorAll('.card.rel-self, .card.rel-dep, .card.rel-after')) { n.classList.remove('rel-self', 'rel-dep', 'rel-after'); n.removeAttribute('data-rel'); }
-  if (!id) return;
+  if (!id || !showRelations) return;
   const t = data.state.tasks.find((x) => x.id === id);
   if (!t) return;
   const mark = (tid, cls, label) => {

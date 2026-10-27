@@ -472,7 +472,9 @@ const EVENT_HINT = {
   question: (e) => `回答：ateam answer ${e.taskId} "<答复>"`,
   user_reply: (e) => (e.kind === 'answer'
     ? `用户已经直接答复，worker 会收到，你不用再 answer。用户的答复改变了任务要求的话，同步改卡（ateam task edit）或 ateam note ${e.taskId} 补充`
-    : `已送给 worker（它下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
+    : e.kind === 'review'
+      ? `review ${e.taskId} 时按用户这句话核对：用户要改的，ateam reject ${e.taskId} 把要求写进修改意见；打回后 worker 也会看到用户原话`
+      : `已送给 worker（它下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
   leader_back: () => '这些卡的 worker 多半已经在做别的卡了。答复或打回后卡会自动交回原 worker（它不在线就换人接手），你照常 answer / approve / reject 就行',
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,

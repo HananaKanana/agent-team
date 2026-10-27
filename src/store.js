@@ -541,8 +541,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         if (task.pendingDelivery) {
           const delivery = task.pendingDelivery;
           task.pendingDelivery = null;
+          // 待 review 时用户留的言，随打回意见一起给
+          const note = takeNote(task);
           changed();
-          return { kind: delivery.kind, task, delivery };
+          return { kind: delivery.kind, task, delivery: note ? { ...delivery, text: `${delivery.text}\n\n## 补充说明（标着「用户直接说」的是用户本人说的，以它为准）\n\n${note}` } : delivery };
         }
         // 规则 2：重复调用 wait，重新返回当前任务（有补充说明一起带上）
         const note = takeNote(task);
@@ -1126,7 +1128,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function noteTask(taskId, text, by = 'lead') {
     text = requireText(text, '补充说明');
     const task = getTask(taskId);
-    if (task.status !== 'working' && task.status !== 'asking') {
+    // 用户留言还可以给待 review 的卡：leader review 时看到，打回后 worker 也会看到
+    if (task.status !== 'working' && task.status !== 'asking' && !(by === 'user' && task.status === 'submitted')) {
       throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中的任务能补充说明；待领取的直接 ateam task edit 改卡。`);
     }
     const line = by === 'user' ? `（用户直接说）${text}` : text;
@@ -1223,10 +1226,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     let kind;
     if (task.status === 'asking') { answer(taskId, text, 'user'); kind = 'answer'; }
     else if (task.status === 'working') { noteTask(taskId, text, 'user'); kind = 'note'; }
-    else throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中、等答复的卡能直接回复。`);
+    else if (task.status === 'submitted') { noteTask(taskId, text, 'user'); kind = 'review'; }
+    else throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有进行中、返工中、等答复、待 review 的卡能直接回复。`);
     emit('user_reply', {
       taskId: task.id, agentId: task.assignee ?? undefined, kind,
-      text: kind === 'answer' ? `用户直接答复了 ${task.id} 的提问：${text.trim()}` : `用户给正在做 ${task.id} 的 worker 留言：${text.trim()}`,
+      text: kind === 'answer' ? `用户直接答复了 ${task.id} 的提问：${text.trim()}`
+        : kind === 'review' ? `用户对待 review 的 ${task.id} 留言：${text.trim()}`
+        : `用户给正在做 ${task.id} 的 worker 留言：${text.trim()}`,
     });
     changed();
     return task;

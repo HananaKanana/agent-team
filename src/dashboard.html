@@ -3285,7 +3285,7 @@ function openCardMenu(id, x, y) {
   fill(m,
     el('div', { class: 'ctx-head' }, el('span', { class: 'id' }, t.id), el('span', { class: 't' }, t.title)),
     item('popout', '打开详情', () => { view.task = t.id; saveView(); renderDrawer(true); }),
-    t.kind !== 'demo' && (t.status === 'asking' || t.status === 'working') ? item('reply', t.status === 'asking' ? '回复提问…' : '给 worker 留言…', () => focusReply(t.id)) : null,
+    t.kind !== 'demo' && ['asking', 'working', 'submitted'].includes(t.status) ? item('reply', t.status === 'asking' ? '回复提问…' : '留言…', () => focusReply(t.id)) : null,
     jumps.length ? [sep(), jumps] : null,
     actions.length ? [sep(), actions] : null,
     dangers.length ? [sep(), dangers] : null,
@@ -3552,12 +3552,13 @@ async function holdAction(kind, id, on) {
 const replyDrafts = new Map(); // 卡号 → 没发出去的草稿，重画抽屉时不丢
 let replyState = { id: null, sending: false, error: '', sent: '' };
 function replyBox(t) {
-  if (t.status !== 'asking' && t.status !== 'working') return null;
+  if (t.status !== 'asking' && t.status !== 'working' && t.status !== 'submitted') return null;
   const asking = t.status === 'asking';
+  const review = t.status === 'submitted';
   const mine = replyState.id === t.id ? replyState : { error: '', sent: '', sending: false };
   const area = el('textarea', {
     class: 'reply-input', rows: '3', 'data-id': t.id,
-    placeholder: asking ? '直接回答上面的提问，worker 收到后接着做…' : `写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的话…`,
+    placeholder: asking ? '直接回答上面的提问，worker 收到后接着做…' : review ? '写给 leader 的 review 要求，比如哪里要改…' : `写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的话…`,
   });
   area.value = replyDrafts.get(t.id) || '';
   const send = async () => {
@@ -3567,7 +3568,7 @@ function replyBox(t) {
     replyState = { id: t.id, sending: true, error: '', sent: '' };
     renderDrawer(false);
     const out = await post('/api/reply', { id: t.id, text });
-    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发给 worker，leader 也收到了。' : '已发出：worker 下一次调用 ateam 命令时收到（提交前一定会看到），leader 也收到了。' }; }
+    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发给 worker，leader 也收到了。' : review ? '已发给 leader，review 时会按你说的核对；打回的话 worker 也会看到。' : '已发出：worker 下一次调用 ateam 命令时收到（提交前一定会看到），leader 也收到了。' }; }
     else replyState = { id: t.id, sending: false, error: out.message || '没发出去。', sent: '' };
     await poll();
     render();
@@ -3577,9 +3578,9 @@ function replyBox(t) {
   area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
   const foot = mine.error ? el('span', { class: 'hint err' }, mine.error)
     : mine.sent ? el('span', { class: 'hint' }, mine.sent)
-    : el('span', { class: 'hint' }, asking ? 'worker 和 leader 都会收到，leader 不会再重复答复 · ' : 'worker 下次调用 ateam 时收到，leader 也会收到 · ', el('kbd', null, '⌘↩'), ' 发送');
+    : el('span', { class: 'hint' }, asking ? 'worker 和 leader 都会收到，leader 不会再重复答复 · ' : review ? 'leader review 时看到；打回的话 worker 也会看到 · ' : 'worker 下次调用 ateam 时收到，leader 也会收到 · ', el('kbd', null, '⌘↩'), ' 发送');
   return el('div', { class: `reply-box${asking ? ' asking' : ''}` },
-    el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : '给 worker 留言'),
+    el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : review ? '给 leader 和 worker 留言' : '给 worker 留言'),
     el('div', { class: 'composer', onclick: () => area.focus() }, area,
       el('div', { class: 'reply-foot' }, foot,
         el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送'))));

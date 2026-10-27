@@ -255,8 +255,11 @@ CDP 里「切到某个标签页」和「把窗口拉到最前」是同一个调�
 - **整个会话只 `open` 一次**：要用浏览器时先 `cmd=tabs`，有 `owned: true` 的就接着用，
   没有才 `open`。之后换页面都在这个标签页里 `goto`（不置顶），不另开
 - **点击、输入、等待、核对、截图时一律不 `open`**，也不要为了「保险」先 `open` 一下
-- **不用 `activate`**。窗口不在最前面时照样能截图、能等文字：`chrome-agent.sh`
-  启动时已经关掉了后台降速
+- **`activate` 只在自己的标签页被压到后面时用**：几个 agent 共用一个窗口，别人新开
+  或切过去的标签页会让你的变成后台页，用户就看不到你在操作。每次 `goto` 之后、每开始
+  一段操作之前 `eval` 读 `document.visibilityState`：`visible` 就直接操作；`hidden` 才
+  `activate` 一次（会置顶一次，这是为了让用户看得见，可以接受）。窗口只是被别的程序挡住
+  时仍是 `visible`（`chrome-agent.sh` 关掉了遮挡降速），不用 `activate`
 - **不干活时 `goto about:blank`，不要 `close`**：关了下次还得 `open`，又置顶一次。
   停在 `about:blank` 的页不占被测网站的连接。原因是同一个网站，整个 Chrome 最多 6 条连接
   （HTTP/1.1，按浏览器算，不按标签页算），几个 agent 共用一个 Chrome、每页又挂着长连接

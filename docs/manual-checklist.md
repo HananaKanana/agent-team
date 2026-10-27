@@ -81,3 +81,4 @@
 62. [ ] 重启 ateam serve 后 `.ateam/` 下出现 board.json、runtime.json、archive/（已验收和作废的需求一个一个文件），state.json 变成 state.json.bak；`.ateam/.gitignore` 里有 runtime.json；worker 心跳时 board.json 不变，卡状态变了才变；看板数据和重启前一样
 63. [ ] `ateam doctor` 列出自检结果全部 ✓；某项没过时看板「需要你处理」里出现「自检：…有问题」
 64. [ ] 设置 → 本设备「悬停显示依赖关系」默认关：悬停卡片没有任何框和标签；打开后悬停有依赖的卡，它依赖的卡标「Tx 在等它」、在等它的卡标「在等 Tx」；关掉后立刻不再标，刷新页面后开关状态保持
+65. [ ] test worker 连续做几张测试卡、中间提问或提交：Chrome 只在它第一次用浏览器时被拉到最前面一次，之后换页面、点击、输入、提问、提交、接下一张卡都不再弹；不干活时它的标签页停在 about:blank；被测网站接口不卡

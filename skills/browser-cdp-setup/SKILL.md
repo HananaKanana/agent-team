@@ -241,23 +241,27 @@ curl -s -X POST "$U?cmd=click" -H "$H" -d "{\"tabId\":\"$T\",\"selector\":\"#go\
 - 读操作（`tabs`/`snapshot`/`shot`/只读 `eval`/`console`/`network`）可以看任何 tab
 - 想操作已开着的页面，正确做法是 `open` 自己的 tab 再 `goto` 同一个 URL——副本同样
   带登录态
-- **本轮开的 tab 本轮 `close`**，遗留的标签是用户可见的变化
+- 不再用的 tab 要 `close`，遗留的标签是用户可见的变化；但自己常用的那一个留着、停在 `about:blank`，免得下次再 `open`（见 5.1）
 
-### 5.1 不要抢用户的焦点、不要占满连接：`open` 少用、用完就关，`activate` 不用
+### 5.1 不要抢用户的焦点、不要占满连接：只 `open` 一次、闲着停在空白页，`activate` 不用
 
 插件的 `open` 和 `activate` 会调 `Page.bringToFront`，在 macOS 上会把整个 Chrome
 拉到最前面、抢走用户正在用的窗口的焦点。其他命令（`goto`/`click`/`type`/`eval`/
 `wait`/`assert`/`shot`/`snapshot`……）都不会。
 
-- **只在要切到别的页面时 `open`**：开工时 `open` 一次拿到 tabId，之后一直用它
-- 切页面优先在同一个标签页里 `goto` 新地址（不置顶）；确实需要另开一个标签页才 `open`
+CDP 里「切到某个标签页」和「把窗口拉到最前」是同一个调用，没有只切标签不置顶的办法，
+所以只能少 `open`：
+
+- **整个会话只 `open` 一次**：要用浏览器时先 `cmd=tabs`，有 `owned: true` 的就接着用，
+  没有才 `open`。之后换页面都在这个标签页里 `goto`（不置顶），不另开
 - **点击、输入、等待、核对、截图时一律不 `open`**，也不要为了「保险」先 `open` 一下
 - **不用 `activate`**。窗口不在最前面时照样能截图、能等文字：`chrome-agent.sh`
   启动时已经关掉了后台降速
-- **一个任务只留一个标签页，用完就 `close`**：同一个网站，整个 Chrome 最多 6 条连接
+- **不干活时 `goto about:blank`，不要 `close`**：关了下次还得 `open`，又置顶一次。
+  停在 `about:blank` 的页不占被测网站的连接。原因是同一个网站，整个 Chrome 最多 6 条连接
   （HTTP/1.1，按浏览器算，不按标签页算），几个 agent 共用一个 Chrome、每页又挂着长连接
   （SSE、WebSocket、长轮询）时，标签页一多，后打开的页面接口会全部卡住。`cmd=tabs` 里
-  `owned: true` 的都是本会话开的，没用的及时关
+  `owned: true` 的都是本会话开的，多出来的及时关
 - 截图像是没刷新、页面动画卡住：先确认浏览器是用 `chrome-agent.sh` 启动的（带那三个
   `--disable-*` 参数），不是就让用户关掉它重新用脚本启动；不要用 `activate` 顶上去
 

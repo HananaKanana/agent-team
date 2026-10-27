@@ -94,7 +94,13 @@ header.top h1 { margin: 0; display: flex; align-items: center; gap: 9px; font-si
 .brand-mark i { background: var(--on-color); border-radius: 1.5px; }
 .brand-mark i:nth-child(4) { opacity: .45; }
 .vr { width: 1px; height: 20px; background: var(--line); flex: none; }
-.workers { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1; }
+.workers { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.workers::-webkit-scrollbar { display: none; }
+/* 一行放不下时逐级收（fitWorkers）：tight 去掉「空闲」「在线」这类状态字、缩小间距；compact 只留头像和任务号 */
+.workers.tight { gap: 4px; }
+.workers.tight .worker .task.idle { display: none; }
+.workers.compact .worker > b, .workers.compact .worker .wid, .workers.compact .worker > .role-text { display: none; }
+.workers.compact .worker { gap: 6px; padding-right: 10px; }
 .worker {
   appearance: none; display: inline-flex; align-items: center; gap: 7px;
   height: 30px; padding: 0 11px 0 4px; border: 1px solid var(--line); border-radius: 999px;
@@ -682,12 +688,6 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   /* 任务进度条进概览卡，下面那条不显示 */
   .side-strip { display: block; flex: 1 1 100%; }
   main > .progress { display: none; }
-  /* 顶部 worker：只留头像和任务号，名字在悬停提示里；放不下横向滑，不换行 */
-  .workers { flex-wrap: nowrap; overflow-x: auto; min-width: 0; scrollbar-width: none; }
-  .workers::-webkit-scrollbar { display: none; }
-  /* 放不下时（fitWorkers 加 compact）才只留头像和任务号 */
-  .workers.compact .worker > b, .workers.compact .worker .wid, .workers.compact .worker > .role-text { display: none; }
-  .workers.compact .worker { gap: 6px; padding-right: 10px; }
   .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .job-side { min-height: 0; }
   /* 高度由内容撑开（不能跟宽屏一样 height:100%，Safari 会按旧高度算，把下面裁掉）；
@@ -1542,7 +1542,7 @@ function renderWorkers() {
         ? `无 leader 模式（${fmtTime(leader.away.since)} 起，${leader.away.by === 'user' ? '你宣布 leader 下线' : 'leader 掉线了'}）：等答复、待 review 的卡先放下，worker 转做没有依赖的卡；leader 回来后自动恢复。点击查看加入的提示词`
         : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
     onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
-  }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: 'task' }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
+  }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: `task${leader.online && leader.watching && !leader.away ? ' idle' : ''}` }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
   // 审卡 worker 和 leader 一样常驻，紧挨着 leader 放
   const isCriticAgent = (a) => a.role.trim().toLowerCase() === 'critic';
   const chips = [leaderChip, ...[...online.filter(isCriticAgent), ...online.filter((a) => !isCriticAgent(a))].map((a) => {
@@ -1558,7 +1558,7 @@ function renderWorkers() {
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
     a.name ? el('span', { class: 'task wid' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-    el('span', { class: 'task' }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
+    el('span', { class: `task${!isCriticAgent(a) && !a.currentTask && !a.leaveAsked ? ' idle' : ''}` }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
   );
   })];
   if (offline.length) {
@@ -1577,8 +1577,11 @@ function renderWorkers() {
 function fitWorkers() {
   const box = document.getElementById('workers');
   if (!box) return;
-  box.classList.remove('compact');
-  if (box.scrollWidth > box.clientWidth + 1) box.classList.add('compact');
+  const over = () => box.scrollWidth > box.clientWidth + 1;
+  box.classList.remove('tight', 'compact');
+  if (!over()) return;
+  box.classList.add('tight');
+  if (over()) box.classList.add('compact');
 }
 addEventListener('resize', () => fitWorkers());
 

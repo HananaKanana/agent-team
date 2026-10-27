@@ -547,6 +547,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       config: store.config(),
+      // 被别人正在改的同一批文件挡住、暂时不派的卡：{ 卡号: 挡着它的卡号 }
+      clash: store.clashes(),
       // 待演播的演播卡现在能不能开始、缺什么
       demoBlockers: Object.fromEntries(store.state.tasks.filter((t) => t.kind === 'demo' && t.status === 'ready').map((t) => [t.id, store.demoBlockers(t.id)])),
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过

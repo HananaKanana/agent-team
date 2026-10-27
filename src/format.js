@@ -183,8 +183,10 @@ function waitingLines(waiting) {
   }
   if (!waiting.blocked?.length) return ['你这个角色目前没有待领取的任务，等 leader 派新任务。'];
   return [
-    '你这个角色的任务都在等依赖完成：',
-    ...waiting.blocked.map((t) => `- ${t.id} ${t.title}：等 ${t.waitingFor.map((d) => `${d.id}（${STATUS[d.status] ?? d.status}）`).join('、')}`),
+    '你这个角色的任务都在等别的卡：',
+    ...waiting.blocked.map((t) => (t.clash
+      ? `- ${t.id} ${t.title}：和 ${t.clash.assignee} 正在做的 ${t.clash.id} 改同一批文件，等它交了再派`
+      : `- ${t.id} ${t.title}：等依赖 ${t.waitingFor.map((d) => `${d.id}（${STATUS[d.status] ?? d.status}）`).join('、')}`)),
   ];
 }
 

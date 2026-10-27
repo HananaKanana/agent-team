@@ -1392,6 +1392,11 @@ function laneTime(t, lane) {
   if (lane === 'pending' && t.dependsOn.some((id) => data.state.tasks.find((x) => x.id === id)?.status !== 'approved')) {
     return el('span', { class: 'since', title: `等待依赖任务通过：${t.dependsOn.join('、')}` }, icon('clock'), '等依赖');
   }
+  const clash = lane === 'pending' && data.clash?.[t.id];
+  if (clash) {
+    const c = data.state.tasks.find((x) => x.id === clash);
+    return el('span', { class: 'since', title: `和 ${c?.assignee ? agentLabel(c.assignee) : ''} 正在做的 ${clash} 改同一批文件，两人同时改会把对方改了一半的内容一起提交，所以等它交了再派` }, icon('clock'), `等 ${clash} 交`);
+  }
   const rule = SINCE[lane];
   const h = rule && t.history.findLast((x) => rule[0].includes(x.type));
   if (!h) return null;

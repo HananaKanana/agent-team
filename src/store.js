@@ -610,8 +610,26 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const parked = state.tasks.filter((t) => t.parked || t === also);
     return state.tasks
       .filter((t) => t.status === 'pending' && !onHold(t) && sameRole(t.role, agent.role) && depsMet(t) && (!t.assignTo || mine(t))
-        && !reserved(t) && !parked.some((p) => pathsOverlap(p.paths, t.paths)))
+        && !reserved(t) && !parked.some((p) => pathsOverlap(p.paths, t.paths)) && !clashWith(t, agent.id))
       .sort((a, b) => (own(b) - own(a)) || (mine(b) - mine(a)) || dispatchOrder(a, b));
+  }
+
+  // 和别人手上正在改（进行中、等答复）的卡改同一批文件：先不派，等那张交了再派。
+  // 两个人同时改同一个文件，一个人提交时会把另一个人改了一半的内容也带进去。返回挡着它的那张卡
+  function clashWith(task, agentId = null) {
+    if (isDemo(task)) return null;
+    return state.tasks.find((o) => o !== task && !isDemo(o) && (o.status === 'working' || o.status === 'asking')
+      && o.assignee && o.assignee !== agentId && pathsOverlap(o.paths, task.paths)) ?? null;
+  }
+  // 看板用：待领取、依赖已满足、但被别人正在改的卡挡住的卡 → 挡着它的卡
+  function clashes() {
+    const out = {};
+    for (const t of state.tasks) {
+      if (t.status !== 'pending' || !depsMet(t)) continue;
+      const c = clashWith(t);
+      if (c) out[t.id] = c.id;
+    }
+    return out;
   }
 
   // ---------- 无 leader 模式 ----------
@@ -839,6 +857,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
           .filter((d) => d && d.status !== 'approved')
           .map((d) => ({ id: d.id, status: d.status })),
       }));
+    for (const t of state.tasks) {
+      if (t.status !== 'pending' || !sameRole(t.role, agent.role) || !depsMet(t)) continue;
+      const c = clashWith(t, agent.id);
+      if (c) blocked.push({ id: t.id, title: t.title, clash: { id: c.id, assignee: c.assignee } });
+    }
     const f = demoFrozen();
     return { blocked, leaveAsked: !!agent.leaveAsked, critic: isCritic(agent), frozen: f ? { taskId: f.id, title: f.title } : null };
   }
@@ -1841,6 +1864,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
     pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
-    setLeaderAway, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
+    setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };
 }

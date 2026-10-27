@@ -998,7 +998,8 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .card.rel-dep { --rel: var(--asking); }
 .card.rel-after { --rel: var(--submitted); }
 .card.rel-dep::after, .card.rel-after::after {
-  content: attr(data-rel); position: absolute; top: -9px; right: 8px; padding: 0 7px; border-radius: 99px;
+  /* 贴在卡片右上角内侧（列是滚动区域，伸到卡片外面会被裁掉） */
+  content: attr(data-rel); position: absolute; top: 0; right: 0; padding: 0 8px; border-radius: 0 5px 0 6px;
   font-size: 11px; font-weight: 600; line-height: 18px; color: var(--on-color); background: var(--rel); pointer-events: none; white-space: nowrap;
 }
 .card.flash { animation: card-flash 1.6s ease-out; }

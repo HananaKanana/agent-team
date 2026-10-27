@@ -2095,7 +2095,7 @@ function renderJobs() {
       return el('button', {
         class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id, 'aria-current': view.job === j.id ? 'true' : 'false',
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
-        oncontextmenu: (e) => { e.preventDefault(); openJobMenu(j.id, e.clientX, e.clientY); },
+        oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openJobMenu(j.id, e.clientX, e.clientY); },
       },
       el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
       el('div', { class: 'sub' }, el('span', { class: 'tag' }, '演播'), el('span', null, live ? (live.status === 'demoing' ? `${modeWord(live)}中` : DEMO_STATUS[live.status][0]) : `${jt.length} 张演播卡`)));
@@ -2103,7 +2103,7 @@ function renderJobs() {
     return el('button', {
       class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id, 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
-      oncontextmenu: (e) => { e.preventDefault(); openJobMenu(j.id, e.clientX, e.clientY); },
+      oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openJobMenu(j.id, e.clientX, e.clientY); },
     },
     el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
     el('div', { class: 'sub' }, j.status === 'accepted' ? el('span', { class: 'accepted' }, '✓ 已验收') : el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
@@ -2180,7 +2180,7 @@ function renderJobs() {
         'aria-current': view.job === j.id ? 'true' : 'false',
         title: `${j.id} ${j.title}\n${j.demo ? `${jt.length} 张演播卡` : `${doneN}/${jt.length} 已通过`}`,
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
-        oncontextmenu: (e) => { e.preventDefault(); openJobMenu(j.id, e.clientX, e.clientY); },
+        oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openJobMenu(j.id, e.clientX, e.clientY); },
       }, j.id, el('i', { class: j.demo || !jt.length ? 'none' : '' }, el('i', { style: `width:${jt.length ? Math.round((doneN / jt.length) * 100) : 0}%` })));
     }), done.length || dropped.length || demos.length ? el('button', { class: 'job-mini more', title: `展开查看演播 ${demos.length}、已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
     return;
@@ -2412,7 +2412,7 @@ function card(t, lane) {
   return el('button', {
     class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}${flashId === t.id ? ' flash' : ''}`, title: `${t.id} ${t.title}`, 'data-id': t.id,
     onclick: () => { view.task = t.id; saveView(); renderDrawer(true); },
-    oncontextmenu: (e) => { e.preventDefault(); openCardMenu(t.id, e.clientX, e.clientY); },
+    oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openCardMenu(t.id, e.clientX, e.clientY); },
   },
     el('div', { class: 't' }, t.title),
     el('div', { class: 'flags' },

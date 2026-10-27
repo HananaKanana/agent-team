@@ -1681,7 +1681,7 @@ function dismissButtons(a) {
       }),
     }, '下线');
   }
-  const cancel = el('button', { class: 'btn ghost sm', onclick: stop(() => { dismissArm = null; renderHelper(); }) }, '取消');
+  const cancel = el('button', { class: 'btn sm', onclick: stop(() => { dismissArm = null; renderHelper(); }) }, '取消');
   if (critic) {
     return [
       cancel,

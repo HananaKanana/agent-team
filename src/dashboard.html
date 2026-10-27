@@ -991,9 +991,16 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .spot-row .dot.job { border-radius: 2px; background: var(--brand); }
 .spot-empty { padding: 18px; text-align: center; color: var(--faint); font-size: 13px; border-top: 1px solid var(--line-soft); }
 .spot-foot { flex: none; display: flex; gap: 14px; padding: 7px 14px; border-top: 1px solid var(--line-soft); font-size: 11.5px; color: var(--faint); }
-/* 悬停卡片：它依赖的卡描实线框，依赖它的卡描虚线框 */
-.card.rel-dep { box-shadow: 0 0 0 2px var(--brand); }
-.card.rel-after { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 55%, transparent); outline: 2px dashed color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: 3px; }
+/* 悬停卡片：自己加深底色；它要等的卡、等它的卡描边，并在右上角贴一个小标签说明关系 */
+.card { position: relative; }
+.card.rel-self { background: var(--raised-hover); }
+.card.rel-dep, .card.rel-after { box-shadow: 0 0 0 2px var(--rel); }
+.card.rel-dep { --rel: var(--asking); }
+.card.rel-after { --rel: var(--submitted); }
+.card.rel-dep::after, .card.rel-after::after {
+  content: attr(data-rel); position: absolute; top: -9px; right: 8px; padding: 0 7px; border-radius: 99px;
+  font-size: 11px; font-weight: 600; line-height: 18px; color: var(--on-color); background: var(--rel); pointer-events: none; white-space: nowrap;
+}
 .card.flash { animation: card-flash 1.6s ease-out; }
 @keyframes card-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--brand); } 100% { box-shadow: 0 0 0 3px transparent; } }
 .confirm-reason { width: 100%; height: 34px; padding: 0 10px; margin-top: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
@@ -3412,12 +3419,19 @@ var relFor = null;
 function markRelated(id) {
   if (relFor === id) return;
   relFor = id;
-  for (const n of document.querySelectorAll('.card.rel-dep, .card.rel-after')) n.classList.remove('rel-dep', 'rel-after');
+  for (const n of document.querySelectorAll('.card.rel-self, .card.rel-dep, .card.rel-after')) { n.classList.remove('rel-self', 'rel-dep', 'rel-after'); n.removeAttribute('data-rel'); }
   if (!id) return;
   const t = data.state.tasks.find((x) => x.id === id);
   if (!t) return;
-  for (const d of t.dependsOn) document.querySelector(`.card[data-id="${d}"]`)?.classList.add('rel-dep');
-  for (const o of data.state.tasks) if (o.dependsOn.includes(id)) document.querySelector(`.card[data-id="${o.id}"]`)?.classList.add('rel-after');
+  const mark = (tid, cls, label) => {
+    const n = document.querySelector(`.card[data-id="${tid}"]`);
+    if (n) { n.classList.add(cls); n.setAttribute('data-rel', label); }
+  };
+  const after = data.state.tasks.filter((o) => o.dependsOn.includes(id));
+  if (!t.dependsOn.length && !after.length) return; // 没有依赖关系就什么都不标
+  document.querySelector(`.card[data-id="${id}"]`)?.classList.add('rel-self');
+  for (const d of t.dependsOn) mark(d, 'rel-dep', `${id} 在等它`);
+  for (const o of after) mark(o.id, 'rel-after', `在等 ${id}`);
 }
 document.addEventListener('mouseover', (e) => markRelated(e.target.closest?.('.card[data-id]')?.dataset.id ?? null));
 

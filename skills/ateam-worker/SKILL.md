@@ -114,7 +114,7 @@ ateam wait --as <编号>
     2. 有东西挡着（提示框、下拉层、引导浮层），先关掉；
     3. 还不行，就按指令里「这一步走不通」的办法处理（演播切慢档，再不行 `demo end --stuck`；预演 `demo end --stuck`）。演播过程中不能 `ateam ask`，它会一直挂起等答复，整场就停住了。
   - **演播卡怎么操作浏览器**（同上用 browser-cdp；连接、自检、ref 和 tabId 的坑见 `browser-cdp-setup` skill）：
-    - 开场用自己已有的标签页（`cmd=tabs` 里 `owned: true` 的），没有才 `cmd=open` 一个，整场都用这个 tabId，收尾时 `cmd=goto` 到 `about:blank`，不要 `close`。不要操作用户自己的标签页。动作块里换页面用 `cmd=goto`，**不要写 `cmd=open` 或 `cmd=activate`**（它们会把 Chrome 拉到最前面，抢走用户的焦点）。
+    - 开场**新开**一个标签页（`cmd=open`），整场都用这个 tabId，收尾时 `cmd=close`。这是唯一一次允许置顶：用户在看演播，演播的页面必须是 Chrome 里的当前页、让用户看得见，所以不要复用之前停在 `about:blank` 的旧标签页（它可能被别人的标签页压在后面，用户看不到你在操作）。旧标签页留着不动，演播完回去接着用。不要操作用户自己的标签页。动作块里换页面用 `cmd=goto`，**不要写 `cmd=open` 或 `cmd=activate`**（它们会把 Chrome 拉到最前面，抢走用户的焦点）。
     - **调视口**：`cmd=eval` 读 `({iw:innerWidth,ih:innerHeight,ow:outerWidth,oh:outerHeight})`，算出窗口和视口的差值，用窗口控制脚本把**真实窗口**设成「目标视口 + 差值」（`"$NODE" <browser-cdp-setup skill 目录>/chrome-window.mjs set <宽> <高>`，`NODE` 是 DSH 自带的 node：`/Applications/DeepSeek Harness.app/Contents/Resources/runtime/primary-runtime/dependencies/node/bin/node`；最大化或全屏时先用 `minset <宽> <高>`），再 `eval` 确认 innerWidth/innerHeight 等于目标。**不要用 `cmd=resize`**：它只改页面以为的大小，窗口不变，内容会溢出。**调好以后整场不再改窗口大小和位置**：内容显示不全、按钮在下面看不到时滚动去找（`cmd=click` 会自动把元素滚进视口，弹窗、抽屉里的元素滚的是它们自己的滚动区域；要单独滚就用 `cmd=wheel`），不要拉大窗口。
     - **动作块**写成一串 curl（`click` / `type` / `key` / `select` / `wait`，用 CSS 选择器或按钮文字定位，不用坐标），一步一次 shell 调用执行完；任何一条返回 `ok:false` 就算这一步没走通。
     - **核对预期**用 `cmd=wait`（等文字出现）或 `cmd=assert`（一次核对多条，看 `passed`/`failed`，`ok:true` 不代表通过）。【核对】步再 `cmd=shot` 截一张图自己看。

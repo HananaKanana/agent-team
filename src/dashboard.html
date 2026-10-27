@@ -929,6 +929,21 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .assign-btn:hover { background: var(--raised-hover); }
 .assign-btn[aria-expanded="true"] { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
 .assign-btn .chev { margin-left: auto; width: 14px; height: 14px; color: var(--muted); }
+.ctx-menu { position: fixed; z-index: 40; min-width: 220px; max-width: 320px; max-height: calc(100vh - 16px); overflow-y: auto; padding: 6px 0; background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-pop); font-size: 13px; }
+.ctx-menu[hidden] { display: none; }
+.ctx-menu .ctx-head { padding: 4px 12px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-menu .ctx-group { padding: 6px 12px 2px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
+.ctx-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 12px; border: none; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ctx-menu button.sub { padding-left: 22px; }
+.ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--raised-hover); outline: none; }
+.ctx-menu button.danger { color: var(--rework); }
+.ctx-menu button .k { font-weight: 600; flex: none; }
+.ctx-menu button .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.ctx-menu button .st { flex: none; font-size: 11.5px; color: var(--faint); }
+.ctx-menu .sep { height: 1px; margin: 6px 0; background: var(--line-soft); }
+.card.flash { animation: card-flash 1.6s ease-out; }
+@keyframes card-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--brand); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.confirm-reason { width: 100%; height: 34px; padding: 0 10px; margin-top: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
 .assign-menu {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; margin: 0; padding: 6px 0; list-style: none;
   background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-pop); max-height: 300px; overflow-y: auto;
@@ -1145,6 +1160,8 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 <div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
 <div class="modal-back" id="show-dialog" hidden role="dialog" aria-modal="true" aria-label="开始演播"></div>
+<div class="modal-back" id="confirm-dialog" hidden role="dialog" aria-modal="true" aria-label="确认"></div>
+<div class="ctx-menu" id="card-menu" hidden role="menu"></div>
 <div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
 
 <script>
@@ -2370,8 +2387,9 @@ function card(t, lane) {
   const waiting = t.status === 'pending' || t.status === 'held';
   const top = t.priority && waiting;
   return el('button', {
-    class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}`, title: `${t.id} ${t.title}`,
+    class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}${flashId === t.id ? ' flash' : ''}`, title: `${t.id} ${t.title}`, 'data-id': t.id,
     onclick: () => { view.task = t.id; saveView(); renderDrawer(true); },
+    oncontextmenu: (e) => { e.preventDefault(); openCardMenu(t.id, e.clientX, e.clientY); },
   },
     el('div', { class: 't' }, t.title),
     el('div', { class: 'flags' },
@@ -3025,6 +3043,166 @@ function renderDrawer(fresh) {
   drawer.scrollTop = scroll;
   drawer.classList.toggle('wide', drawerWide);
   if (fresh) drawer.querySelector('.close').focus();
+}
+
+// ---------- 卡片右键菜单 ----------
+// 右键（触屏模式下长按）卡片：跳到相关的卡、常用操作、复制。会改动东西又不好撤回的（收回、作废）先弹确认框
+var flashId = null; // card() 在这之前定义，用 var 免得首次渲染时还没初始化
+var flashTimer = 0;
+const post = async (url, body) => {
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return await res.json();
+  } catch { return { ok: false, message: '连不上 ateam 服务。' }; }
+};
+const normPath = (p) => { const x = String(p).trim().replace(/^\.\//, '').replace(/\/+$/, ''); return x === '.' ? '' : x; };
+function pathsOverlap(a, b) {
+  for (const x of a.map(normPath)) for (const y of b.map(normPath)) {
+    if (x === '' || y === '' || x === y || y.startsWith(`${x}/`) || x.startsWith(`${y}/`)) return true;
+  }
+  return false;
+}
+// 跳到某张卡：不在当前需求就先切过去；滚到看得见、闪一下，打开它的详情
+function jumpToTask(id) {
+  const t = data.state.tasks.find((x) => x.id === id);
+  if (!t) return;
+  if (t.jobId !== view.job) { view.job = t.jobId; view.report = false; }
+  view.task = id;
+  saveView();
+  flashId = id;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { flashId = null; }, 1700);
+  render();
+  renderDrawer(true);
+  requestAnimationFrame(() => document.querySelector(`.card[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }));
+}
+function closeCardMenu() {
+  const m = document.getElementById('card-menu');
+  if (m.hidden) return;
+  m.hidden = true;
+  m.replaceChildren();
+}
+function openCardMenu(id, x, y) {
+  const t = data.state.tasks.find((q) => q.id === id);
+  if (!t) return;
+  const tasks = data.state.tasks;
+  const m = document.getElementById('card-menu');
+  const act = (fn) => (e) => { e.stopPropagation(); closeCardMenu(); fn(); };
+  const item = (label, fn, cls = '') => el('button', { role: 'menuitem', class: cls, onclick: act(fn) }, label);
+  const taskItem = (o) => el('button', { role: 'menuitem', class: 'sub', title: `${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
+    el('span', { class: 'k' }, o.id), el('span', { class: 't' }, o.title), el('span', { class: 'st' }, o.status === 'cancelled' ? '已作废' : LANE_LABEL[laneOf(o)] || o.status));
+  const group = (title, list) => (list.length ? [el('div', { class: 'ctx-group' }, title), list.map(taskItem)] : []);
+  const sep = () => el('div', { class: 'sep' });
+  const live = (o) => o.status !== 'approved' && o.status !== 'cancelled';
+
+  const deps = t.dependsOn.map((d) => tasks.find((o) => o.id === d)).filter(Boolean);
+  const dependents = tasks.filter((o) => o.status !== 'cancelled' && o.dependsOn.includes(t.id));
+  const overlaps = t.kind === 'demo' || !live(t) ? [] : tasks.filter((o) => o.id !== t.id && o.kind !== 'demo' && live(o) && pathsOverlap(t.paths, o.paths));
+  const parkedTo = t.parked ? (t.parkedFor || lastClaimSince(t.assignee, t.parked)) : null;
+  const parkedFrom = tasks.filter((o) => o.parked && (o.parkedFor || lastClaimSince(o.assignee, o.parked)) === t.id);
+  const jumps = [
+    ...group('依赖', deps),
+    ...group('依赖它的卡', dependents),
+    ...group('改同一批文件', overlaps),
+    ...group('转做的卡', parkedTo ? [tasks.find((o) => o.id === parkedTo)].filter(Boolean) : []),
+    ...group('转做前放下的卡', parkedFrom),
+  ];
+
+  const waiting = t.kind !== 'demo' && (t.status === 'pending' || t.status === 'held');
+  const actions = [];
+  if (waiting) {
+    actions.push(item(t.priority ? '取消优先' : '设为优先', async () => { await post('/api/tasks/priority', { id: t.id, top: !t.priority }); await poll(); render(); }));
+    actions.push(item(t.onHold ? '恢复领取' : '暂停领取', () => holdAction('tasks', t.id, !t.onHold)));
+    const role = t.role.trim().toLowerCase();
+    const online = data.state.agents.filter((a) => a.status === 'online' && a.role.trim().toLowerCase() === role);
+    const assign = (to) => async () => { const out = await post('/api/tasks/assign', { id: t.id, to }); if (!out.ok) openConfirm({ title: '指派没成功', body: out.message, ok: '知道了', run: async () => ({ ok: true }) }); await poll(); render(); };
+    actions.push(el('div', { class: 'ctx-group' }, '指派给'));
+    actions.push(el('button', { role: 'menuitem', class: 'sub', onclick: act(assign('')) }, el('span', { class: 't' }, `不指派（${t.role} 谁都能领）`), !t.assignTo ? el('span', { class: 'st' }, '当前') : null));
+    for (const a of online) actions.push(el('button', { role: 'menuitem', class: 'sub', onclick: act(assign(a.id)) }, el('span', { class: 'k' }, agentLabel(a.id)), el('span', { class: 't' }, a.currentTask ? `在做 ${a.currentTask}` : '空闲'), t.assignTo === a.id ? el('span', { class: 'st' }, '当前') : null));
+  }
+  if (!t.parked && (t.status === 'working' || t.status === 'asking' || (t.kind === 'demo' && (t.status === 'demoing' || t.status === 'wrapping')))) {
+    actions.push(item('收回换人…', () => openConfirm({
+      title: `收回 ${t.id}？`,
+      body: `${agentLabel(t.assignee)} 会被标记为掉线，${t.kind === 'demo' ? '这次演播记为中断，演播卡回到待演播' : '任务退回待领取，由同角色的 worker 接手，已有改动保留'}。窗口只是停住了的话，用顶部的叫醒话就行。`,
+      ok: '确认收回',
+      run: () => post('/api/reclaim', { id: t.id, text: '用户在看板上收回' }),
+    }), 'danger'));
+  }
+  if (live(t)) {
+    const blockers = dependents;
+    actions.push(item('作废…', () => openConfirm({
+      title: `作废 ${t.id}？`,
+      body: blockers.length
+        ? `${blockers.map((o) => o.id).join('、')} 依赖这张卡，不能直接作废。先作废它们，或让 leader 去掉这个依赖。`
+        : `「${t.title}」作废后不再派发，不能恢复。${t.assignee && (t.status === 'working' || t.status === 'asking') ? `${agentLabel(t.assignee)} 正在做它，下次调用 ateam 命令时会收到作废通知、停手并还原改动。` : ''}已经提交的代码不会撤销。`,
+      reason: !blockers.length,
+      ok: '确认作废',
+      disabled: blockers.length > 0,
+      run: (reason) => post('/api/cancel', { id: t.id, text: reason || '用户在看板上作废' }),
+    }), 'danger'));
+  }
+
+  const copy = (text) => async () => { try { await navigator.clipboard.writeText(text); } catch {} };
+  const copies = [
+    item(`复制卡号 ${t.id}`, copy(t.id)),
+    item('复制卡号和标题', copy(`${t.id} ${t.title}`)),
+    t.commits?.length ? item(`复制提交号（${t.commits.length}）`, copy(t.commits.join(' '))) : null,
+  ];
+
+  fill(m,
+    el('div', { class: 'ctx-head' }, `${t.id} ${t.title}`),
+    item('打开详情', () => { view.task = t.id; saveView(); renderDrawer(true); }),
+    jumps.length ? [sep(), jumps] : null,
+    actions.length ? [sep(), actions] : null,
+    sep(), copies);
+  m.hidden = false;
+  // 贴着鼠标打开，碰到屏幕边就往里收
+  const r = m.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+  m.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  m.querySelector('button')?.focus();
+}
+addEventListener('scroll', closeCardMenu, true);
+addEventListener('resize', closeCardMenu);
+
+// 通用确认框：title、body、ok（按钮文字）、reason（要不要填原因）、disabled、run(reason) → { ok, message }
+let confirmState = null;
+function closeConfirm() {
+  confirmState = null;
+  const box = document.getElementById('confirm-dialog');
+  box.hidden = true;
+  box.replaceChildren();
+}
+function openConfirm(opts) {
+  confirmState = { ...opts, error: null, busy: false };
+  renderConfirm();
+}
+function renderConfirm() {
+  const c = confirmState;
+  const box = document.getElementById('confirm-dialog');
+  if (!c) return closeConfirm();
+  const reason = c.reason ? el('input', { type: 'text', class: 'confirm-reason', placeholder: '原因（选填）' }) : null;
+  const go = async (e) => {
+    e.stopPropagation();
+    c.busy = true;
+    const out = await c.run(reason?.value.trim() ?? '');
+    if (out?.ok) { closeConfirm(); await poll(); render(); renderDrawer(false); return; }
+    c.busy = false;
+    c.error = out?.message || '操作失败';
+    renderConfirm();
+  };
+  box.onclick = (e) => { if (e.target === box) closeConfirm(); };
+  fill(box, el('div', { class: 'modal', onclick: (e) => e.stopPropagation() },
+    modalHead(c.title, closeConfirm),
+    el('div', { class: 'modal-body' },
+      el('p', null, c.body),
+      reason,
+      c.error ? el('p', { class: 'hint', style: 'color: var(--rework)' }, c.error) : null),
+    el('div', { class: 'modal-foot' },
+      el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); closeConfirm(); } }, '取消'),
+      el('button', { class: 'btn warn', disabled: c.disabled || c.busy, onclick: go }, c.ok))));
+  box.hidden = false;
+  (reason || box.querySelector('.modal-foot .btn'))?.focus();
 }
 
 function closeDrawer() {
@@ -3789,6 +3967,8 @@ async function poll() {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (!document.getElementById('card-menu').hidden) { closeCardMenu(); return; }
+  if (!document.getElementById('confirm-dialog').hidden) { closeConfirm(); return; }
   if (showDlg) { closeShowDialog(); return; }
   if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
@@ -3798,11 +3978,12 @@ document.addEventListener('keydown', (e) => {
 });
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
+  if (!e.target.closest('#card-menu')) closeCardMenu();
   if (attentionOpen && !e.target.closest('#attention, #attention-list')) { attentionOpen = false; renderAttentionList(); }
   if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
   if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
   if (!view.task) return;
-  if (e.target.closest('#drawer, .card, .cancelled-row, .demo-row, #demo-banner, #stale-dialog, #decide-dialog, #show-dialog')) return;
+  if (e.target.closest('#drawer, .card, .cancelled-row, .demo-row, #demo-banner, #stale-dialog, #decide-dialog, #show-dialog, #confirm-dialog, #card-menu')) return;
   closeDrawer();
 });
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });
@@ -4067,6 +4248,26 @@ if (new URLSearchParams(location.search).has('inputlog')) {
   };
   addEventListener('pointerup', end, true);
   addEventListener('pointercancel', end, true);
+  // 长按卡片 = 右键菜单（触屏没有右键）。手指一动、松开就取消；打开菜单后吞掉松手时的那次点击
+  let press = 0;
+  addEventListener('pointerdown', (e) => {
+    clearTimeout(press);
+    if (!touchScroll || e.button !== 0) return;
+    const c = e.target.closest('.card[data-id]');
+    if (!c) return;
+    const { clientX: x, clientY: y } = e;
+    press = setTimeout(() => {
+      st = null;
+      openCardMenu(c.dataset.id, x, y);
+      const swallow = (ev) => { if (!ev.target.closest('#card-menu')) { ev.stopPropagation(); ev.preventDefault(); } };
+      addEventListener('click', swallow, { capture: true, once: true });
+      setTimeout(() => removeEventListener('click', swallow, true), 400);
+    }, 550);
+  }, true);
+  const unpress = () => clearTimeout(press);
+  addEventListener('pointerup', unpress, true);
+  addEventListener('pointercancel', unpress, true);
+  addEventListener('pointermove', (e) => { if (st?.axis) unpress(); }, true);
 })();
 </script>
 </body>

@@ -929,18 +929,34 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .assign-btn:hover { background: var(--raised-hover); }
 .assign-btn[aria-expanded="true"] { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
 .assign-btn .chev { margin-left: auto; width: 14px; height: 14px; color: var(--muted); }
-.ctx-menu { position: fixed; z-index: 40; min-width: 220px; max-width: 320px; max-height: calc(100vh - 16px); overflow-y: auto; padding: 6px 0; background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-pop); font-size: 13px; }
+.ctx-menu { position: fixed; z-index: 40; width: 300px; max-height: calc(100vh - 16px); overflow-y: auto; padding: 4px; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 8px; box-shadow: var(--shadow-pop); font-size: 13px; animation: ctx-in .12s ease-out; }
+@keyframes ctx-in { from { opacity: 0; transform: translateY(-3px) scale(.98); } }
 .ctx-menu[hidden] { display: none; }
-.ctx-menu .ctx-head { padding: 4px 12px 6px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ctx-menu .ctx-group { padding: 6px 12px 2px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
-.ctx-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 12px; border: none; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-.ctx-menu button.sub { padding-left: 22px; }
+.ctx-menu .ctx-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; min-width: 0; }
+.ctx-menu .ctx-head .id { flex: none; padding: 0 6px; border-radius: 4px; font-size: 11.5px; font-weight: 600; line-height: 18px; color: var(--muted); background: var(--sunken); font-variant-numeric: tabular-nums; }
+.ctx-menu .ctx-head .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ctx-menu .ctx-group { padding: 8px 8px 3px; color: var(--faint); font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+.ctx-menu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; border: none; border-radius: 5px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.ctx-menu button > svg { flex: none; width: 14px; height: 14px; color: var(--muted); }
 .ctx-menu button:hover, .ctx-menu button:focus-visible { background: var(--raised-hover); outline: none; }
-.ctx-menu button.danger { color: var(--rework); }
-.ctx-menu button .k { font-weight: 600; flex: none; }
-.ctx-menu button .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.ctx-menu button.danger, .ctx-menu button.danger > svg { color: var(--rework); }
+.ctx-menu button.danger:hover { background: color-mix(in srgb, var(--rework) 9%, transparent); }
+.ctx-menu .dot { flex: none; width: 8px; height: 8px; margin: 0 3px; border-radius: 50%; background: var(--pending); }
+.ctx-menu .dot.s-approved { background: var(--approved); } .ctx-menu .dot.s-working { background: var(--working); }
+.ctx-menu .dot.s-rework { background: var(--rework); } .ctx-menu .dot.s-asking { background: var(--asking); }
+.ctx-menu .dot.s-submitted { background: var(--submitted); } .ctx-menu .dot.s-held { background: var(--held); }
+.ctx-menu .dot.s-cancelled { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+.ctx-menu button .k { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ctx-menu button .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ctx-menu button .st { flex: none; font-size: 11.5px; color: var(--faint); }
-.ctx-menu .sep { height: 1px; margin: 6px 0; background: var(--line-soft); }
+.ctx-menu button .av { width: 18px; height: 18px; font-size: 10px; }
+.ctx-menu button .ok { flex: none; width: 14px; height: 14px; color: var(--brand); }
+.ctx-menu .sep { height: 1px; margin: 4px 6px; background: var(--line-soft); }
+.ctx-menu .ctx-copy { display: flex; align-items: center; gap: 6px; padding: 6px 8px 4px; }
+.ctx-menu .ctx-copy > svg { width: 14px; height: 14px; color: var(--muted); }
+.ctx-menu .ctx-copy button { width: auto; height: 24px; padding: 0 9px; border: 1px solid var(--line); border-radius: 99px; font-size: 12px; color: var(--muted); }
+.ctx-menu .ctx-copy button:hover { color: var(--ink); border-color: var(--brand); background: transparent; }
+.ctx-menu .ctx-copy button.done { color: var(--approved); border-color: var(--approved); }
 .card.flash { animation: card-flash 1.6s ease-out; }
 @keyframes card-flash { 0%, 40% { box-shadow: 0 0 0 3px var(--brand); } 100% { box-shadow: 0 0 0 3px transparent; } }
 .confirm-reason { width: 100%; height: 34px; padding: 0 10px; margin-top: 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; }
@@ -1123,6 +1139,8 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2"/></symbol>
   <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-pin" viewBox="0 0 16 16"><path d="M10 2.5l3.5 3.5-2.2 1-2.3 2.3.3 2.7-1 1L2.9 7.6l1-1 2.7.3L8.9 4.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.7 10.3L2.5 13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 3.5v-.5a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.2 11.8l7.6-7.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.8 8z" fill="currentColor"/></symbol>
   <symbol id="i-text-down" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
@@ -3088,16 +3106,21 @@ function openCardMenu(id, x, y) {
   const tasks = data.state.tasks;
   const m = document.getElementById('card-menu');
   const act = (fn) => (e) => { e.stopPropagation(); closeCardMenu(); fn(); };
-  const item = (label, fn, cls = '') => el('button', { role: 'menuitem', class: cls, onclick: act(fn) }, label);
-  const taskItem = (o) => el('button', { role: 'menuitem', class: 'sub', title: `${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
-    el('span', { class: 'k' }, o.id), el('span', { class: 't' }, o.title), el('span', { class: 'st' }, o.status === 'cancelled' ? '已作废' : LANE_LABEL[laneOf(o)] || o.status));
+  const item = (ic, label, fn, cls = '') => el('button', { role: 'menuitem', class: cls, onclick: act(fn) }, icon(ic), el('span', { class: 't' }, label));
+  const taskItem = (o) => {
+    const lane = o.status === 'cancelled' ? 'cancelled' : laneOf(o);
+    return el('button', { role: 'menuitem', title: `跳到 ${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
+      el('span', { class: `dot s-${lane}` }), el('span', { class: 'k' }, o.id), el('span', { class: 't' }, o.title), el('span', { class: 'st' }, LANE_LABEL[lane] || o.status));
+  };
   const group = (title, list) => (list.length ? [el('div', { class: 'ctx-group' }, title), list.map(taskItem)] : []);
   const sep = () => el('div', { class: 'sep' });
   const live = (o) => o.status !== 'approved' && o.status !== 'cancelled';
 
   const deps = t.dependsOn.map((d) => tasks.find((o) => o.id === d)).filter(Boolean);
   const dependents = tasks.filter((o) => o.status !== 'cancelled' && o.dependsOn.includes(t.id));
-  const overlaps = t.kind === 'demo' || !live(t) ? [] : tasks.filter((o) => o.id !== t.id && o.kind !== 'demo' && live(o) && pathsOverlap(t.paths, o.paths));
+  // 已经列在依赖里的不再重复列
+  const overlaps = t.kind === 'demo' || !live(t) ? [] : tasks.filter((o) => o.id !== t.id && o.kind !== 'demo' && live(o) && pathsOverlap(t.paths, o.paths)
+    && !t.dependsOn.includes(o.id) && !o.dependsOn.includes(t.id));
   const parkedTo = t.parked ? (t.parkedFor || lastClaimSince(t.assignee, t.parked)) : null;
   const parkedFrom = tasks.filter((o) => o.parked && (o.parkedFor || lastClaimSince(o.assignee, o.parked)) === t.id);
   const jumps = [
@@ -3111,17 +3134,18 @@ function openCardMenu(id, x, y) {
   const waiting = t.kind !== 'demo' && (t.status === 'pending' || t.status === 'held');
   const actions = [];
   if (waiting) {
-    actions.push(item(t.priority ? '取消优先' : '设为优先', async () => { await post('/api/tasks/priority', { id: t.id, top: !t.priority }); await poll(); render(); }));
-    actions.push(item(t.onHold ? '恢复领取' : '暂停领取', () => holdAction('tasks', t.id, !t.onHold)));
+    actions.push(item('top', t.priority ? '取消优先' : '设为优先', async () => { await post('/api/tasks/priority', { id: t.id, top: !t.priority }); await poll(); render(); }));
+    actions.push(item(t.onHold ? 'play' : 'pause', t.onHold ? '恢复领取' : '暂停领取', () => holdAction('tasks', t.id, !t.onHold)));
     const role = t.role.trim().toLowerCase();
     const online = data.state.agents.filter((a) => a.status === 'online' && a.role.trim().toLowerCase() === role);
     const assign = (to) => async () => { const out = await post('/api/tasks/assign', { id: t.id, to }); if (!out.ok) openConfirm({ title: '指派没成功', body: out.message, ok: '知道了', run: async () => ({ ok: true }) }); await poll(); render(); };
     actions.push(el('div', { class: 'ctx-group' }, '指派给'));
-    actions.push(el('button', { role: 'menuitem', class: 'sub', onclick: act(assign('')) }, el('span', { class: 't' }, `不指派（${t.role} 谁都能领）`), !t.assignTo ? el('span', { class: 'st' }, '当前') : null));
-    for (const a of online) actions.push(el('button', { role: 'menuitem', class: 'sub', onclick: act(assign(a.id)) }, el('span', { class: 'k' }, agentLabel(a.id)), el('span', { class: 't' }, a.currentTask ? `在做 ${a.currentTask}` : '空闲'), t.assignTo === a.id ? el('span', { class: 'st' }, '当前') : null));
+    actions.push(el('button', { role: 'menuitem', onclick: act(assign('')) }, avatar(null), el('span', { class: 't' }, `不指派`), el('span', { class: 'st' }, `${t.role} 谁都能领`), !t.assignTo ? icon('tick', 'ok') : null));
+    for (const a of online) actions.push(el('button', { role: 'menuitem', onclick: act(assign(a.id)) }, avatar(a.id, a.role), el('span', { class: 't' }, agentLabel(a.id)), el('span', { class: 'st' }, a.currentTask ? `在做 ${a.currentTask}` : '空闲'), t.assignTo === a.id ? icon('tick', 'ok') : null));
   }
+  const dangers = [];
   if (!t.parked && (t.status === 'working' || t.status === 'asking' || (t.kind === 'demo' && (t.status === 'demoing' || t.status === 'wrapping')))) {
-    actions.push(item('收回换人…', () => openConfirm({
+    dangers.push(item('back', '收回换人…', () => openConfirm({
       title: `收回 ${t.id}？`,
       body: `${agentLabel(t.assignee)} 会被标记为掉线，${t.kind === 'demo' ? '这次演播记为中断，演播卡回到待演播' : '任务退回待领取，由同角色的 worker 接手，已有改动保留'}。窗口只是停住了的话，用顶部的叫醒话就行。`,
       ok: '确认收回',
@@ -3130,7 +3154,7 @@ function openCardMenu(id, x, y) {
   }
   if (live(t)) {
     const blockers = dependents;
-    actions.push(item('作废…', () => openConfirm({
+    dangers.push(item('ban', '作废…', () => openConfirm({
       title: `作废 ${t.id}？`,
       body: blockers.length
         ? `${blockers.map((o) => o.id).join('、')} 依赖这张卡，不能直接作废。先作废它们，或让 leader 去掉这个依赖。`
@@ -3142,18 +3166,23 @@ function openCardMenu(id, x, y) {
     }), 'danger'));
   }
 
-  const copy = (text) => async () => { try { await navigator.clipboard.writeText(text); } catch {} };
-  const copies = [
-    item(`复制卡号 ${t.id}`, copy(t.id)),
-    item('复制卡号和标题', copy(`${t.id} ${t.title}`)),
-    t.commits?.length ? item(`复制提交号（${t.commits.length}）`, copy(t.commits.join(' '))) : null,
-  ];
+  // 复制：一行小按钮，点了变「已复制」再关菜单
+  const copyBtn = (label, text) => el('button', { onclick: async (e) => {
+    e.stopPropagation();
+    try { await navigator.clipboard.writeText(text); } catch {}
+    e.currentTarget.textContent = '已复制';
+    e.currentTarget.classList.add('done');
+    setTimeout(closeCardMenu, 450);
+  } }, label);
+  const copies = el('div', { class: 'ctx-copy' }, icon('copy'),
+    copyBtn('卡号', t.id), copyBtn('卡号 + 标题', `${t.id} ${t.title}`), t.commits?.length ? copyBtn('提交号', t.commits.join(' ')) : null);
 
   fill(m,
-    el('div', { class: 'ctx-head' }, `${t.id} ${t.title}`),
-    item('打开详情', () => { view.task = t.id; saveView(); renderDrawer(true); }),
+    el('div', { class: 'ctx-head' }, el('span', { class: 'id' }, t.id), el('span', { class: 't' }, t.title)),
+    item('popout', '打开详情', () => { view.task = t.id; saveView(); renderDrawer(true); }),
     jumps.length ? [sep(), jumps] : null,
     actions.length ? [sep(), actions] : null,
+    dangers.length ? [sep(), dangers] : null,
     sep(), copies);
   m.hidden = false;
   // 贴着鼠标打开，碰到屏幕边就往里收

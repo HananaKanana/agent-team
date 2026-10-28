@@ -279,7 +279,8 @@ const commands = {
     const { task } = await request('POST', '/api/progress', { as, text, expect: flags.expect });
     const busy = flags.expect ? `接下来 ${Math.min(Number(flags.expect), 180)} 分钟内不调用 ateam 也不会被当成停住。` : '';
     const note = task.note ? `\n\n# 补充说明\n\n${task.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。` : '';
-    return `已记录 ${task.id} 的进度。${busy}继续工作；完成后运行：ateam submit --as ${as} "<做了什么、怎么验证的>"${note}`;
+    const test = /^(test|qa|测试)$/i.test(String(task.role ?? '').trim()) ? '核对完下一条验收标准就再报一次（两次之间不超过 5 分钟）。' : '';
+    return `已记录 ${task.id} 的进度。${busy}${test}继续工作；完成后运行：ateam submit --as ${as} "<做了什么、怎么验证的>"${note}`;
   },
 
   async ask({ flags, positional }) {

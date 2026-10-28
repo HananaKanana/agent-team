@@ -162,7 +162,20 @@ const CRITIQUE_STATUS = {
   overruled: '用户维持原样', // 旧数据
 };
 
-function footer(agentId) {
+// 测试卡常见的毛病：一进浏览器就忘了报进度，看板上一直没动静，15 分钟后还会被当成停住
+const isTestRole = (role) => /^(test|qa|测试)$/i.test(String(role ?? '').trim());
+function testProgressRule(agentId, task) {
+  const n = task.acceptance?.length;
+  return [
+    '',
+    '**⚠ 测试时最容易忘的事：报进度。** 在浏览器里操作不会调用 ateam，服务看不到你在干活；用户在看板上也只能看到进度笔记。所以：',
+    `- **每核对完一条验收标准，立刻报一次**，写结果和看到的现象：ateam progress --as ${agentId} "第 1/${n || 'N'} 条 通过：<看到了什么>"（不通过就写「不通过：<现象>」）`,
+    `- 开始操作浏览器前先报一次「开始测：<先测哪条>」；一条要测很久（等数据、等定时任务），先报备：ateam progress --as ${agentId} "<在等什么>" --expect <分钟>`,
+    '- 不管测到哪，**两次进度之间不要超过 5 分钟**。宁可多报，不要少报。',
+  ];
+}
+
+function footer(agentId, task) {
   return [
     '',
     '',
@@ -172,6 +185,7 @@ function footer(agentId) {
     '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
+    ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task) : []),
   ].join('\n');
 }
 
@@ -291,7 +305,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
-  return out + footer(agentId);
+  return out + footer(agentId, task);
 }
 
 // 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用

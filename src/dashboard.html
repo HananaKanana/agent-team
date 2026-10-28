@@ -355,6 +355,10 @@ input[type="checkbox"]:not(.switch):checked::after {
 .demo-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); gap: 20px; align-items: start; }
 .demo-layout .demo-list { max-width: none; }
 @media (max-width: 1100px) { .demo-layout { grid-template-columns: minmax(0, 1fr); } }
+/* 平板宽度、需求栏展开时：右边脚本步骤收窄，把宽度让给左边的演播卡；需求栏收起时不变 */
+@media (min-width: 1101px) and (max-width: 1440px) {
+  .layout:not(.nav-collapsed) .demo-layout { grid-template-columns: minmax(0, 1fr) minmax(240px, 300px); gap: 16px; }
+}
 .demo-layout .prompter .say { font-size: 26px; line-height: 1.45; font-weight: 650; margin: 10px 0 4px; -webkit-line-clamp: 4; }
 .demo-layout .prompter { padding: 16px 18px 14px; }
 /* 左栏卡片下面的面板：下一步、本步怎么操作、运行记录 */

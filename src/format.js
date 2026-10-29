@@ -186,7 +186,7 @@ export function fillTestTemplate(text, task, agentId) {
     .replace(/\{\{验收标准\}\}/g, acc.map((a, i) => `${i + 1}. ${one(a)}`).join('\n'));
 }
 
-// ateam 自带的测试报告模板。项目可以在看板「设置 → 测试报告模板」里改，存在 .ateam/test-template.md
+// ateam 自带的测试报告模板。项目可以在看板「使用说明 → 测试用例」里改，存在 .ateam/test-template.md
 export const DEFAULT_TEST_TEMPLATE = `# {{卡号}} 测试报告：{{标题}}
 
 - 测试人：{{测试人}}

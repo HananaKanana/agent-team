@@ -224,7 +224,7 @@ input[type="checkbox"]:not(.switch):checked::after {
 .warn-text { color: var(--rework); }
 .install-done { color: var(--approved); font-weight: 600; }
 .install-pick { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
-.tpl-head { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.tpl-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .tpl-head b { font-size: 13px; }
 .tpl-badge { padding: 1px 7px; border-radius: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--sunken); }
 .tpl-badge.custom { color: var(--brand-ink); background: var(--brand-soft); }
@@ -1810,8 +1810,6 @@ function settingsPage() {
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, it.hint)));
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '测试')),
-    testTemplateEditor(),
     el('div', { class: 'helper-sec' }, el('h4', null, '本设备')),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -1919,10 +1917,10 @@ function testTemplateEditor() {
     body = area;
   }
   const code = (t) => el('code', {}, t);
-  return [
+  return el('div', { class: 'rules-page tpl-page' },
     el('div', { class: 'tpl-head' }, el('b', null, '测试报告模板'),
       el('span', { class: `tpl-badge${testTpl.custom ? ' custom' : ''}` }, testTpl.custom ? '自定义' : 'ateam 自带')),
-    el('p', { class: 'hint' }, 'test worker 领到测试卡时按这个模板建报告（Markdown）。客户要求用他们的格式，就在这里改成客户的栏目；客户给的是 Excel / Word，让 leader 派一张卡转成 Markdown 贴进来。占位符：',
+    el('p', { class: 'tab-hint' }, 'test worker 领到测试卡时按这个模板建报告、写用例（Markdown）。客户要求用他们的格式，就在这里改成客户的栏目；客户给的是 Excel / Word，让 leader 派一张卡转成 Markdown 贴进来。占位符：',
       code('{{卡号}}'), ' ', code('{{标题}}'), ' ', code('{{测试人}}'), ' ', code('{{验收标准}}'), '（编号列表）；', code('{{#每条}}'), '…', code('{{/每条}}'),
       ' 之间按验收标准逐条重复，里面用 ', code('{{序号}}'), ' ', code('{{验收标准}}'), '。'),
     el('div', { class: 'rules-bar' },
@@ -1932,8 +1930,7 @@ function testTemplateEditor() {
     body,
     el('div', { class: 'rules-foot' }, saveBtn, undoBtn, resetBtn,
       testTpl.status ? el('span', { class: 'hint' }, testTpl.status) : null,
-      el('span', { class: 'path' }, testTpl.custom ? '保存在 .ateam/test-template.md' : '没改过：用 ateam 自带的')),
-  ];
+      el('span', { class: 'path' }, testTpl.custom ? '保存在 .ateam/test-template.md' : '没改过：用 ateam 自带的')));
 }
 
 async function keepAgents(ids) {
@@ -2137,7 +2134,9 @@ function renderHelper(force = false) {
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
   if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
-  if (!force && helper.tab === 'settings' && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('tpl-editor')) && panel.contains(document.activeElement)) return;
+  if (!force && helper.tab === 'settings' && document.activeElement?.classList?.contains('setting-num') && panel.contains(document.activeElement)) return;
+  // 正在编辑测试报告模板：同项目规则，轮询不重画
+  if (!force && helper.tab === 'tests' && panel.querySelector('.tpl-page')) return;
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;
   const online = agents.filter((a) => a.status === 'online');
@@ -2179,10 +2178,10 @@ function renderHelper(force = false) {
   fill(panel,
     el('div', { class: 'panel-top' },
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('settings', '设置'))),
+      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' ? null : el('p', { class: 'tab-hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
-    tab === 'settings' ? settingsPage() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
+    tab === 'rules' || tab === 'settings' || tab === 'tests' ? null : el('p', { class: 'tab-hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
+    tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
     el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
     [...roles.values()].map((role) => {

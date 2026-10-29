@@ -199,7 +199,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
   // 和项目规则（长期有效的约定）
-  // 测试报告模板：.ateam/test-template.md，用户在看板「设置 → 测试报告模板」里编辑（比如按客户的格式）。
+  // 测试报告模板：.ateam/test-template.md，用户在看板「使用说明 → 测试用例」里编辑（比如按客户的格式）。
   // 没有这个文件（没改过、或重置了）就用 ateam 自带的
   const testTemplateFile = join(dataDir, 'test-template.md');
   const MAX_TEST_TEMPLATE = 30 * 1024;

@@ -1233,7 +1233,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <div class="workers" id="workers"></div>
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
-  <button class="btn" id="notify-btn" type="button" hidden title="允许浏览器弹通知：有需求待验收、任务缺 worker、leader 掉线时提醒你">开启通知</button>
+  <button class="btn" id="notify-btn" type="button" hidden title="开启浏览器通知：需求待验收、任务缺少 worker、leader 离线时发送提醒">开启通知</button>
   <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
@@ -1242,8 +1242,8 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <!-- 页面提示都做成右上角的浮动气泡，不占页面、可以关掉 -->
 <div class="toasts" id="toasts">
 <div class="banner demo" id="demo-banner" hidden></div>
-<div class="banner" id="banner" hidden><b>连不上 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 仍在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 的代码已经更新，但服务还在跑旧代码。在运行 ateam serve 的终端里按 Ctrl+C，再重新运行 ateam serve，然后刷新本页。状态不会丢，worker 和 leader 会自动重连。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 代码已更新，当前服务仍在运行旧版本。请在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve，再刷新本页。数据不会丢失，worker 和 leader 将自动重连。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 </div>
 <div class="layout">
   <nav class="jobs" id="jobs" aria-label="需求列表"><h2>需求</h2><div class="sk sk-job"></div><div class="sk sk-job"></div><div class="sk sk-job"></div></nav>
@@ -1251,7 +1251,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 </div>
 <aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
 <div class="prompter-strip" id="prompter-strip" aria-live="polite"></div>
-<div class="att-pop" id="attention-list" hidden role="dialog" aria-label="需要你处理"></div>
+<div class="att-pop" id="attention-list" hidden role="dialog" aria-label="待处理事项"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
 <div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
@@ -1259,7 +1259,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="modal-back" id="confirm-dialog" hidden role="dialog" aria-modal="true" aria-label="确认"></div>
 <div class="ctx-menu" id="card-menu" hidden role="menu"></div>
 <div class="spot-back" id="spotlight" hidden role="dialog" aria-modal="true" aria-label="搜索"></div>
-<div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 可能停了"></div>
+<div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 无响应"></div>
 
 <script>
 'use strict';
@@ -1274,7 +1274,7 @@ const LANES = [
   { key: 'held', label: '已挂起' },
 ];
 const LANE_LABEL = { ...Object.fromEntries(LANES.map((l) => [l.key, l.label])), cancelled: '已作废' };
-const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待你验收', accepted: '已验收', cancelled: '已作废' };
+const JOB_STATUS = { planning: '规划中', active: '进行中', awaiting_acceptance: '待验收', accepted: '已验收', cancelled: '已作废' };
 const JOB_LOZENGE = { planning: 'pending', active: 'working', awaiting_acceptance: 'asking', accepted: 'approved', cancelled: 'cancelled' };
 let descOpenJob = null; // 展开了说明的需求
 let acceptArm = null; // 「验收通过」两步确认：记需求编号
@@ -1298,18 +1298,18 @@ function acceptButtons(job) {
     el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); acceptJob(job.id); } }, `确认 ${job.id} 验收通过`),
   ];
 }
-const ACCEPT_HINT = '测过没问题就点「验收通过」；有问题就在对话里告诉 leader 哪里不对，它会在这个需求下加修复任务。';
+const ACCEPT_HINT = '测试无误后点击「验收通过」；如有问题，请在对话中向 leader 说明，leader 将在该需求下新增修复任务。';
 const HISTORY = {
   created: ['创建', 'pending'], claimed: ['领取', 'working'], progress: ['进度', 'working'],
   asked: ['提问', 'asking'], answered: ['答复', 'asking'], submitted: ['交付', 'submitted'],
-  approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['掉线交接', 'held'],
+  approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['离线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
   demo_ended: ['运行结束', 'approved'], demo_saved: ['操作记录', 'approved'],
-  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做别的卡', 'held'],
+  note: ['补充说明', 'pending'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做其他任务', 'held'],
 };
 // 演播卡的状态：名称、lozenge 颜色
 const DEMO_STATUS = { ready: ['待演播', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演播中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
-const RUN_OUTCOME = { done: '跑完', stopped: '叫停', interrupted: '中断' };
+const RUN_OUTCOME = { done: '完成', stopped: '叫停', interrupted: '中断' };
 const RUN_MODE = { rehearsal: '预演', show: '演播' };
 
 let data = null;
@@ -1359,7 +1359,7 @@ function avText(name) {
   return m ? m[1] : String(name).trim().charAt(0).toUpperCase();
 }
 function avatar(id, role) {
-  if (!id) return el('span', { class: 'av none', title: '还没人领' });
+  if (!id) return el('span', { class: 'av none', title: '未领取' });
   const a = data.state.agents.find((x) => x.id === id);
   return el('span', { class: 'av', style: roleStyle(role ?? a?.role ?? ''), title: agentLabel(id) }, avText(a?.name || id));
 }
@@ -1426,7 +1426,7 @@ function laneTime(t, lane) {
   // 依赖的卡已作废：永远等不到，标红让人去改依赖（正常流程不会出现，老数据才有）
   const deadDeps = t.status === 'pending' || t.status === 'held' ? t.dependsOn.filter((id) => data.state.tasks.find((x) => x.id === id)?.status === 'cancelled') : [];
   if (deadDeps.length) {
-    return el('span', { class: 'since dead-dep', title: `依赖的 ${deadDeps.join('、')} 已作废，这张卡永远等不到依赖完成，不会被派发。请让 leader 用 ateam task edit ${t.id} --after ... 去掉这个依赖` }, icon('clock'), `依赖 ${deadDeps.join('、')} 已作废`);
+    return el('span', { class: 'since dead-dep', title: `依赖的 ${deadDeps.join('、')} 已作废，该任务的依赖无法满足，不会被派发。请由 leader 执行 ateam task edit ${t.id} --after ... 移除该依赖` }, icon('clock'), `依赖 ${deadDeps.join('、')} 已作废`);
   }
   if (lane === 'pending' && t.dependsOn.some((id) => data.state.tasks.find((x) => x.id === id)?.status !== 'approved')) {
     return el('span', { class: 'since', title: `等待依赖任务通过：${t.dependsOn.join('、')}` }, icon('clock'), '等依赖');
@@ -1434,7 +1434,7 @@ function laneTime(t, lane) {
   const clash = lane === 'pending' && data.clash?.[t.id];
   if (clash) {
     const c = data.state.tasks.find((x) => x.id === clash);
-    return el('span', { class: 'since', title: `和 ${c?.assignee ? agentLabel(c.assignee) : ''} 正在做的 ${clash} 改同一批文件，两人同时改会把对方改了一半的内容一起提交，所以等它交了再派` }, icon('clock'), `等 ${clash} 交`);
+    return el('span', { class: 'since', title: `与 ${c?.assignee ? agentLabel(c.assignee) : ''} 正在处理的 ${clash} 修改同一批文件。为避免提交对方未完成的改动，待其提交后再派发` }, icon('clock'), `待 ${clash} 提交`);
   }
   const rule = SINCE[lane];
   const h = rule && t.history.findLast((x) => rule[0].includes(x.type));
@@ -1552,9 +1552,9 @@ function criticProgress(a) {
     .map((id) => data.state.tasks.find((t) => t.id === id))
     .filter((t) => t && t.status !== 'cancelled' && !reviewed(t));
   const leaving = a.dismiss || data.config?.criticAutoLeave ? '，审完下线' : '';
-  if (left.length) return `审 ${left[0].id}${left.length > 1 ? `，这批还剩 ${left.length} 张` : ''}${leaving}`;
-  const last = a.lastCritiqued?.length ? `，刚审完 ${a.lastCritiqued.join('、')}` : '';
-  return `等新卡${last}`;
+  if (left.length) return `审核 ${left[0].id}${left.length > 1 ? `，本批剩余 ${left.length} 张` : ''}${leaving}`;
+  const last = a.lastCritiqued?.length ? `，最近审核 ${a.lastCritiqued.join('、')}` : '';
+  return `等待新任务${last}`;
 }
 
 function renderWorkers() {
@@ -1568,10 +1568,10 @@ function renderWorkers() {
     type: 'button',
     class: `worker leader-chip ${leader.online && !leader.away ? 'online' : 'offline-lead'}`,
     title: leader.online && !leader.away
-      ? (leader.watching ? 'leader 在线，正在监听事件。点击查看 leader 的提示词' : `leader ${ago(leader.lastSeenAt)}操作过，但没有在监听事件。点击查看提示词`)
+      ? (leader.watching ? 'leader 在线，正在监听事件。点击查看 leader 提示词' : `leader ${ago(leader.lastSeenAt)}有操作，但未在监听事件。点击查看提示词`)
       : leader.away
-        ? `无 leader 模式（${fmtTime(leader.away.since)} 起，${leader.away.by === 'user' ? '你宣布 leader 下线' : 'leader 掉线了'}）：等答复、待 review 的卡先放下，worker 转做没有依赖的卡；leader 回来后自动恢复。点击查看加入的提示词`
-        : 'leader 没有连接：没有在监听事件，最近 3 分钟也没有操作。点击查看加入的提示词',
+        ? `无 leader 模式（${fmtTime(leader.away.since)} 起，${leader.away.by === 'user' ? '手动设置' : '检测到 leader 离线'}）：等待答复、待 review 的任务暂时搁置，worker 转做无依赖的任务；leader 恢复后自动退出。点击查看加入提示词`
+        : 'leader 未连接：未在监听事件，且近 3 分钟无操作。点击查看加入提示词',
     onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
   }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: `task${leader.online && leader.watching && !leader.away ? ' idle' : ''}` }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
   // 审卡 worker 和 leader 一样常驻，紧挨着 leader 放
@@ -1589,16 +1589,16 @@ function renderWorkers() {
     el('b', { class: 'role-text', style: roleStyle(a.role) }, a.name || a.id),
     a.name ? el('span', { class: 'task wid' }, a.id) : null,
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
-    el('span', { class: `task${!isCriticAgent(a) && !a.currentTask && !a.leaveAsked ? ' idle' : ''}` }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，做完下线` : a.currentTask) : (a.leaveAsked ? '空闲，申请下线' : '空闲')),
+    el('span', { class: `task${!isCriticAgent(a) && !a.currentTask && !a.leaveAsked ? ' idle' : ''}` }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，完成后下线` : a.currentTask) : (a.leaveAsked ? '空闲，已申请下线' : '空闲')),
   );
   })];
   if (offline.length) {
     chips.push(el('button', {
-      type: 'button', class: 'worker offline', title: '点击查看和移除掉线的 worker',
+      type: 'button', class: 'worker offline', title: '点击查看或移除已离线的 worker',
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
-    }, `${offline.length} 个已掉线`));
+    }, `${offline.length} 个已离线`));
   }
-  if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '还没有 worker 加入，点右边「使用说明」开 worker'));
+  if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '暂无 worker 加入，可在右侧「使用说明」中添加 worker'));
   box.replaceChildren(...chips);
   fitWorkers();
   renderHelper();
@@ -1645,17 +1645,17 @@ async function setLeaderAway(on) {
 function leaderCard() {
   const leader = data.leader || {};
   const away = leader.away;
-  const state = away ? `无 leader 模式 · ${fmtTime(away.since)} 起${away.by === 'user' ? '，你设的' : '，检测到掉线'}`
-    : leader.online ? (leader.watching ? '在线，正在监听' : `在线，未监听 · ${ago(leader.lastSeenAt)}操作过`) : '未连接';
+  const state = away ? `无 leader 模式 · ${fmtTime(away.since)} 起${away.by === 'user' ? '，手动设置' : '，检测到离线'}`
+    : leader.online ? (leader.watching ? '在线，正在监听' : `在线，未监听 · ${ago(leader.lastSeenAt)}有操作`) : '未连接';
   return el('div', { class: 'wcard' },
     el('div', { class: 'wcard-head' },
       el('span', { class: 'av' }, 'L'),
       el('span', { class: 'grow' }, el('span', { class: 'who-line' }, el('b', null, 'leader'), el('span', { class: 'hint' }, state))),
-      el('button', { class: 'btn ghost sm', title: away ? '退出无 leader 模式，放下的卡等 leader 处理' : '进入无 leader 模式', onclick: (e) => { e.stopPropagation(); setLeaderAway(!away); } }, away ? '恢复' : '下线')),
+      el('button', { class: 'btn ghost sm', title: away ? '退出无 leader 模式，搁置的任务交由 leader 处理' : '进入无 leader 模式', onclick: (e) => { e.stopPropagation(); setLeaderAway(!away); } }, away ? '恢复' : '下线')),
     el('p', { class: 'hint' }, away
-      ? `等答复、待 review 的卡挂起，worker 先做没有依赖、不改同一批文件的卡。${away.by === 'user' ? 'leader 执行任何命令（后台监听不算）' : 'leader 重新挂上监听或执行命令'}会自动恢复。`
-      : 'leader 的 token 用完、暂时回不来时点「下线」：进入无 leader 模式，worker 不再干等，先放下等答复、待 review 的卡，转做没有依赖、不改同一批文件的卡。leader 回来执行任何命令就自动恢复，按顺序答复和 review，卡交回原来的 worker。设置里可以打开「掉线时自动进入」。'),
-    leader.online || away ? promptBlock(leadWakePrompt(), renderHelper) : el('p', { class: 'hint' }, 'leader 没有连接：用 ① 里那句话重新开一个。'));
+      ? `等待答复、待 review 的任务已搁置，worker 优先处理无依赖且不涉及相同文件的任务。${away.by === 'user' ? 'leader 执行任意命令（后台监听除外）' : 'leader 重新开始监听或执行命令'}后自动恢复。`
+      : 'leader 因 token 用尽等原因暂时无法响应时，可点击「下线」进入无 leader 模式：worker 搁置等待答复、待 review 的任务，转做无依赖且不涉及相同文件的任务。leader 执行任意命令后自动恢复，依次处理答复与 review，任务交回原 worker。也可在「设置」中开启离线时自动进入。'),
+    leader.online || away ? promptBlock(leadWakePrompt(), renderHelper) : el('p', { class: 'hint' }, 'leader 未连接：请使用 ① 中的提示词重新启动。'));
 }
 function leadWakePrompt() {
   return '继续。你是 ateam leader。先运行 ateam status，按「待你处理」继续（先答复，再 review）；如果后台的 ateam watch --follow 监听停了，用 Monitor 重新启动它。中途不要停下来等我。';
@@ -1673,11 +1673,11 @@ function lastClaimSince(agentId, since) {
 function dismissButtons(a) {
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   const last = isLastOfRole(a);
-  const lastTip = last ? `${a.role} 角色只剩它一个，下线后这个角色的新任务没人领` : '';
+  const lastTip = last ? `该 worker 是 ${a.role} 角色唯一在线的 worker，下线后该角色的新任务将无人领取` : '';
   // 已安排做完再下线：可以撤销，或改成立即下线
   if (a.dismiss) {
     return [
-      el('button', { class: 'btn ghost sm', title: '撤销「做完再下线」，它会继续领新任务', onclick: stop(() => keepAgents([a.id])) }, '撤销'),
+      el('button', { class: 'btn ghost sm', title: '撤销「完成后下线」，该 worker 将继续领取新任务', onclick: stop(() => keepAgents([a.id])) }, '撤销'),
       el('button', { class: 'btn ghost sm', title: '立即下线；进行中的任务退回待领取', onclick: stop(() => dismissAgents({ ids: [a.id], userApproved: true })) }, '立即下线'),
     ];
   }
@@ -1697,11 +1697,11 @@ function dismissButtons(a) {
     return [
       cancel,
       el('button', {
-        class: 'btn sm', title: '把待审的卡（包括审的过程中新来的）都审完，没有待审的卡了才下线',
+        class: 'btn sm', title: '审核完所有待审任务（含审核期间新增的）后下线',
         onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true, afterTask: true }); }),
-      }, '审完再下线'),
+      }, '审核完成后下线'),
       el('button', {
-        class: 'btn warn sm', title: '马上停下，没审的卡留着，下次开审卡 worker 再审',
+        class: 'btn warn sm', title: '立即停止，未审核的任务保留至下次审卡 worker 上线',
         onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
       }, '立即下线'),
     ];
@@ -1715,11 +1715,11 @@ function dismissButtons(a) {
   return [
     cancel,
     el('button', {
-      class: 'btn sm', title: `做完 ${a.currentTask}（通过或作废）后下线，期间不领新任务。${lastTip}`,
+      class: 'btn sm', title: `完成 ${a.currentTask}（通过或作废）后下线，期间不再领取新任务。${lastTip}`,
       onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true, afterTask: true }); }),
-    }, `做完 ${a.currentTask} 再下线`),
+    }, `完成 ${a.currentTask} 后下线`),
     el('button', {
-      class: 'btn warn sm', title: `马上停下，${a.currentTask} 若还在进行中就退回待领取。${lastTip}`,
+      class: 'btn warn sm', title: `立即停止；${a.currentTask} 若仍在进行中，将退回待领取。${lastTip}`,
       onclick: stop(() => { dismissArm = null; dismissAgents({ ids: [a.id], userApproved: true }); }),
     }, '立即下线'),
   ];
@@ -1754,16 +1754,16 @@ async function dismissAgents(body) {
 // 改一项存一项。数字框在失去焦点或回车时保存；正在输入时轮询不重画面板（见 renderHelper）。
 const SETTING_ITEMS = [
   { group: 'worker' },
-  { key: 'idleMin', type: 'num', label: '空闲多久申请下线（分钟）', hint: 'worker 没活干超过这个时间，向 leader 申请下线，省得空等浪费 token。' },
-  { key: 'leaseMin', type: 'num', label: '多久没动静算「可能停了」（分钟）', hint: '手上有任务的 worker 超过这个时间没动静，弹框问你；空闲的直接算掉线。跑长命令的 worker 会先报备，不受影响。' },
-  { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少留一个 worker', hint: '开启时，会让某个角色一个不剩的下线要你同意（leader 会先问你）。关掉后 leader 可以直接让最后一个下线。' },
+  { key: 'idleMin', type: 'num', label: '空闲申请下线时长（分钟）', hint: 'worker 空闲超过该时长后向 leader 申请下线，避免空等消耗 token。' },
+  { key: 'leaseMin', type: 'num', label: '无响应判定时长（分钟）', hint: '持有任务的 worker 超过该时长无活动时，弹窗请求确认其状态；空闲 worker 直接判定为离线。执行耗时命令前已报备的 worker 不受影响。' },
+  { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少保留一个 worker', hint: '开启后，某一角色的最后一个 worker 下线需经用户同意（leader 会先行征询）。关闭后 leader 可直接让其下线。' },
   { group: '审卡' },
-  { key: 'criticAutoLeave', type: 'bool', label: '审完自动下线', hint: '审卡 worker 审完所有待审的卡就下线（新开的也一样）；之后有新卡要审，再开一个。关掉时审卡 worker 常驻，只有你要求才下线。' },
+  { key: 'criticAutoLeave', type: 'bool', label: '审核完成后自动下线', hint: '审卡 worker 审核完所有待审任务后自动下线（新启动的同样适用），有新任务需审核时再启动。关闭后审卡 worker 常驻，仅在用户要求时下线。' },
   { group: 'review' },
-  { key: 'rejectLimit', type: 'int', label: '打回几次后挂起', hint: '同一个任务被打回这么多次，停止自动派发，转给 leader 处理（改写任务或自己动手）。' },
+  { key: 'rejectLimit', type: 'int', label: '打回次数上限', hint: '同一任务被打回达到该次数后停止自动派发并挂起，转由 leader 处理（改写任务或直接修改）。' },
   { group: 'leader' },
-  { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在「使用说明 → leader」里点「下线」才进入。开着时，leader 掉线（超过下面的时间既没挂着监听、也没执行命令）也自动进入，重新挂上监听或执行命令就自动退出。token 用完后它的后台监听最多还会挂半小时，这段时间仍算在线。' },
-  { key: 'leaderAwayMin', type: 'int', label: '断开多久算掉线（分钟）', hint: '只在上面的自动开关开着时有用。' },
+  { key: 'autoNoLeader', type: 'bool', label: 'leader 离线时自动进入无 leader 模式', hint: '关闭时，仅在「使用说明 → leader」中点击「下线」后进入。开启时，leader 离线（超过下方时长既未监听也未执行命令）也会自动进入，重新监听或执行命令后自动退出。token 用尽后，leader 的后台监听最多仍会保持约半小时，期间视为在线。' },
+  { key: 'leaderAwayMin', type: 'int', label: '离线判定时长（分钟）', hint: '仅在上方自动进入开关开启时生效。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';
@@ -1784,16 +1784,16 @@ async function saveSetting(key, value) {
     const res = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
     const out = await res.json();
     settingsMsg = out.ok ? '已保存。' : out.message;
-  } catch { settingsMsg = '连不上 ateam 服务。'; }
+  } catch { settingsMsg = '无法连接 ateam 服务。'; }
   await poll();
   renderHelper(true);
 }
 
 function settingsPage() {
   const cfg = data.config || {};
-  if (!data.config) return el('p', { class: 'hint' }, '服务还是旧版本，没有设置功能。请重启 ateam serve。');
+  if (!data.config) return el('p', { class: 'hint' }, '当前服务版本不支持设置，请重启 ateam serve。');
   return [
-    el('p', { class: 'tab-hint' }, '这些设置对整个项目生效，改完马上生效，重启服务也不会丢。'),
+    el('p', { class: 'tab-hint' }, '以下设置对整个项目生效，修改后立即生效，重启服务后保留。'),
     SETTING_ITEMS.map((it) => {
       if (it.group) return el('div', { class: 'helper-sec' }, el('h4', null, it.group));
       let input;
@@ -1821,7 +1821,7 @@ function settingsPage() {
         try { localStorage.setItem('ateam.touchScroll', touchScroll ? '1' : '0'); } catch {}
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '触屏模式'),
-        el('span', { class: 'hint' }, '给 Mac 外接触摸屏用：在列表、看板、抽屉里按住拖动就能滚动（上下、左右都行）。开启后用鼠标拖选文字也会变成滚动（输入框除外；提示词用旁边的复制按钮）。只对这台设备的这个浏览器生效。')));
+        el('span', { class: 'hint' }, '适用于 Mac 外接触摸屏：在列表、看板和详情面板中按住拖动即可上下或左右滚动。开启后，鼠标拖选文字也会变为滚动（输入框除外，提示词请使用复制按钮）。仅对当前设备的当前浏览器生效。')));
     })(),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -1833,7 +1833,7 @@ function settingsPage() {
         renderMain();
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '空列收窄'),
-        el('span', { class: 'hint' }, '看板里没有卡的列收成一条窄竖条，宽度让给有卡的列；关掉后七列一样宽。只对这台设备的这个浏览器生效。')));
+        el('span', { class: 'hint' }, '看板中没有任务的列收窄显示，空间留给有任务的列；关闭后各列等宽。仅对当前设备的当前浏览器生效。')));
     })(),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -1845,7 +1845,7 @@ function settingsPage() {
         markRelated(null);
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '悬停显示依赖关系'),
-        el('span', { class: 'hint' }, '鼠标停在卡上时，给它依赖的卡和在等它的卡加框、标上「在等」。关着时卡片上的「等依赖」和右键菜单里的相关卡照常可用。只对这台设备的这个浏览器生效。')));
+        el('span', { class: 'hint' }, '鼠标悬停在任务卡上时，高亮其依赖的任务和下游任务并显示标签。关闭后，卡片上的「等依赖」和右键菜单中的相关任务仍可使用。仅对当前设备的当前浏览器生效。')));
     })(),
   ];
 }
@@ -1862,7 +1862,7 @@ async function loadTestTpl() {
     const keep = testTpl.draft !== testTpl.saved;
     testTpl = { ...testTpl, loaded: true, saved: json.text, draft: keep ? testTpl.draft : json.text, custom: json.custom, def: json.default, status: keep ? '有未保存的修改。' : '' };
   } catch {
-    testTpl = { ...testTpl, loaded: true, status: '读取失败，请确认服务是新版本（重启 ateam serve）。' };
+    testTpl = { ...testTpl, loaded: true, status: '读取失败，请重启 ateam serve 以更新服务版本。' };
   }
   testTpl.loading = false;
   renderHelper(true);
@@ -1872,7 +1872,7 @@ async function saveTestTpl(text, okMsg) {
     const res = await fetch('/api/test-template', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
     const json = await res.json();
     if (!json.ok) throw new Error(json.message);
-    testTpl = { ...testTpl, saved: json.text, draft: json.text, custom: json.custom, def: json.default, status: json.custom ? okMsg : '已恢复成 ateam 自带的模板。' };
+    testTpl = { ...testTpl, saved: json.text, draft: json.text, custom: json.custom, def: json.default, status: json.custom ? okMsg : '已恢复为默认模板。' };
   } catch (err) {
     testTpl = { ...testTpl, status: `保存失败：${err.message}` };
   }
@@ -1892,15 +1892,15 @@ function testTemplateEditor() {
   const dirty = testTpl.draft !== testTpl.saved;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   const setMode = (m) => stop(() => { testTpl.mode = m; renderHelper(true); });
-  const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: stop(() => saveTestTpl(testTpl.draft, '已保存。之后领到的测试卡按这个模板写报告。')) }, '保存');
+  const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: stop(() => saveTestTpl(testTpl.draft, '已保存。此后领取的测试任务将按此模板编写报告。')) }, '保存');
   const undoBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: stop(() => { testTpl = { ...testTpl, draft: testTpl.saved, status: '' }; renderHelper(true); }) }, '撤销修改');
   const resetBtn = el('button', {
     class: 'btn ghost sm', disabled: !testTpl.custom && !dirty,
     onclick: stop(() => openConfirm({
-      title: '重置为自带模板？', body: '自定义的模板会被删除（.ateam/test-template.md），之后测试卡用 ateam 自带的模板。', ok: '重置',
+      title: '重置为默认模板？', body: '将删除自定义模板（.ateam/test-template.md），此后测试任务使用默认模板。', ok: '重置',
       run: async () => { await saveTestTpl('', ''); return { ok: true }; },
     })),
-  }, '重置为自带模板');
+  }, '重置为默认模板');
   let body;
   if (testTpl.mode === 'view') {
     const box = el('div', { class: 'tpl-preview md' });
@@ -1921,18 +1921,18 @@ function testTemplateEditor() {
   const code = (t) => el('code', {}, t);
   return el('div', { class: 'rules-page tpl-page' },
     el('div', { class: 'tpl-head' }, el('b', null, '测试报告模板'),
-      el('span', { class: `tpl-badge${testTpl.custom ? ' custom' : ''}` }, testTpl.custom ? '自定义' : 'ateam 自带')),
-    el('p', { class: 'tab-hint' }, 'test worker 领到测试卡时按这个模板建报告、写用例（Markdown）。客户要求用他们的格式，就在这里改成客户的栏目；客户给的是 Excel / Word，让 leader 派一张卡转成 Markdown 贴进来。占位符：',
+      el('span', { class: `tpl-badge${testTpl.custom ? ' custom' : ''}` }, testTpl.custom ? '自定义模板' : '默认模板')),
+    el('p', { class: 'tab-hint' }, 'test worker 领取测试任务时，按此模板创建测试报告并编写用例（Markdown 格式）。如需采用客户指定格式，请在此按客户模板调整栏目；客户提供 Excel / Word 模板时，可由 leader 派发任务转换为 Markdown 后粘贴至此。可用占位符：',
       code('{{卡号}}'), ' ', code('{{标题}}'), ' ', code('{{测试人}}'), ' ', code('{{验收标准}}'), '（编号列表）；', code('{{#每条}}'), '…', code('{{/每条}}'),
-      ' 之间按验收标准逐条重复，里面用 ', code('{{序号}}'), ' ', code('{{验收标准}}'), '。'),
+      ' 之间的内容按验收标准逐条重复，其中可使用 ', code('{{序号}}'), ' ', code('{{验收标准}}'), '。'),
     el('div', { class: 'rules-bar' },
       el('div', { class: 'seg' },
         el('button', { class: testTpl.mode !== 'view' ? 'on' : '', onclick: setMode('edit') }, '编辑'),
-        el('button', { class: testTpl.mode === 'view' ? 'on' : '', onclick: setMode('view') }, '用示例卡预览'))),
+        el('button', { class: testTpl.mode === 'view' ? 'on' : '', onclick: setMode('view') }, '示例预览'))),
     body,
     el('div', { class: 'rules-foot' }, saveBtn, undoBtn, resetBtn,
       testTpl.status ? el('span', { class: 'hint' }, testTpl.status) : null,
-      el('span', { class: 'path' }, testTpl.custom ? '保存在 .ateam/test-template.md' : '没改过：用 ateam 自带的')));
+      el('span', { class: 'path' }, testTpl.custom ? '存储位置：.ateam/test-template.md' : '当前使用默认模板')));
 }
 
 async function keepAgents(ids) {
@@ -1967,11 +1967,11 @@ function renderOfflinePanel(panel) {
   fill(panel,
     el('div', { class: 'panel-top', style: 'padding-bottom: 12px' },
       el('div', { class: 'helper-head' },
-        el('b', null, `掉线的 worker（${offline.length}）`),
+        el('b', null, `已离线的 worker（${offline.length}）`),
         el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); hideAgents(offline.map((a) => a.id)); } }, '全部移除'),
         el('button', { class: 'btn ghost icon', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); close(); } }, icon('close')))),
     el('div', { class: 'panel-body' },
-    el('p', { class: 'tab-hint' }, '窗口还在：点「重连」，把提示词发到它自己的 agent 窗口，它会用原编号重新加入、接着干活。窗口没了：点「移除」，只是不再显示，任务时间线里的记录保留。'),
+    el('p', { class: 'tab-hint' }, '窗口仍在：点击「重连」，将提示词发送至该 worker 的 agent 窗口，worker 将以原编号重新加入并继续工作。窗口已关闭：点击「移除」，仅从列表中隐藏，任务时间线中的记录保留。'),
     offline.map((a) => el('div', { class: 'wcard' },
       el('div', { class: 'wcard-head' },
         avatar(a.id, a.role),
@@ -2030,7 +2030,7 @@ async function loadRules() {
     const keepDraft = rules.loaded && rules.draft !== rules.saved;
     rules = { ...rules, loaded: true, saved, draft: keepDraft ? rules.draft : saved, status: keepDraft ? '有未保存的修改。' : '', roles: json.roles || [] };
   } catch {
-    rules = { ...rules, loaded: true, status: '读取失败，请确认服务在运行（规则功能需要新版服务）。' };
+    rules = { ...rules, loaded: true, status: '读取失败，请确认服务正在运行且为最新版本。' };
   }
   renderHelper(true);
 }
@@ -2040,7 +2040,7 @@ async function saveRules() {
     const res = await fetch('/api/rules', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: rules.draft, userApproved: true }) });
     const json = await res.json();
     if (!json.ok) throw new Error(json.message);
-    rules = { ...rules, loaded: true, saved: json.rules, draft: json.rules, status: '已保存。之后派发的任务按角色带上。' };
+    rules = { ...rules, loaded: true, saved: json.rules, draft: json.rules, status: '已保存。此后派发的任务将按角色附带相应规则。' };
   } catch (err) {
     rules = { ...rules, status: `保存失败：${err.message}` };
   }
@@ -2067,7 +2067,7 @@ function rulesEditor() {
   function refreshMeta() {
     fill(counts, ruleCounts(rules.draft).map(([name, n]) => el('span', { class: 'rules-count' }, name, el('b', {}, String(n)))));
     const lost = unreceivedRoles(rules.draft, rules.roles);
-    warn.textContent = lost.length ? `这些段目前没有角色会收到：${lost.join('、')}。全员段的小标题只认 ## ALL。` : '';
+    warn.textContent = lost.length ? `以下分段目前没有对应角色：${lost.join('、')}。全员分段的标题须为 ## ALL。` : '';
     warn.hidden = !lost.length;
   }
   refreshMeta();
@@ -2076,7 +2076,7 @@ function rulesEditor() {
   if (mode === 'edit') {
     const area = el('textarea', {
       class: 'rules-editor', spellcheck: 'false',
-      placeholder: '比如：\n- 不写新的测试代码\n\n## backend\n- 提交前先跑一遍编译\n\n## frontend, test\n- 页面文字不出现接口路径',
+      placeholder: '示例：\n- 不写新的测试代码\n\n## backend\n- 提交前先跑一遍编译\n\n## frontend, test\n- 页面文字不出现接口路径',
     });
     area.value = rules.draft;
     area.addEventListener('input', () => {
@@ -2100,23 +2100,23 @@ function rulesEditor() {
     body = [
       el('div', { class: 'role-pills' }, '角色',
         roles.map((r) => el('button', { class: `role-pill${r === role ? ' on' : ''}`, onclick: (e) => { e.stopPropagation(); rules.previewRole = r; renderHelper(true); } }, r)),
-        roles.length ? el('span', { class: 'got' }, `领卡时收到 ${total} 条`) : null),
+        roles.length ? el('span', { class: 'got' }, `领取任务时附带 ${total} 条`) : null),
       secs.length
         ? el('div', { class: 'rules-view' }, secs.map((x) => el('section', { class: 'rules-sec' },
           el('div', { class: 'rules-sec-head' },
             el('span', { class: `rules-tag${x.roles === 'all' ? ' all' : ''}` }, x.heading ?? 'ALL'),
-            x.heading === null ? (split ? '第一个小标题之前' : '还没分段，所有角色都收到') : x.roles === 'all' ? '所有角色' : null),
+            x.heading === null ? (split ? '首个小标题之前' : '未分段，适用于所有角色') : x.roles === 'all' ? '所有角色' : null),
           md(x.body.trim()))))
-        : el('div', { class: 'rules-empty' }, role ? `${role} 收不到任何规则` : '还没有项目规则'),
+        : el('div', { class: 'rules-empty' }, role ? `${role} 没有适用的规则` : '暂无项目规则'),
     ];
   }
 
   const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); saveRules(); } }, '保存');
-  const resetBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); rules = { ...rules, draft: rules.saved, status: '' }; renderHelper(true); } }, '还原');
+  const resetBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: (e) => { e.stopPropagation(); rules = { ...rules, draft: rules.saved, status: '' }; renderHelper(true); } }, '撤销修改');
   const code = (t) => el('code', {}, t);
   return el('div', { class: 'rules-page' },
-    el('p', { class: 'tab-hint' }, '每个任务都要遵守的约定，worker 领卡时自动附上。用 ', code('## backend'), '、', code('## frontend, test'),
-      ' 分段，只发给这些角色；', code('## ALL'), ' 段和第一个小标题之前的内容发给所有人。一行一条，支持 markdown。'),
+    el('p', { class: 'tab-hint' }, '所有任务均需遵守的约定，worker 领取任务时自动附带。使用 ', code('## backend'), '、', code('## frontend, test'),
+      ' 分段，仅发送给对应角色；', code('## ALL'), ' 分段及首个小标题之前的内容发送给所有角色。每行一条，支持 Markdown。'),
     el('div', { class: 'rules-bar' },
       el('div', { class: 'seg' },
         el('button', { class: mode === 'edit' ? 'on' : '', onclick: setMode('edit') }, '编辑'),
@@ -2127,8 +2127,8 @@ function rulesEditor() {
     // 按角色查看是只读的：不放保存 / 还原；有没保存的修改时提示回到编辑里保存
     el('div', { class: 'rules-foot' },
       mode === 'edit' ? [saveBtn, resetBtn, rules.status ? el('span', { class: 'hint' }, rules.status) : null]
-        : el('span', { class: 'hint' }, dirty ? '只读预览，含还没保存的修改；回到「编辑」里保存' : '只读预览，要改请切到「编辑」'),
-      el('span', { class: 'path' }, '保存在 .ateam/rules.md · leader 用命令行改需要你同意')));
+        : el('span', { class: 'hint' }, dirty ? '只读预览（含未保存的修改），请返回「编辑」保存' : '只读预览，如需修改请切换至「编辑」'),
+      el('span', { class: 'path' }, '存储位置：.ateam/rules.md · leader 通过命令行修改需经用户同意')));
 }
 
 function renderHelper(force = false) {
@@ -2183,10 +2183,10 @@ function renderHelper(force = false) {
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
       el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' ? null : el('p', { class: 'tab-hint' }, data.root ? `项目目录：${data.root}。每段话发到对应的 agent 窗口里。` : '每段话发到对应的 agent 窗口里。'),
+    tab === 'rules' || tab === 'settings' || tab === 'tests' ? null : el('p', { class: 'tab-hint' }, data.root ? `项目目录：${data.root}。请将各段提示词发送至对应的 agent 窗口。` : '请将各段提示词发送至对应的 agent 窗口。'),
     tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
-    el('div', { class: 'helper-sec' }, el('h4', null, '① 开 worker')),
-    el('p', { class: 'hint' }, '打开新的 agent 窗口（可以换账号），工作目录选项目目录，发对应角色的那句话。想起名字就在第一行末尾加「，名字 账号B」。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
+    el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
     [...roles.values()].map((role) => {
       const key = role.trim().toLowerCase();
       const std = STANDARD_ROLES.find((r) => r.key === key);
@@ -2200,36 +2200,36 @@ function renderHelper(force = false) {
           el('span', { class: 'hint' }, `在线 ${working}，待领取 ${waiting}`)),
         promptBlock(workerPrompt(role), renderHelper));
     }),
-    el('div', { class: 'helper-sec' }, el('h4', null, `② 干活中：在线的 worker（${online.length}）`), dismissAll),
+    el('div', { class: 'helper-sec' }, el('h4', null, `② 在线 worker（${online.length}）`), dismissAll),
     el('p', { class: 'hint' }, dismissAllArm
       ? '确认后所有 worker 立即下线；进行中的任务退回待领取，已有改动保留。'
-      : 'worker 停下来不动时，复制它的叫醒话，发到它自己的 agent 窗口。'),
+      : 'worker 停止响应时，复制其唤醒提示词并发送至该 worker 的 agent 窗口。'),
     ordered.length ? ordered.map((a) => el('div', { class: `wcard${a.id === helper.focus ? ' focus' : ''}` },
       el('div', { class: 'wcard-head' },
         avatar(a.id, a.role),
         el('span', { class: 'grow' },
           el('span', { class: 'who-line' },
             el('b', null, agentLabel(a.id)),
-            el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask ? `在做 ${a.currentTask}` : '空闲')} · 心跳 ${ago(a.lastSeenAt)}`)),
+            el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask ? `正在处理 ${a.currentTask}` : '空闲')} · 心跳 ${ago(a.lastSeenAt)}`)),
           el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role),
-          isStale(a) ? el('span', { class: 'pill' }, '可能停了') : null,
-          a.leaveAsked ? el('span', { class: 'pill', title: '空闲太久，向 leader 申请下线' }, '申请下线') : null,
-          a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审完待审的卡后下线' : '做完手上的任务后下线，不再领新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完下线' : '做完下线') : null,
-          pendingCancel(a) ? el('span', { class: 'pill', title: '它还在做一个已作废的任务' }, `${pendingCancel(a).id} 已作废，它还不知道`) : null),
+          isStale(a) ? el('span', { class: 'pill' }, '无响应') : null,
+          a.leaveAsked ? el('span', { class: 'pill', title: '空闲超时，已向 leader 申请下线' }, '申请下线') : null,
+          a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审核完待审任务后下线' : '完成当前任务后下线，不再领取新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完后下线' : '完成后下线') : null,
+          pendingCancel(a) ? el('span', { class: 'pill', title: '该 worker 仍在处理已作废的任务' }, `${pendingCancel(a).id} 已作废，尚未通知到`) : null),
         dismissArm === a.id ? null : el('span', { class: 'wcard-acts' }, dismissButtons(a))),
       // 点了「下线」要选怎么下线：单独一条确认栏，按钮不挤在名字那一行里折行
       // 确认时叫醒话先收起来，卡片里只留这一件事
       dismissArm === a.id ? el('div', { class: 'wcard-confirm' },
-        el('p', { class: 'q' }, `让 ${agentLabel(a.id)} 怎么下线？`),
-        isLastOfRole(a) ? el('p', { class: 'warn-note' }, `${a.role} 只剩它一个，下线后这个角色的新任务没人领`) : null,
+        el('p', { class: 'q' }, `选择 ${agentLabel(a.id)} 的下线方式`),
+        isLastOfRole(a) ? el('p', { class: 'warn-note' }, `该 worker 是 ${a.role} 角色唯一在线的 worker，下线后该角色的新任务将无人领取`) : null,
         el('div', { class: 'wcard-acts' }, dismissButtons(a)))
       : pendingCancel(a) ? [
-        el('p', { class: 'hint' }, `${pendingCancel(a).id} 已被作废，但它正在干活，要等下一次调用 ateam 命令才会知道。想让它马上停：在它的 agent 窗口里点停止，把下面这句话发过去。`),
+        el('p', { class: 'hint' }, `${pendingCancel(a).id} 已作废，但该 worker 正在工作，需在下次调用 ateam 命令时才会收到通知。如需立即停止，请在其 agent 窗口中点击停止，并发送以下提示词。`),
         promptBlock(stopPrompt(a, pendingCancel(a)), renderHelper),
-      ] : promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '没有在线的 worker。'),
+      ] : promptBlock(wakePrompt(a), renderHelper))) : el('p', { class: 'hint' }, '暂无在线 worker。'),
     offline.length ? [
-      el('div', { class: 'helper-sec' }, el('h4', null, `③ 掉线了：重连（${offline.length}）`)),
-      el('p', { class: 'hint' }, '窗口还在、只是掉线了：把重连话发到它自己的 agent 窗口，它会用原编号重新加入、接着干活，窗口标题不用改。'),
+      el('div', { class: 'helper-sec' }, el('h4', null, `③ 已离线 worker（${offline.length}）`)),
+      el('p', { class: 'hint' }, 'agent 窗口仍在但已离线时：将重连提示词发送至该窗口，worker 将以原编号重新加入并继续工作，无需修改窗口标题。'),
       offline.map((a) => el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' },
           avatar(a.id, a.role),
@@ -2238,17 +2238,17 @@ function renderHelper(force = false) {
             el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role))),
         promptBlock(reconnectPrompt(a), renderHelper))),
     ] : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '④ 收工')),
-    el('p', { class: 'hint' }, '需求都做完了：在 ② 里点「全部下线」，worker 会立即停下。leader 那边对它说「让大家收工」也一样。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, '④ 结束工作')),
+    el('p', { class: 'hint' }, '所有需求完成后，在 ② 中点击「全部下线」，worker 将立即停止；也可在 leader 对话中发出「让大家收工」。'),
     ] : [
-    el('div', { class: 'helper-sec' }, el('h4', null, '① 开 leader')),
-    el('p', { class: 'hint' }, '在项目目录里开一个 Claude Code 会话，发下面这句话。leader 只需要一个。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, '① 启动 leader')),
+    el('p', { class: 'hint' }, '在项目目录中新建 Claude Code 会话，发送以下提示词。每个项目只需一个 leader。'),
     el('div', { class: 'wcard' },
-      el('div', { class: 'wcard-head' }, el('b', null, '加入'), el('span', { class: 'hint' }, '新开会话、或者上下文满了重开会话，都用这一句')),
+      el('div', { class: 'wcard-head' }, el('b', null, '加入'), el('span', { class: 'hint' }, '新建会话或上下文已满需重开会话时，均使用此提示词')),
       promptBlock(leadPrompt(), renderHelper)),
-    el('p', { class: 'hint' }, '加入后直接在对话里跟 leader 说需求，比如「需求是……」。它会拆任务、派给 worker，并告诉你需要开几个什么角色的 worker。'),
-    el('div', { class: 'helper-sec' }, el('h4', null, `② 干活中：在线的 leader（${data.leader?.online && !data.leader?.away ? 1 : 0}）`)),
-    el('p', { class: 'hint' }, 'leader 停下来不动、或者后台监听停了，复制它的叫醒话，发到 leader 的会话里。token 用完暂时回不来，就点「下线」。'),
+    el('p', { class: 'hint' }, '加入后，直接在对话中向 leader 描述需求（例如「需求是……」）。leader 将拆分任务、派发给 worker，并告知需要启动的 worker 角色与数量。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, `② 在线 leader（${data.leader?.online && !data.leader?.away ? 1 : 0}）`)),
+    el('p', { class: 'hint' }, 'leader 停止响应或后台监听中断时，复制唤醒提示词并发送至 leader 会话。token 用尽暂时无法恢复时，请点击「下线」。'),
     leaderCard(),
     ]),
   );
@@ -2353,8 +2353,8 @@ function renderJobs() {
     }, el('span', null, acceptedOpen ? '▾' : '▸'), `已验收（${done.length}）`),
     acceptedOpen ? done.map(jobItem) : null,
   ] : [];
-  const empty = jobs.length ? (open.length || demos.length ? [] : [emptyState('done', '需求都验收完了', '有新需求时直接跟 leader 说。')])
-    : [emptyState('inbox', '还没有需求', '对 leader 说出你的需求，它会在这里建立任务。')];
+  const empty = jobs.length ? (open.length || demos.length ? [] : [emptyState('done', '所有需求已验收', '如有新需求，请直接告知 leader。')])
+    : [emptyState('inbox', '暂无需求', '向 leader 描述需求后，任务将显示在此处。')];
   document.querySelector('.layout').classList.toggle('nav-collapsed', navCollapsed);
   const toggle = el('button', {
     class: 'nav-toggle', title: navCollapsed ? '展开需求栏' : '收起需求栏', 'aria-label': navCollapsed ? '展开需求栏' : '收起需求栏',
@@ -2391,9 +2391,9 @@ function renderMain() {
   if (!job) {
     main.removeAttribute('aria-busy');
     fill(main, data.state.jobs.length
-      ? emptyState('pointer', '选一个需求', '在左侧选择一个需求，查看它的任务看板。')
-      : emptyState('inbox', '等 leader 建第一个需求',
-        data.leader?.online ? 'leader 已经在线，直接在它的对话里说需求就行，比如「需求是……」。' : '先开一个 leader：在项目目录里开 Claude Code 会话，发 leader 的加入提示词，然后跟它说需求。',
+      ? emptyState('pointer', '选择需求', '在左侧选择需求以查看任务看板。')
+      : emptyState('inbox', '等待 leader 创建需求',
+        data.leader?.online ? 'leader 已在线，请在其对话中描述需求，例如「需求是……」。' : '请先启动 leader：在项目目录中新建 Claude Code 会话，发送 leader 加入提示词，再描述需求。',
         data.leader?.online ? null : openGuide('lead')));
     return;
   }
@@ -2409,10 +2409,10 @@ function renderMain() {
     el('h2', { class: `job-title${job.status === 'cancelled' ? ' dropped' : ''}` }, job.title),
     job.demo ? el('div', { class: 'head-acts' }, el('span', { class: 'lozenge c-held' }, '演播需求')) : null,
     job.onHold && job.status !== 'cancelled' ? el('div', { class: 'job-cancelled job-hold' },
-      `${fmtTime(job.onHold.at)} ${job.onHold.by === 'user' ? '你' : 'leader'}暂停了领取${job.onHold.reason ? `：${job.onHold.reason}` : ''}。待领取的卡都不会派发，正在做的照常做完。`,
+      `${fmtTime(job.onHold.at)} ${job.onHold.by === 'user' ? '用户' : 'leader'}已暂停领取${job.onHold.reason ? `：${job.onHold.reason}` : ''}。待领取的任务暂不派发，进行中的任务不受影响。`,
       el('button', { class: 'link-btn', onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, false); } }, '恢复领取')) : null,
     job.status === 'cancelled' ? el('div', { class: 'job-cancelled' },
-      `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的卡和代码保留，没做完的卡已作废。`) : null,
+      `${job.cancelledAt ? fmtTime(job.cancelledAt) + ' ' : ''}作废${job.cancelReason ? `：${job.cancelReason}` : ''}。已通过的任务及代码保留，未完成的任务已作废。`) : null,
     // 说明和「展开」放一组：宽屏上下排（desc-row 是 display: contents）；窄屏收起时只露一行，「展开」接在行尾
     el('div', { class: 'desc-row' },
       job.description ? (() => {
@@ -2422,7 +2422,7 @@ function renderMain() {
       })() : null,
       longDesc ? el('button', { class: 'more', onclick: () => { descOpenJob = descOpen ? null : job.id; renderMain(); } }, descOpen ? '收起说明' : '展开全部说明') : null),
     job.origin ? el('details', { class: 'origin-box' },
-      el('summary', null, '你提需求时的原话'),
+      el('summary', null, '需求原文'),
       (() => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(job.origin); return d; })()) : null];
   const head = job.demo
     ? el('div', { class: 'job-head' }, headMain)
@@ -2436,7 +2436,7 @@ function renderMain() {
       ? el('div', { class: 'demo-layout' },
         el('div', { class: 'demo-left' }, el('div', { class: 'demo-list' }, tasks.map(demoRow)), stagePanels(focus)),
         stepOutline(focus))
-      : emptyState('split', '还没有演播卡', '跟 leader 说要演播什么，它会和你定好步骤、写好脚本，再建演播卡。'),
+      : emptyState('split', '暂无演播卡', '向 leader 说明演播内容，leader 将确认演播步骤、编写脚本并创建演播卡。'),
     cancelledSection(cancelled));
     // 重画后保持大纲的滚动位置；当前步换了就把它滚到可见处
     const ol = main.querySelector('.outline ol');
@@ -2453,7 +2453,7 @@ function renderMain() {
   let report = null;
   if (job.status === 'awaiting_acceptance' && job.report) {
     report = el('div', { class: 'report-bar' },
-      el('span', { class: 'what' }, 'leader 已提交汇报，等你验收'),
+      el('span', { class: 'what' }, 'leader 已提交汇报，待验收'),
       el('span', { class: 'when' }, `${fmtTime(job.updatedAt)} 提交`),
       el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openReport(); } }, '查看汇报'),
       acceptButtons(job),
@@ -2486,7 +2486,7 @@ function renderMain() {
 
   const scrolls = Object.fromEntries([...main.querySelectorAll('.lane[data-lane] .cards')].map((c) => [c.parentNode.dataset.lane, c.scrollTop]));
   main.removeAttribute('aria-busy');
-  fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : emptyState('split', 'leader 正在拆任务', '拆好后任务会出现在这里。需要哪些角色的 worker，leader 会在对话里告诉你。'), cancelledBox);
+  fill(main, head, tasks.length ? stats : null, report, tasks.length ? board : emptyState('split', 'leader 正在拆分任务', '拆分完成后任务将显示在此处，所需的 worker 角色将由 leader 在对话中告知。'), cancelledBox);
   fitActs();
   for (const c of main.querySelectorAll('.lane[data-lane] .cards')) c.scrollTop = scrolls[c.parentNode.dataset.lane] || 0;
 }
@@ -2515,7 +2515,7 @@ function jobSide(job, tasks, collapsed) {
   // 整个需求暂停 / 恢复领取：概览卡右上角，平时鼠标移入卡片才出现，暂停中一直显示
   const holdBtn = job.demo || job.status === 'accepted' || job.status === 'cancelled' ? null : el('button', {
     class: `side-hold${job.onHold ? ' on' : ''}`,
-    title: job.onHold ? '这个需求待领取的卡暂停派发中。点一下恢复' : '这个需求待领取的卡（包括之后新加的）先不派发，正在做的不受影响',
+    title: job.onHold ? '该需求的待领取任务已暂停派发，点击恢复' : '暂停派发该需求的待领取任务（含后续新增任务），进行中的任务不受影响',
     onclick: (e) => { e.stopPropagation(); holdAction('jobs', job.id, !job.onHold); },
   }, icon(job.onHold ? 'play' : 'pause'), job.onHold ? '已暂停 · 恢复' : '暂停领取');
   return el('aside', { class: `job-side${shown.length ? '' : ' bare'}`, 'aria-label': '概览和最近动态' }, holdBtn,
@@ -2612,19 +2612,19 @@ function card(t, lane) {
     el('div', { class: 'flags' },
       // 标签放不下时只裁标签（右边渐隐），后面的计时始终完整显示
       el('span', { class: 'tags' },
-      waiting && t.onHold ? el('span', { class: 'tag hold icon-only', title: `这张卡暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
+      waiting && t.onHold ? el('span', { class: 'tag hold icon-only', title: `该任务已暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
-      t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `你指派给了 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
+      t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `已指派给 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
       t.parked ? (() => {
         // 先放下这张、转去做的那张卡（最近一次领的）；那张作废了就把编号划掉
         const to = t.parkedFor || lastClaimSince(t.assignee, t.parked);
         const gone = to && data.state.tasks.find((x) => x.id === to)?.status === 'cancelled';
-        return el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 先放下这张卡、转去做${to ? ` ${to}${gone ? '（已作废）' : ''}` : '别的卡'}了；leader 回来处理后交回给它` },
+        return el('span', { class: 'tag hold', title: `leader 不在线，${agentName(t.assignee)} 暂时搁置该任务，转做${to ? ` ${to}${gone ? '（已作废）' : ''}` : '其他任务'}；leader 处理后交回原 worker` },
           el('span', { class: 'lbl' }, '转做'), el('span', { class: 'sym' }, '→'), to ? [el('span', { class: 'opt' }, ' '), el('span', { class: gone ? 'gone' : '' }, to)] : null);
       })() : null,
       !t.parked && data.leader?.away && (t.status === 'asking' || t.status === 'submitted')
-        ? el('span', { class: 'tag leader-wait', title: `无 leader 模式：等 leader 回来${t.status === 'asking' ? '答复' : ' review'}。${agentName(t.assignee)} 现在没有别的卡能做（同角色的卡都在等依赖，或者和这张改同一批文件），所以还拿着它；一有能做的卡就放下这张、转做那张` }, '等 leader') : null,
-      t.returnTo && waiting ? el('span', { class: 'tag assigned', title: `挂起后被 leader 处理，留给原来的 ${t.returnTo} 接着做（它不在线就谁都能领）` }, `留给 ${agentName(t.returnTo)}`) : null,
+        ? el('span', { class: 'tag leader-wait', title: `无 leader 模式：等待 leader 恢复后${t.status === 'asking' ? '答复' : ' review'}。${agentName(t.assignee)} 当前没有其他可处理的任务（同角色任务均在等待依赖，或与该任务修改同一批文件），因此暂时保留；出现可处理的任务后将搁置该任务并转做` }, '等 leader') : null,
+      t.returnTo && waiting ? el('span', { class: 'tag assigned', title: `搁置后已由 leader 处理，优先交回原 worker ${t.returnTo}（其不在线时同角色 worker 均可领取）` }, `留给 ${agentName(t.returnTo)}`) : null,
       t.rejectCount ? el('span', { class: 'tag warn', title: `打回 ${t.rejectCount} 次` }, el('span', { class: 'lbl' }, '打回'), el('span', { class: 'opt' }, ' '), el('span', { class: 'sym' }, '↺'), String(t.rejectCount), el('span', { class: 'opt' }, ' 次')) : null,
       handedOff ? el('span', { class: 'tag handoff' }, '接手') : null,
       critiqueTag(t)),
@@ -2649,7 +2649,7 @@ async function demoAction(kind, t, mode, steps, viewport) {
     const res = await fetch(`/api/demo/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, mode, ...(steps ? { steps } : {}), ...(viewport ? { viewport } : {}) }) });
     const out = await res.json();
     demoError = out.ok ? null : { id: t.id, message: out.message };
-  } catch { demoError = { id: t.id, message: '连不上 ateam 服务。' }; }
+  } catch { demoError = { id: t.id, message: '无法连接 ateam 服务。' }; }
   await poll();
   render();
   return !demoError;
@@ -2702,7 +2702,7 @@ function renderRehearsalDialog(box, t) {
   };
   const opt = (v, label) => el('button', { class: `vp-opt${d.pick === v ? ' on' : ''}`, onclick: stop(() => { Object.assign(d, { pick: v, error: null }); renderShowDialog(); }) },
     el('b', null, label[0]), label[1] ? el('span', null, label[1]) : null, recorded === v ? el('em', null, '上次') : null);
-  const custom = el('input', { type: 'text', class: 'vp-custom', value: d.custom, placeholder: '比如 1440x900' });
+  const custom = el('input', { type: 'text', class: 'vp-custom', value: d.custom, placeholder: '例如 1440x900' });
   // 点进自定义框就切到自定义；重画后把光标放回框里
   custom.addEventListener('focus', () => { if (d.pick !== 'custom') { Object.assign(d, { pick: 'custom', error: null, refocus: true }); renderShowDialog(); } });
   custom.addEventListener('input', () => { d.custom = custom.value; d.error = null; const b = box.querySelector('.modal-foot .primary'); const v = norm(custom.value).match(/^(\d{3,4})x(\d{3,4})$/); if (b) b.disabled = blockers.length > 0 || !v || ![v[1], v[2]].every((n) => Number(n) >= 320 && Number(n) <= 7680); });
@@ -2712,16 +2712,16 @@ function renderRehearsalDialog(box, t) {
   fill(box, el('div', { class: 'modal show-modal', onclick: (e) => e.stopPropagation() },
     modalHead(`开始预演：${t.title}`, closeShowDialog),
     el('div', { class: 'modal-body' },
-      el('p', { class: 'lead' }, '选这次的浏览器视口。worker 开始前把浏览器调到这个尺寸，按它录操作记录；以后演播都沿用这个尺寸。'),
+      el('p', { class: 'lead' }, '选择本次预演的浏览器视口。worker 开始前将浏览器调整至该尺寸并据此录制操作记录，后续演播沿用此尺寸。'),
       el('div', { class: 'vp-opts' }, VIEWPORT_PRESETS.map(([v, label]) => opt(v, label))),
       el('label', { class: `vp-custom-row${d.pick === 'custom' ? ' on' : ''}`, onclick: (e) => e.stopPropagation() },
         el('span', { class: 'vp-custom-label' }, '自定义'), custom, el('span', { class: 'hint' }, '宽x高'),
         recorded && !VIEWPORT_PRESETS.some(([v]) => v === recorded) ? el('em', null, '上次') : null),
-      el('p', { class: 'hint' }, '窗口要比视口再大一圈（标签栏、地址栏），超过屏幕的尺寸 worker 调不出来，会停住。'),
-      d.pick === 'custom' && d.custom && !valid ? el('p', { class: 'hint', style: 'color: var(--rework)' }, '要写成 宽x高，宽高在 320 到 7680 之间。') : null,
+      el('p', { class: 'hint' }, '浏览器窗口需大于视口（含标签栏、地址栏）；超出屏幕尺寸时无法调整，预演将中止。'),
+      d.pick === 'custom' && d.custom && !valid ? el('p', { class: 'hint', style: 'color: var(--rework)' }, '格式为 宽x高，取值范围 320–7680。') : null,
       d.error ? el('p', { class: 'hint', style: 'color: var(--rework)' }, d.error) : null),
     el('div', { class: 'modal-foot' },
-      blockers.length ? el('span', { class: 'hint' }, `现在不能开始：${blockers.join('；')}`) : null,
+      blockers.length ? el('span', { class: 'hint' }, `暂不能开始：${blockers.join('；')}`) : null,
       el('button', { class: 'btn', onclick: stop(closeShowDialog) }, '取消'),
       el('button', { class: 'btn primary', disabled: blockers.length > 0 || !valid, onclick: stop(go) }, '开始预演'))));
   box.hidden = false;
@@ -2777,13 +2777,13 @@ function renderShowDialog() {
       t.mayChange ? el('p', { class: 'lead warn-line' }, '页面可能有变动，建议先重新预演。') : null,
       el('div', { class: 'choices' },
         choice('all', '从头完整演播', `从第 1 步演到第 ${total || '…'} 步。`),
-        choice('from', d.resume ? `从第 ${d.resume} 步继续` : '从第 N 步开始', d.resume ? '上一场停在这里，从这一步演到最后。' : '从选中的那一步演到最后一步。'),
+        choice('from', d.resume ? `从第 ${d.resume} 步继续` : '从第 N 步开始', d.resume ? '上一场在此中断，从该步演播至最后一步。' : '从所选步骤演播至最后一步。'),
         choice('some', '只演选中的几步', '只演勾选的步骤，其余跳过。')),
       detail,
-      d.pick !== 'all' ? el('p', { class: 'hint' }, '跳过的步骤不会补跑，它们留下的数据和页面要已经在（比如上一场留下的）。没跑到最后一步的话，演完不清理数据。') : null,
+      d.pick !== 'all' ? el('p', { class: 'hint' }, '跳过的步骤不会补执行，其所需的数据和页面状态须已存在（例如上一场遗留）。未执行到最后一步时，结束后不清理数据。') : null,
       d.error ? el('p', { class: 'hint', style: 'color: var(--rework)' }, d.error) : null),
     el('div', { class: 'modal-foot' },
-      blockers.length ? el('span', { class: 'hint' }, `现在不能开始：${blockers.join('；')}`) : null,
+      blockers.length ? el('span', { class: 'hint' }, `暂不能开始：${blockers.join('；')}`) : null,
       el('button', { class: 'btn', onclick: stop(closeShowDialog) }, '取消'),
       el('button', { class: 'btn primary', disabled: !sc || blockers.length > 0 || (picked && !picked.length), onclick: stop(go) }, label))));
   box.hidden = false;
@@ -2794,8 +2794,8 @@ const runMode = (t) => t.runs?.[t.runs.length - 1]?.mode ?? 'show';
 const modeWord = (t) => (t.status === 'queued' ? t.pendingMode : runMode(t)) === 'rehearsal' ? '预演' : '演播';
 // 预演状态：未预演 / 已预演 / 页面可能有变动
 function rehearsalTag(t) {
-  if (!t.rehearsedAt) return el('span', { class: 'lozenge c-pending', title: '还没完整预演过，只能先预演' }, '未预演');
-  if (t.mayChange) return el('span', { class: 'lozenge c-asking', title: `${fmtTime(t.rehearsedAt)} 预演后有新代码通过了 review，建议先重新预演` }, '页面可能有变动');
+  if (!t.rehearsedAt) return el('span', { class: 'lozenge c-pending', title: '尚未完成预演，需先预演' }, '未预演');
+  if (t.mayChange) return el('span', { class: 'lozenge c-asking', title: `${fmtTime(t.rehearsedAt)} 预演后有新代码通过 review，建议重新预演` }, '页面可能有变动');
   return el('span', { class: 'lozenge c-approved', title: `${fmtTime(t.rehearsedAt)} 预演` }, '已预演');
 }
 function demoButton(t) {
@@ -2807,14 +2807,14 @@ function demoButton(t) {
     const why = blockers.join('；');
     const start = (mode, label, primary, tip) => el('button', {
       class: `btn${primary ? ' primary' : ''}`, disabled: blockers.length > 0 || (mode === 'show' && legacy),
-      title: why || (mode === 'show' && legacy ? '操作记录是旧格式（按坐标录的），请先重新预演' : tip),
+      title: why || (mode === 'show' && legacy ? '操作记录为旧格式（基于坐标），请先重新预演' : tip),
       onclick: (e) => { stop(e); if (mode === 'show') openShowDialog(t); else openRehearsalDialog(t); },
     }, label);
-    if (!t.rehearsedAt) return start('rehearsal', '开始预演', true, '慢慢走一遍，写出逐步的操作记录；开始后派发暂停');
-    if (legacy) return [start('rehearsal', '重新预演', true, '操作记录是旧格式（按坐标录的），按新格式重新走一遍'), start('show', '开始演播', false, '')];
+    if (!t.rehearsedAt) return start('rehearsal', '开始预演', true, '逐步执行并录制操作记录；开始后暂停派发');
+    if (legacy) return [start('rehearsal', '重新预演', true, '操作记录为旧格式（基于坐标），需按新格式重新录制'), start('show', '开始演播', false, '')];
     return [
-      start('show', '开始演播', true, t.mayChange ? '页面可能有变动，建议先重新预演' : '按操作记录快速执行；开始后派发暂停'),
-      start('rehearsal', '重新预演', false, '重新走一遍，核实并改正操作记录'),
+      start('show', '开始演播', true, t.mayChange ? '页面可能有变动，建议先重新预演' : '按操作记录快速执行；开始后暂停派发'),
+      start('rehearsal', '重新预演', false, '重新执行并校正操作记录'),
     ];
   }
   if (t.status === 'demoing' && !t.stopRequested) {
@@ -2825,15 +2825,15 @@ function demoButton(t) {
   }
   // 收尾中（或老数据里叫停了还停在演播中）：worker 迟迟不收尾时，用户可以直接结束
   if (t.status === 'wrapping' || (t.status === 'demoing' && t.stopRequested)) {
-    return el('button', { class: 'btn', title: `不等 ${agentName(t.assignee)} 收尾了，卡直接回到待演播（这次还没提交的操作记录不保存）`, onclick: (e) => { stop(e); demoAction('release', t); } }, '结束收尾');
+    return el('button', { class: 'btn', title: `不再等待 ${agentName(t.assignee)} 收尾，演播卡直接回到待演播（本次未提交的操作记录不保存）`, onclick: (e) => { stop(e); demoAction('release', t); } }, '结束收尾');
   }
   return null;
 }
 
 // 当前进行到哪一步 + 已演播多久（演播中）；等 worker 领（等待开始）；收尾中
 function demoProgress(t) {
-  if (t.status === 'queued') return el('span', null, `等 ${t.role} worker 领取…`);
-  if (t.status === 'wrapping') return el('span', null, `${agentName(t.assignee)} 在收尾：清理数据、写操作记录`);
+  if (t.status === 'queued') return el('span', null, `等待 ${t.role} worker 领取…`);
+  if (t.status === 'wrapping') return el('span', null, `${agentName(t.assignee)} 正在收尾：清理数据、写入操作记录`);
   if (t.status !== 'demoing') return null;
   const run = t.runs?.[t.runs.length - 1];
   const since = run ? el('span', { class: 'since', title: '已演播时长', 'data-since': run.startedAt }, icon('clock'), el('span')) : null;
@@ -2846,21 +2846,21 @@ function demoProgress(t) {
 function pauseButton(t, cls) {
   const paused = !!t.paused;
   return el('button', {
-    class: `${cls} pause-btn`, title: paused ? '让 worker 接着做下一步' : '当前这一步做完后停住，浏览器停在当前页面，方便讲解、回答提问',
+    class: `${cls} pause-btn`, title: paused ? '继续执行下一步' : '当前步骤完成后暂停，浏览器停留在当前页面，便于讲解与答疑',
     onclick: (e) => { e.stopPropagation(); demoAction(paused ? 'resume' : 'pause', t); },
   }, icon(paused ? 'play' : 'pause'), paused ? '继续' : '暂停');
 }
 function pausedTag(t) {
   if (!t.paused) return null;
   const s = t.demoStep;
-  const waiting = s && t.paused.afterStep === s.n ? '这一步做完后停住' : '已停住';
-  return el('span', { class: 'tag paused', title: `暂停中：${waiting}，点「继续」接着做下一步` }, '已暂停');
+  const waiting = s && t.paused.afterStep === s.n ? '当前步骤完成后暂停' : '已暂停';
+  return el('span', { class: 'tag paused', title: `暂停中：${waiting}。点击「继续」执行下一步` }, '已暂停');
 }
 
 // 提词：这一步的讲解（没写就用这一步做什么）、下一步预告
 function cueOf(t) {
   const s = t.demoStep;
-  if (!s) return { head: '准备中', say: '马上开始第 1 步', next: '' };
+  if (!s) return { head: '准备中', say: '即将开始第 1 步', next: '' };
   const scene = sceneOf(t);
   return { head: `第 ${s.n}/${s.total} 步${scene ? `（${scene}）` : ''} · ${s.text}`, say: s.cue?.narration || s.text, next: s.cue?.next || '' };
 }
@@ -2904,7 +2904,7 @@ function stepsBar(t) {
   const slow = new Set(t.runs?.[t.runs.length - 1]?.slowSteps || []);
   const only = runSteps(t);
   const scene = sceneOf(t);
-  return el('div', { class: 'steps-bar', title: `第 ${s.n}/${s.total} 步${scene ? `，${scene}（虚格是本场跳过的步骤）` : ''}` }, Array.from({ length: s.total }, (_, i) => {
+  return el('div', { class: 'steps-bar', title: `第 ${s.n}/${s.total} 步${scene ? `，${scene}（虚线格为本场跳过的步骤）` : ''}` }, Array.from({ length: s.total }, (_, i) => {
     const n = i + 1;
     if (only && !only.includes(n)) return el('span', { class: 'skip' });
     return el('span', { class: slow.has(n) && n <= s.n ? 'slow' : n < s.n ? 'done' : n === s.n ? 'now' : '' });
@@ -2913,10 +2913,10 @@ function stepsBar(t) {
 function prompter(t) {
   const c = cueOf(t);
   return el('div', { class: 'prompter', onclick: (e) => e.stopPropagation() },
-    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '这一步照操作记录没走通，worker 在自己摸索，会停顿几秒' }, '慢档') : null, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
+    el('div', { class: 'head' }, el('b', null, c.head), runSince(t), t.demoStep?.slow ? el('span', { class: 'tag warn', title: '按操作记录未能完成此步，worker 正在自行探索，可能停顿数秒' }, '慢档') : null, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null),
     el('div', { class: 'say' }, c.say),
     stepsBar(t),
-    el('button', { class: 'btn sm pop', title: '弹出一个字幕小窗，放在屏幕最下方，可以拖到第二块屏幕', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, icon('popout'), '弹出提词'));
+    el('button', { class: 'btn sm pop', title: '打开字幕窗口，显示在屏幕底部，可拖至副屏', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, icon('popout'), '弹出提词'));
 }
 // 悬浮窗的偏好：置顶、字号、背景浓淡，存在本窗口的 localStorage。
 // 置顶和关闭要窗口自己做：写进地址的 #pin=0/1、#close=1，src/prompter.jxa 每 0.3 秒读一次
@@ -2936,13 +2936,13 @@ function nativeTools() {
   const set = (k, v) => { promptPrefs[k] = v; applyPromptPrefs(); renderPrompterStrip(); };
   const clamp = (v, lo, hi) => Math.round(Math.min(hi, Math.max(lo, v)) * 100) / 100;
   return [
-    el('button', { class: promptPrefs.pin ? 'on' : '', title: promptPrefs.pin ? '已置顶：浮在所有窗口上面。点一下取消置顶' : '未置顶：会被别的窗口盖住。点一下置顶', onclick: () => set('pin', !promptPrefs.pin) }, icon('pin')),
+    el('button', { class: promptPrefs.pin ? 'on' : '', title: promptPrefs.pin ? '已置顶：显示在所有窗口上方。点击取消置顶' : '未置顶：可能被其他窗口遮挡。点击置顶', onclick: () => set('pin', !promptPrefs.pin) }, icon('pin')),
     el('span', { class: 'grp' },
-      el('button', { title: '字小一点', onclick: () => set('scale', clamp(promptPrefs.scale - 0.1, 0.6, 1.8)) }, icon('text-down')),
-      el('button', { title: '字大一点', onclick: () => set('scale', clamp(promptPrefs.scale + 0.1, 0.6, 1.8)) }, icon('text-up'))),
+      el('button', { title: '缩小字号', onclick: () => set('scale', clamp(promptPrefs.scale - 0.1, 0.6, 1.8)) }, icon('text-down')),
+      el('button', { title: '放大字号', onclick: () => set('scale', clamp(promptPrefs.scale + 0.1, 0.6, 1.8)) }, icon('text-up'))),
     el('span', { class: 'grp' },
-      el('button', { title: '背景更透明', onclick: () => set('alpha', clamp(promptPrefs.alpha - 0.15, 0, 0.95)) }, icon('bg-less')),
-      el('button', { title: '背景更深', onclick: () => set('alpha', clamp(promptPrefs.alpha + 0.15, 0, 0.95)) }, icon('bg-more'))),
+      el('button', { title: '降低背景不透明度', onclick: () => set('alpha', clamp(promptPrefs.alpha - 0.15, 0, 0.95)) }, icon('bg-less')),
+      el('button', { title: '提高背景不透明度', onclick: () => set('alpha', clamp(promptPrefs.alpha + 0.15, 0, 0.95)) }, icon('bg-more'))),
     el('button', { title: '关闭提词窗', onclick: () => applyPromptPrefs('&close=1') }, icon('close')),
   ];
 }
@@ -2958,13 +2958,13 @@ function renderPrompterStrip() {
   // 暂停 / 继续放在右上角控制键的最前面；原生悬浮窗里是图标按钮
   const canPause = t?.status === 'demoing' && !t.stopRequested;
   const pause = !canPause ? null : PROMPTER_NATIVE
-    ? el('button', { class: `pz${t.paused ? ' on' : ''}`, title: t.paused ? '已暂停。点一下让 worker 接着做下一步' : '暂停：当前这一步做完后停住', onclick: () => demoAction(t.paused ? 'resume' : 'pause', t) }, icon(t.paused ? 'play' : 'pause'))
+    ? el('button', { class: `pz${t.paused ? ' on' : ''}`, title: t.paused ? '已暂停。点击继续执行下一步' : '暂停：当前步骤完成后暂停', onclick: () => demoAction(t.paused ? 'resume' : 'pause', t) }, icon(t.paused ? 'play' : 'pause'))
     : pauseButton(t, 'strip-pause');
   const tools = el('span', { class: 'tools' }, pause, PROMPTER_NATIVE ? nativeTools() : [
     el('button', { onclick: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }, '全屏'),
     el('button', { onclick: () => window.close() }, '关闭')]);
   if (!t || t.status !== 'demoing') {
-    const why = !t ? (PROMPTER_ONLY === 'auto' ? '现在没有在跑的预演或演播，开始后这里会自动显示' : `找不到 ${PROMPTER_ONLY}`) : t.status === 'queued' ? '等 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 在收尾' : '还没开始，在调度台点开始后这里会自动显示';
+    const why = !t ? (PROMPTER_ONLY === 'auto' ? '当前没有进行中的预演或演播，开始后将自动显示' : `未找到 ${PROMPTER_ONLY}`) : t.status === 'queued' ? '等待 worker 开始…' : t.status === 'wrapping' ? '已结束，worker 正在收尾' : '尚未开始，在调度台点击开始后将自动显示';
     fill(box, el('div', { class: 'head' }, el('b', null, t ? t.title : '提词'), tools), el('div', { class: 'idle' }, why));
     return;
   }
@@ -3025,8 +3025,8 @@ function demoRow(t) {
         el('span', null, `已运行 ${runs.length} 次`),
         last ? el('span', null, `上次 ${fmtTime(last.startedAt)} ${RUN_MODE[last.mode] || '演播'}${RUN_OUTCOME[last.outcome] || '进行中'}`) : null,
         t.status === 'ready' && t.mayChange ? el('span', null, '页面可能有变动，建议先重新预演') : null,
-        t.rehearsedAt && opsCache.get(t.id)?.viewport ? el('span', { title: '预演时的视口；演播时 worker 会把浏览器调成这个尺寸' }, `视口 ${opsCache.get(t.id).viewport}`) : null,
-        t.status === 'ready' && opsCache.get(t.id)?.legacy ? el('span', { class: 'warn-text' }, '操作记录是旧格式（按坐标录的），请重新预演') : null,
+        t.rehearsedAt && opsCache.get(t.id)?.viewport ? el('span', { title: '预演时录制的视口；演播时 worker 将浏览器调整至该尺寸' }, `视口 ${opsCache.get(t.id).viewport}`) : null,
+        t.status === 'ready' && opsCache.get(t.id)?.legacy ? el('span', { class: 'warn-text' }, '操作记录为旧格式（基于坐标），请重新预演') : null,
         t.assignTo && t.status === 'ready' ? el('span', null, `指派 ${agentName(t.assignTo)}`) : null)),
     el('div', { class: 'demo-acts' }, demoButton(t)),
     t.status === 'demoing' ? prompter(t) : progress ? el('div', { class: 'step' }, progress) : null,
@@ -3067,7 +3067,7 @@ function renderModePill() {
     el('span', { class: 'pulse' }),
     el('span', null, t.status === 'queued' ? `等待${modeWord(t)}` : `${modeWord(t)}中`),
     el('span', { class: 'sub' }, '· 派发已暂停'));
-  btn.title = `${t.id} ${t.title}\n${modeWord(t)}期间不派新任务，${modeWord(t)}结束或叫停后自动恢复。点击查看`;
+  btn.title = `${t.id} ${t.title}\n${modeWord(t)}期间暂停派发新任务，结束或叫停后自动恢复。点击查看`;
   btn.onclick = (e) => { e.stopPropagation(); view = { job: t.jobId, task: null, report: false }; saveView(); render(); };
   btn.hidden = false;
 }
@@ -3079,7 +3079,7 @@ function demoDrawerBody(t) {
     demoError?.id === t.id ? el('p', { class: 'hint' }, demoError.message) : null,
     t.status === 'ready' ? assignBox(t) : null,
     (t.status === 'demoing' || t.status === 'wrapping') && t.assignee ? reclaimBox(t) : null,
-    el('p', { class: 'hint' }, '操作记录、运行记录和脚本步骤在演播需求页上看；这里管指派、收回和时间线。'),
+    el('p', { class: 'hint' }, '操作记录、运行记录和脚本步骤请在演播需求页查看；此处用于指派、收回及查看时间线。'),
   ];
 }
 
@@ -3105,14 +3105,14 @@ function stagePanels(t) {
     top = el('div', { class: 'stage-grid' },
       el('section', { class: 'panel' }, el('h5', null, '下一步', next ? el('span', { class: 'hint' }, `第 ${next.n} 步`) : null),
         next ? [el('div', { class: 'big' }, next.text), next.narration ? el('div', { class: 'say' }, `讲解：${next.narration}`) : null]
-          : el('div', { class: 'big' }, '这是最后一步，走完就结束了')),
-      el('section', { class: 'panel' }, el('h5', null, '这一步怎么操作', el('span', { class: 'hint' }, '来自操作记录')),
-        op ? opsHtml(op) : el('div', { class: 'empty' }, modeWord(t) === '预演' ? 'worker 预演走通这一步后会写在这里' : '操作记录里没有这一步，worker 在自己摸索')));
+          : el('div', { class: 'big' }, '这是最后一步，完成后演播结束')),
+      el('section', { class: 'panel' }, el('h5', null, '本步操作', el('span', { class: 'hint' }, '来自操作记录')),
+        op ? opsHtml(op) : el('div', { class: 'empty' }, modeWord(t) === '预演' ? 'worker 预演完成此步后将记录在此' : '操作记录中无此步骤，worker 正在自行探索')));
   } else {
     const written = steps.filter((st) => sc?.recorded?.has(st.n)).length;
     top = el('section', { class: 'panel' },
       el('h5', null, '操作记录', el('span', { class: 'hint' }, steps.length ? `已录 ${written} / ${steps.length} 步${sc?.viewport ? ` · 视口 ${sc.viewport}` : ''}` : '')),
-      !sc ? el('div', { class: 'empty' }, '读取中…') : written ? opsHtml(sc.raw) : el('div', { class: 'empty' }, '还没有操作记录。点「开始预演」，worker 会一步步走通并写在这里。'));
+      !sc ? el('div', { class: 'empty' }, '读取中…') : written ? opsHtml(sc.raw) : el('div', { class: 'empty' }, '暂无操作记录。点击「开始预演」，worker 将逐步执行并记录在此。'));
   }
   const runs = (t.runs || []).slice().reverse().slice(0, 5);
   const history = el('section', { class: 'panel' },
@@ -3124,7 +3124,7 @@ function stagePanels(t) {
         el('td', null, RUN_MODE[r.mode] || '演播'),
         el('td', null, agentName(r.by)),
         el('td', { class: r.outcome ? `r-${r.outcome}` : '' }, RUN_OUTCOME[r.outcome] || '进行中'),
-        el('td', { class: 'note' }, r.steps?.length ? el('span', { class: 'only' }, r.steps.length > 1 && r.steps.every((n, i) => i === 0 || n === r.steps[i - 1] + 1) ? stepsLabel(r.steps) : `选 ${r.steps.length} 步：${r.steps.join('、')}`) : null, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null))))) : el('div', { class: 'empty' }, '还没运行过'));
+        el('td', { class: 'note' }, r.steps?.length ? el('span', { class: 'only' }, r.steps.length > 1 && r.steps.every((n, i) => i === 0 || n === r.steps[i - 1] + 1) ? stepsLabel(r.steps) : `选 ${r.steps.length} 步：${r.steps.join('、')}`) : null, r.result || '—', r.slowSteps?.length ? el('div', { class: 'hint' }, `慢档：第 ${r.slowSteps.join('、')} 步`) : null))))) : el('div', { class: 'empty' }, '暂无运行记录'));
   return [top, history];
 }
 // 缓存键：提交、运行次数，以及当前步（预演中 worker 边走边写操作记录，每走一步重读一次脚本）
@@ -3146,16 +3146,16 @@ function stepOutline(t) {
   const cur = s?.n ?? 0;
   const only = t.status === 'demoing' ? runSteps(t) : null;
   const recCount = sc ? sc.steps.filter((st) => sc.recorded?.has(st.n)).length : 0;
-  const head = el('h4', null, '脚本步骤', el('span', { class: 'hint', title: '已录：操作记录里有合法的动作块，演播时能直接回放' }, sc ? `共 ${sc.steps.length} 步 · 已录 ${recCount}` : ''),
-    sc && recCount < sc.steps.length ? el('span', { class: 'hint legend', title: '编号是红色虚线圈的步骤还没录动作块' }, el('i'), '未录') : null);
+  const head = el('h4', null, '脚本步骤', el('span', { class: 'hint', title: '已录：操作记录中有有效的动作块，演播时可直接回放' }, sc ? `共 ${sc.steps.length} 步 · 已录 ${recCount}` : ''),
+    sc && recCount < sc.steps.length ? el('span', { class: 'hint legend', title: '编号带红色虚线圈的步骤尚未录制动作块' }, el('i'), '未录') : null);
   if (!sc) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '读取中…'));
   if (sc.error && !sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, sc.error));
-  if (!sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '脚本里没有找到「## 演示步骤」'));
+  if (!sc.steps.length) return el('aside', { class: 'outline' }, head, el('div', { class: 'empty' }, '脚本中未找到「## 演示步骤」'));
   return el('aside', { class: 'outline' }, head, el('ol', null, sc.steps.map((st) => {
     const rec = sc.recorded?.has(st.n);
     const skip = only && !only.includes(st.n);
     const cls = [skip ? 'skip' : '', !skip && st.n < cur ? 'done' : '', st.n === cur ? 'now' : '', slow.has(st.n) && (cur ? st.n <= cur : true) ? 'slow' : '', rec ? '' : 'unrec'].filter(Boolean).join(' ');
-    return el('li', { class: cls, 'data-n': st.n, title: rec ? '已录动作块，演播时直接回放' : '还没录动作块，演播到这一步会变慢' },
+    return el('li', { class: cls, 'data-n': st.n, title: rec ? '已录动作块，演播时直接回放' : '尚未录制动作块，演播至此步时速度较慢' },
       el('span', { class: 'no' }, st.n < cur && !slow.has(st.n) && !skip ? '✓' : st.n),
       el('div', null, el('div', { class: 'what' }, st.text, skip ? el('span', { class: 'skip-tag' }, '本场跳过') : null),
         st.narration && (st.n === cur || !cur) ? el('div', { class: 'say' }, st.narration) : null));
@@ -3170,7 +3170,7 @@ function refetchOps(t, prev) {
     fetch(`/api/demo/ops?id=${encodeURIComponent(t.id)}`).then((r) => r.json()).then((out) => {
       const ops = (out.ops || '').replace(/<!--[\s\S]*?-->/g, '').trim();
       opsCache.set(t.id, { key, raw: ops, html: ops ? renderMarkdown(ops) : '', steps: out.steps || [], recorded: new Set(out.recorded || []), viewport: out.viewport || null, legacy: !!out.legacy, error: out.ok ? out.error : out.message });
-    }).catch(() => opsCache.set(t.id, { ...(prev || {}), key, steps: prev?.steps || [], error: '连不上 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); if (showDlg?.id === t.id) renderShowDialog(); });
+    }).catch(() => opsCache.set(t.id, { ...(prev || {}), key, steps: prev?.steps || [], error: '无法连接 ateam 服务。' })).then(() => { if (view.task === t.id) renderDrawer(false); if (view.job === t.jobId) renderMain(); if (showDlg?.id === t.id) renderShowDialog(); });
   }
 }
 
@@ -3196,7 +3196,7 @@ function renderDrawer(fresh) {
     fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—')) : el('dl', { class: 'facts' },
     fact('状态', el('span', { class: `lozenge c-${lane}` }, LANE_LABEL[lane])),
     fact('角色', el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
-    fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '还没人领'),
+    fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '未领取'),
     fact('依赖', t.dependsOn.length ? t.dependsOn.join('、') : '无'),
     fact('打回', `${t.rejectCount} 次`),
     fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—'),
@@ -3207,8 +3207,8 @@ function renderDrawer(fresh) {
       el('span', { class: 'crumbs', title: job ? `${job.id} ${job.title}` : t.jobId }, `需求 ${t.jobId} / `, el('b', null, t.id)),
       el('button', {
         class: 'btn ghost icon widen',
-        title: drawerWide ? '收窄' : '展开到大半屏',
-        'aria-label': drawerWide ? '收窄' : '展开到大半屏',
+        title: drawerWide ? '收窄' : '展开',
+        'aria-label': drawerWide ? '收窄' : '展开',
         onclick: (e) => {
           e.stopPropagation();
           drawerWide = !drawerWide;
@@ -3228,14 +3228,14 @@ function renderDrawer(fresh) {
       // 作废了、但拿着它的 worker 还不知道：给出叫停的话
       const a = t.status === 'cancelled' && data.state.agents.find((x) => pendingCancel(x)?.id === t.id);
       return a ? [
-        el('h4', null, `${agentLabel(a.id)} 还在做这个任务`),
-        el('p', { class: 'hint' }, '它要等下一次调用 ateam 命令才会知道已作废。想让它马上停：在它的 agent 窗口里点停止，把下面这句话发过去。'),
+        el('h4', null, `${agentLabel(a.id)} 仍在处理该任务`),
+        el('p', { class: 'hint' }, '该 worker 需在下次调用 ateam 命令时才会收到作废通知。如需立即停止，请在其 agent 窗口中点击停止，并发送以下提示词。'),
         promptBlock(stopPrompt(a, t), () => renderDrawer(false)),
       ] : null;
     })(),
     t.status === 'pending' ? [
-      el('h4', null, t.handoff ? '让新 worker 接手' : '找 worker 来做'),
-      el('p', { class: 'hint' }, '在新的 agent 窗口（可以换账号）里发这句话。已有同角色 worker 在线时不用开新窗口，它做完手上的会自动领。'),
+      el('h4', null, t.handoff ? '让新 worker 接手' : '分配 worker'),
+      el('p', { class: 'hint' }, '在新建的 agent 窗口（可使用其他账号）中发送以下提示词。若已有同角色 worker 在线，无需新建窗口，其完成当前任务后将自动领取。'),
       promptBox(t.role),
     ] : null,
     el('h4', null, '验收标准'),
@@ -3273,7 +3273,7 @@ const post = async (url, body) => {
   try {
     const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return await res.json();
-  } catch { return { ok: false, message: '连不上 ateam 服务。' }; }
+  } catch { return { ok: false, message: '无法连接 ateam 服务。' }; }
 };
 const normPath = (p) => { const x = String(p).trim().replace(/^\.\//, '').replace(/\/+$/, ''); return x === '.' ? '' : x; };
 function pathsOverlap(a, b) {
@@ -3311,7 +3311,7 @@ function openCardMenu(id, x, y) {
   const item = (ic, label, fn, cls = '') => el('button', { role: 'menuitem', class: cls, onclick: act(fn) }, icon(ic), el('span', { class: 't' }, label));
   const taskItem = (o) => {
     const lane = o.status === 'cancelled' ? 'cancelled' : laneOf(o);
-    return el('button', { role: 'menuitem', title: `跳到 ${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
+    return el('button', { role: 'menuitem', title: `跳转至 ${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
       el('span', { class: `dot s-${lane}` }), el('span', { class: 'k' }, o.id), el('span', { class: 't' }, o.title), el('span', { class: 'st' }, LANE_LABEL[lane] || o.status));
   };
   const group = (title, list) => (list.length ? [el('div', { class: 'ctx-group' }, title), list.map(taskItem)] : []);
@@ -3327,10 +3327,10 @@ function openCardMenu(id, x, y) {
   const parkedFrom = tasks.filter((o) => o.parked && (o.parkedFor || lastClaimSince(o.assignee, o.parked)) === t.id);
   const jumps = [
     ...group('依赖', deps),
-    ...group('依赖它的卡', dependents),
-    ...group('改同一批文件', overlaps),
-    ...group('转做的卡', parkedTo ? [tasks.find((o) => o.id === parkedTo)].filter(Boolean) : []),
-    ...group('转做前放下的卡', parkedFrom),
+    ...group('下游任务', dependents),
+    ...group('修改相同文件', overlaps),
+    ...group('转做的任务', parkedTo ? [tasks.find((o) => o.id === parkedTo)].filter(Boolean) : []),
+    ...group('转做前搁置的任务', parkedFrom),
   ];
 
   const waiting = t.kind !== 'demo' && (t.status === 'pending' || t.status === 'held');
@@ -3340,16 +3340,16 @@ function openCardMenu(id, x, y) {
     actions.push(item(t.onHold ? 'play' : 'pause', t.onHold ? '恢复领取' : '暂停领取', () => holdAction('tasks', t.id, !t.onHold)));
     const role = t.role.trim().toLowerCase();
     const online = data.state.agents.filter((a) => a.status === 'online' && a.role.trim().toLowerCase() === role);
-    const assign = (to) => async () => { const out = await post('/api/tasks/assign', { id: t.id, to }); if (!out.ok) openConfirm({ title: '指派没成功', body: out.message, ok: '知道了', run: async () => ({ ok: true }) }); await poll(); render(); };
+    const assign = (to) => async () => { const out = await post('/api/tasks/assign', { id: t.id, to }); if (!out.ok) openConfirm({ title: '指派失败', body: out.message, ok: '确定', run: async () => ({ ok: true }) }); await poll(); render(); };
     actions.push(el('div', { class: 'ctx-group' }, '指派给'));
-    actions.push(el('button', { role: 'menuitem', onclick: act(assign('')) }, avatar(null), el('span', { class: 't' }, `不指派`), el('span', { class: 'st' }, `${t.role} 谁都能领`), !t.assignTo ? icon('tick', 'ok') : null));
-    for (const a of online) actions.push(el('button', { role: 'menuitem', onclick: act(assign(a.id)) }, avatar(a.id, a.role), el('span', { class: 't' }, agentLabel(a.id)), el('span', { class: 'st' }, a.currentTask ? `在做 ${a.currentTask}` : '空闲'), t.assignTo === a.id ? icon('tick', 'ok') : null));
+    actions.push(el('button', { role: 'menuitem', onclick: act(assign('')) }, avatar(null), el('span', { class: 't' }, `不指派`), el('span', { class: 'st' }, `${t.role} 角色均可领取`), !t.assignTo ? icon('tick', 'ok') : null));
+    for (const a of online) actions.push(el('button', { role: 'menuitem', onclick: act(assign(a.id)) }, avatar(a.id, a.role), el('span', { class: 't' }, agentLabel(a.id)), el('span', { class: 'st' }, a.currentTask ? `正在处理 ${a.currentTask}` : '空闲'), t.assignTo === a.id ? icon('tick', 'ok') : null));
   }
   const dangers = [];
   if (!t.parked && (t.status === 'working' || t.status === 'asking' || (t.kind === 'demo' && (t.status === 'demoing' || t.status === 'wrapping')))) {
     dangers.push(item('back', '收回换人…', () => openConfirm({
       title: `收回 ${t.id}？`,
-      body: `${agentLabel(t.assignee)} 会被标记为掉线，${t.kind === 'demo' ? '这次演播记为中断，演播卡回到待演播' : '任务退回待领取，由同角色的 worker 接手，已有改动保留'}。窗口只是停住了的话，用顶部的叫醒话就行。`,
+      body: `${agentLabel(t.assignee)} 将被标记为离线，${t.kind === 'demo' ? '本次演播记为中断，演播卡回到待演播' : '任务退回待领取，由同角色 worker 接手，已有改动保留'}。如窗口仅停止响应，使用唤醒提示词即可。`,
       ok: '确认收回',
       run: () => post('/api/reclaim', { id: t.id, text: '用户在看板上收回' }),
     }), 'danger'));
@@ -3359,8 +3359,8 @@ function openCardMenu(id, x, y) {
     dangers.push(item('ban', '作废…', () => openConfirm({
       title: `作废 ${t.id}？`,
       body: blockers.length
-        ? `${blockers.map((o) => o.id).join('、')} 依赖这张卡，不能直接作废。先作废它们，或让 leader 去掉这个依赖。`
-        : `「${t.title}」作废后不再派发，不能恢复。${t.assignee && (t.status === 'working' || t.status === 'asking') ? `${agentLabel(t.assignee)} 正在做它，下次调用 ateam 命令时会收到作废通知、停手并还原改动。` : ''}已经提交的代码不会撤销。`,
+        ? `${blockers.map((o) => o.id).join('、')} 依赖此任务，无法直接作废。请先作废这些任务，或由 leader 移除依赖。`
+        : `「${t.title}」作废后将不再派发，且无法恢复。${t.assignee && (t.status === 'working' || t.status === 'asking') ? `${agentLabel(t.assignee)} 正在处理该任务，将在下次调用 ateam 命令时收到作废通知，停止工作并还原改动。` : ''}已提交的代码不会撤销。`,
       reason: !blockers.length,
       ok: '确认作废',
       disabled: blockers.length > 0,
@@ -3410,11 +3410,11 @@ function openJobMenu(id, x, y) {
   const open = j.status !== 'accepted' && j.status !== 'cancelled';
 
   const main = [item('popout', '打开', go)];
-  if (j.report) main.push(item('inbox', j.status === 'awaiting_acceptance' ? '查看汇报（待你验收）' : '查看汇报', () => { go(); openReport(); }));
+  if (j.report) main.push(item('inbox', j.status === 'awaiting_acceptance' ? '查看汇报（待验收）' : '查看汇报', () => { go(); openReport(); }));
   if (j.status === 'awaiting_acceptance') {
     main.push(item('check', '验收通过…', () => openConfirm({
       title: `验收 ${j.id}？`,
-      body: `「${j.title}」标为已验收，收进左侧「已验收」。之后还要改，在这个需求下加任务，它会回到进行中。`,
+      body: `「${j.title}」将标记为已验收并归入左侧「已验收」。如需后续修改，在该需求下新增任务后，需求将恢复为进行中。`,
       ok: '验收通过',
       run: async () => { await acceptJob(j.id); return { ok: true }; },
     })));
@@ -3422,7 +3422,7 @@ function openJobMenu(id, x, y) {
   // 需要你看一眼的卡：等答复、待 review、挂起
   const LABEL = { asking: '等待答复', submitted: '待 review', held: '已挂起' };
   const notable = tasks.filter((t) => LABEL[t.status]);
-  const jumps = notable.length ? [sep(), el('div', { class: 'ctx-group' }, '要处理的卡'), notable.map((o) => el('button', { role: 'menuitem', title: `跳到 ${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
+  const jumps = notable.length ? [sep(), el('div', { class: 'ctx-group' }, '待处理任务'), notable.map((o) => el('button', { role: 'menuitem', title: `跳转至 ${o.id} ${o.title}`, onclick: act(() => jumpToTask(o.id)) },
     el('span', { class: `dot s-${laneOf(o)}` }), el('span', { class: 'k' }, o.id), el('span', { class: 't' }, o.title), el('span', { class: 'st' }, LABEL[o.status])))] : [];
 
   const actions = [];
@@ -3432,7 +3432,7 @@ function openJobMenu(id, x, y) {
     const left = tasks.filter((t) => t.status !== 'approved' && t.status !== 'cancelled');
     dangers.push(item('ban', '作废需求…', () => openConfirm({
       title: `作废 ${j.id}？`,
-      body: `「${j.title}」作废后不能恢复。${left.length ? `会连带作废没做完的 ${left.length} 张卡（${left.map((t) => t.id).join('、')}），正在做的 worker 会收到通知、停手。` : '没有没做完的卡。'}已通过的卡和已提交的代码保留。`,
+      body: `「${j.title}」作废后不能恢复。${left.length ? `将同时作废 ${left.length} 个未完成任务（${left.map((t) => t.id).join('、')}），相关 worker 将收到通知并停止工作。` : '无未完成任务。'}已通过的任务及已提交的代码保留。`,
       reason: true,
       ok: '确认作废',
       run: (reason) => post('/api/jobs/cancel', { id: j.id, text: reason || '用户在看板上作废', userApproved: true }),
@@ -3523,7 +3523,7 @@ function renderSpotlight(fresh) {
   };
   let input = box.querySelector('input');
   if (fresh || !input) {
-    input = el('input', { type: 'text', placeholder: '搜卡号、需求编号或标题', autocomplete: 'off', spellcheck: 'false' });
+    input = el('input', { type: 'text', placeholder: '搜索任务编号、需求编号或标题', autocomplete: 'off', spellcheck: 'false' });
     input.addEventListener('input', () => { spot.q = input.value; spot.sel = 0; renderSpotlight(false); });
     input.addEventListener('keydown', (e) => {
       const n = box.querySelectorAll('.spot-row').length;
@@ -3535,7 +3535,7 @@ function renderSpotlight(fresh) {
     box.onclick = (e) => { if (e.target === box) closeSpotlight(); };
     fill(box, el('div', { class: 'spot', onclick: (e) => e.stopPropagation() },
       el('label', { class: 'spot-input' }, icon('search'), input, el('kbd', null, 'esc')),
-      el('div', { class: 'spot-list' }), el('div', { class: 'spot-empty', hidden: true }), el('div', { class: 'spot-foot' }, el('span', null, '↑↓ 选择'), el('span', null, '↵ 跳过去'), el('span', null, 'esc 关闭'))));
+      el('div', { class: 'spot-list' }), el('div', { class: 'spot-empty', hidden: true }), el('div', { class: 'spot-foot' }, el('span', null, '↑↓ 选择'), el('span', null, '↵ 打开'), el('span', null, 'esc 关闭'))));
     box.hidden = false;
     input.focus();
   }
@@ -3552,7 +3552,7 @@ function renderSpotlight(fresh) {
   fill(list, sections);
   const empty = box.querySelector('.spot-empty');
   empty.hidden = !(spot.q.trim() && !rows.length);
-  empty.textContent = '没有找到';
+  empty.textContent = '无匹配结果';
   list.querySelector('.spot-row.on')?.scrollIntoView({ block: 'nearest' });
 }
 document.getElementById('search-btn').addEventListener('click', (e) => { e.stopPropagation(); openSpotlight(); });
@@ -3580,8 +3580,8 @@ function markRelated(id) {
   const after = data.state.tasks.filter((o) => o.dependsOn.includes(id));
   if (!t.dependsOn.length && !after.length) return; // 没有依赖关系就什么都不标
   document.querySelector(`.card[data-id="${id}"]`)?.classList.add('rel-self');
-  for (const d of t.dependsOn) mark(d, 'rel-dep', `${id} 在等它`);
-  for (const o of after) mark(o.id, 'rel-after', `在等 ${id}`);
+  for (const d of t.dependsOn) mark(d, 'rel-dep', `被 ${id} 依赖`);
+  for (const o of after) mark(o.id, 'rel-after', `依赖 ${id}`);
 }
 document.addEventListener('mouseover', (e) => markRelated(e.target.closest?.('.card[data-id]')?.dataset.id ?? null));
 
@@ -3641,7 +3641,7 @@ async function holdAction(kind, id, on) {
     const res = await fetch(`/api/${kind}/hold`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, on, by: 'user' }) });
     const out = await res.json();
     holdError = out.ok ? null : out.message;
-  } catch { holdError = '连不上 ateam 服务。'; }
+  } catch { holdError = '无法连接 ateam 服务。'; }
   await poll();
   render();
   renderDrawer(false);
@@ -3658,7 +3658,7 @@ function replyBox(t) {
   const mine = replyState.id === t.id ? replyState : { error: '', sent: '', sending: false };
   const area = el('textarea', {
     class: 'reply-input', rows: '3', 'data-id': t.id,
-    placeholder: asking ? '直接回答上面的提问，worker 收到后接着做…' : review ? '写给 leader 的 review 要求，比如哪里要改…' : `写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的话…`,
+    placeholder: asking ? '回复上方提问，worker 收到后将继续工作…' : review ? '填写对 review 的要求，例如需要修改之处…' : `填写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的说明…`,
   });
   area.value = replyDrafts.get(t.id) || '';
   const send = async () => {
@@ -3668,8 +3668,8 @@ function replyBox(t) {
     replyState = { id: t.id, sending: true, error: '', sent: '' };
     renderDrawer(false);
     const out = await post('/api/reply', { id: t.id, text });
-    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发给 worker，leader 也收到了。' : review ? '已发给 leader，review 时会按你说的核对；打回的话 worker 也会看到。' : '已发出：worker 下一次调用 ateam 命令时收到（提交前一定会看到），leader 也收到了。' }; }
-    else replyState = { id: t.id, sending: false, error: out.message || '没发出去。', sent: '' };
+    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发送给 worker，并同步通知 leader。' : review ? '已发送给 leader，将在 review 时据此核对；如被打回，worker 也会收到。' : '已发送：worker 将在下次调用 ateam 命令时收到（提交前必定可见），并同步通知 leader。' }; }
+    else replyState = { id: t.id, sending: false, error: out.message || '发送失败。', sent: '' };
     await poll();
     render();
     renderDrawer(false);
@@ -3678,7 +3678,7 @@ function replyBox(t) {
   area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
   const foot = mine.error ? el('span', { class: 'hint err' }, mine.error)
     : mine.sent ? el('span', { class: 'hint' }, mine.sent)
-    : el('span', { class: 'hint' }, asking ? 'worker 和 leader 都会收到，leader 不会再重复答复 · ' : review ? 'leader review 时看到；打回的话 worker 也会看到 · ' : 'worker 下次调用 ateam 时收到，leader 也会收到 · ', el('kbd', null, '⌘↩'), ' 发送');
+    : el('span', { class: 'hint' }, asking ? '将同时发送给 worker 和 leader，leader 不会重复答复 · ' : review ? 'leader 将在 review 时查看；如被打回，worker 也会收到 · ' : 'worker 将在下次调用 ateam 时收到，并同步通知 leader · ', el('kbd', null, '⌘↩'), ' 发送');
   return el('div', { class: `reply-box${asking ? ' asking' : ''}` },
     el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : review ? '给 leader 和 worker 留言' : '给 worker 留言'),
     el('div', { class: 'composer', onclick: () => area.focus() }, area,
@@ -3695,9 +3695,9 @@ function holdBox(t) {
   const job = data.state.jobs.find((j) => j.id === t.jobId);
   const on = !!t.onHold;
   let hint;
-  if (job?.onHold) hint = `整个需求 ${job.id} 暂停了领取，这张卡也不会派发。在需求页的提示里点「恢复领取」。`;
-  else if (on) hint = `已暂停${t.onHold.reason ? `（${t.onHold.reason}）` : ''}：卡留在待领取，worker 不会领到它。恢复后按上面的派发顺序派发。`;
-  else hint = '先不想让 worker 领这张卡（比如等确认、等别的事），可以暂停领取。依赖它的卡也会跟着等。';
+  if (job?.onHold) hint = `需求 ${job.id} 已暂停领取，该任务暂不派发。可在需求页的提示中点击「恢复领取」。`;
+  else if (on) hint = `已暂停${t.onHold.reason ? `（${t.onHold.reason}）` : ''}：任务保留在待领取，worker 不会领取。恢复后按派发顺序派发。`;
+  else hint = '如暂不希望 worker 领取该任务（例如等待确认），可暂停领取。依赖该任务的任务也将一并等待。';
   return [
     el('h4', null, '暂停领取'),
     el('p', { class: 'hint' }, hint),
@@ -3708,15 +3708,15 @@ function holdBox(t) {
 }
 // ---------- 审卡意见 ----------
 const CRITIQUE_STATUS = {
-  open: '等 leader 回复', proposed: 'leader 同意，等你确认', disputed: 'leader 不同意，等你决定',
-  redo: '你已决定，等 leader 照做', resolved: '已处理', closed: '你决定不改', overruled: '你维持了原样',
+  open: '待 leader 回复', proposed: 'leader 已同意，待确认', disputed: 'leader 不同意，待决定',
+  redo: '已决定，待 leader 执行', resolved: '已处理', closed: '决定不修改', overruled: '维持原样',
 };
 
 const awaitingUser = (c) => c.status === 'proposed' || c.status === 'disputed';
 
 function critiqueTag(t) {
   const list = t.critiques || [];
-  if (list.some(awaitingUser)) return el('span', { class: 'tag warn' }, '审卡：待你决定');
+  if (list.some(awaitingUser)) return el('span', { class: 'tag warn' }, '审卡：待决定');
   const open = list.filter((c) => c.status === 'open' || c.status === 'redo').length;
   return open ? el('span', { class: 'tag critique' }, `审卡意见 ${open}`) : null;
 }
@@ -3724,14 +3724,14 @@ function critiqueTag(t) {
 // 一条审卡意见的完整内容：意见、依据、leader 的回复、你的决定、改了什么
 function critiqueItem(c) {
   const md = (text) => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(text); return d; }; // renderMarkdown 先转义了 HTML
-  const replyLabel = c.replyKind === 'agree' ? 'leader 同意，打算这样改：' : c.replyKind === 'dispute' ? 'leader 不同意，理由：' : 'leader：';
+  const replyLabel = c.replyKind === 'agree' ? 'leader 同意，拟修改如下：' : c.replyKind === 'dispute' ? 'leader 不同意，理由：' : 'leader：';
   return el('div', { class: 'critique-item' },
     el('div', { class: 'hint' }, `#${c.id} ${c.by}，${fmtTime(c.ts)}${c.because ? `，重新审：${c.because}` : ''}　`, el('b', null, CRITIQUE_STATUS[c.status] || c.status)),
     el('div', { class: 'ci-label' }, '审卡意见'), md(c.text),
     c.basis ? [el('div', { class: 'ci-label' }, '依据'), md(c.basis)] : null,
     c.reply ? [el('div', { class: 'ci-label' }, replyLabel), md(c.reply)] : null,
     c.replyBasis ? [el('div', { class: 'ci-label' }, 'leader 的依据'), md(c.replyBasis)] : null,
-    c.ruling ? [el('div', { class: 'ci-label' }, '你的决定'), md(c.ruling)] : null,
+    c.ruling ? [el('div', { class: 'ci-label' }, '决定'), md(c.ruling)] : null,
     c.doneText ? [el('div', { class: 'ci-label' }, 'leader 已改'), md(c.doneText)] : null);
 }
 
@@ -3743,7 +3743,7 @@ function critiqueBox(t) {
     el('h4', null, `审卡意见（${list.length}）`),
     list.map(critiqueItem),
     waiting ? el('div', { class: 'prompt' },
-      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); decideLater.delete(t.id); decideFocus = t.id; renderDecideDialog(); } }, '去决定')) : null,
+      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); decideLater.delete(t.id); decideFocus = t.id; renderDecideDialog(); } }, '去处理')) : null,
   ];
 }
 
@@ -3763,7 +3763,7 @@ async function decide(t, side, text) {
     const res = await fetch('/api/critique/rule', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, side, text }) });
     const out = await res.json();
     decideError = out.ok ? null : out.message;
-  } catch { decideError = '连不上 ateam 服务。'; }
+  } catch { decideError = '无法连接 ateam 服务。'; }
   if (!decideError) { decideCustom = false; decideFocus = null; }
   await poll();
   renderDecideDialog();
@@ -3783,37 +3783,37 @@ function renderDecideDialog() {
   const job = data.state.jobs.find((j) => j.id === t.jobId);
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   const origin = el('div', { class: 'md origin' });
-  origin.innerHTML = renderMarkdown(job?.origin || '（这个需求没有存你的原话）');
-  const area = el('textarea', { class: 'rules-editor', rows: '4', placeholder: '写下你要 leader 怎么改，比如「按审卡意见改，但按钮文案保留原来的」' });
+  origin.innerHTML = renderMarkdown(job?.origin || '（该需求未记录原文）');
+  const area = el('textarea', { class: 'rules-editor', rows: '4', placeholder: '填写对 leader 的修改要求，例如「按审卡意见修改，但保留原按钮文案」' });
   // 每个选项一张卡片：点了就按它决定
   const choice = (title, desc, fn, on) => el('button', { class: `choice${on ? ' on' : ''}`, onclick: stop(fn) },
     el('span', { class: 'radio' }), el('span', null, el('b', null, title), el('span', { class: 'd' }, desc)));
   const options = agreed ? [
-    choice('按 leader 的方案改', 'leader 同意审卡的意见，并给出了改法，就照它的改。', () => decide(t, 'leader')),
-    choice('按审卡意见原样改', '不用 leader 的改法，照审卡提的原样改。', () => decide(t, 'critic')),
-    choice('都不改', '两边都不采纳，卡片保持现状，到此结束。', () => decide(t, 'none')),
+    choice('按 leader 的方案改', 'leader 同意审卡意见并给出修改方案，按该方案修改。', () => decide(t, 'leader')),
+    choice('按审卡意见原样改', '不采用 leader 的方案，按审卡意见原样修改。', () => decide(t, 'critic')),
+    choice('均不修改', '双方意见均不采纳，任务保持现状。', () => decide(t, 'none')),
   ] : [
-    choice('按审卡意见改', '审卡说得对，leader 照审卡的意见改卡。', () => decide(t, 'critic')),
-    choice('维持原样', '同意 leader 的看法，卡片不改，到此结束。', () => decide(t, 'leader')),
+    choice('按审卡意见改', '采纳审卡意见，由 leader 按审卡意见修改任务。', () => decide(t, 'critic')),
+    choice('维持原样', '采纳 leader 意见，任务保持不变。', () => decide(t, 'leader')),
   ];
   const later = () => { decideLater.add(t.id); decideFocus = null; decideCustom = false; renderDecideDialog(); };
   box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   fill(box, el('div', { class: 'modal decide-modal', onclick: (e) => e.stopPropagation() },
-    modalHead(all.length > 1 ? `审卡有分歧，等你决定（共 ${all.length} 张）` : '审卡有分歧，等你决定', later),
+    modalHead(all.length > 1 ? `审卡存在分歧，待决定（共 ${all.length} 项）` : '审卡存在分歧，待决定', later),
     el('div', { class: 'modal-body' },
       el('p', { class: 'lead' }, el('b', { style: 'color: var(--ink)' }, `${t.id} ${t.title}`), `　需求 ${t.jobId} · ${t.role} · ${LANE_LABEL[laneOf(t)] || t.status}　`,
-        el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '看卡片全文')),
-      job?.origin ? [el('div', { class: 'ci-label' }, `你提需求时的原话（需求 ${t.jobId}）`), origin] : null,
+        el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '查看任务详情')),
+      job?.origin ? [el('div', { class: 'ci-label' }, `需求原文（${t.jobId}）`), origin] : null,
       waiting.map(critiqueItem),
-      el('div', { class: 'ci-label', style: 'margin-top: 16px' }, '你的决定'),
+      el('div', { class: 'ci-label', style: 'margin-top: 16px' }, '处理方式'),
       el('div', { class: 'choices' }, options,
-        choice('我来写意见', '两边都不完全对：写下你要 leader 怎么改。', () => { decideCustom = !decideCustom; renderDecideDialog(); }, decideCustom)),
+        choice('自定义意见', '双方意见均不完全适用，自行填写修改要求。', () => { decideCustom = !decideCustom; renderDecideDialog(); }, decideCustom)),
       decideCustom ? [area, el('div', { class: 'actions' },
-        el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'custom', area.value)) }, '按我的意见改'))] : null,
+        el('button', { class: 'btn primary', onclick: stop(() => decide(t, 'custom', area.value)) }, '按此意见修改'))] : null,
       decideError ? el('p', { class: 'hint', style: 'color: var(--rework)' }, decideError) : null),
     el('div', { class: 'modal-foot' },
-      el('span', { class: 'hint' }, '决定之后 leader 照做，做完会写明改了什么。'),
-      el('button', { class: 'btn', onclick: stop(later) }, '稍后再说'))));
+      el('span', { class: 'hint' }, '决定后由 leader 执行，并在完成后说明修改内容。'),
+      el('button', { class: 'btn', onclick: stop(later) }, '稍后处理'))));
   box.hidden = false;
 }
 
@@ -3831,13 +3831,13 @@ function assignBox(t) {
       const res = await fetch('/api/tasks/assign', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, to }) });
       const out = await res.json();
       assignError = out.ok ? null : out.message;
-    } catch { assignError = '连不上 ateam 服务。'; }
+    } catch { assignError = '无法连接 ateam 服务。'; }
     await poll();
     renderDrawer(false);
   };
   const options = [
-    { id: '', av: avatar(null), name: '不指派', sub: `${t.role} 角色谁都能领` },
-    ...online.map((a) => ({ id: a.id, av: avatar(a.id, a.role), name: agentLabel(a.id), sub: a.currentTask ? `正在做 ${a.currentTask}` : '空闲' })),
+    { id: '', av: avatar(null), name: '不指派', sub: `${t.role} 角色均可领取` },
+    ...online.map((a) => ({ id: a.id, av: avatar(a.id, a.role), name: agentLabel(a.id), sub: a.currentTask ? `正在处理 ${a.currentTask}` : '空闲' })),
     ...(current && current.status !== 'online' ? [{ id: current.id, av: avatar(current.id, current.role), name: agentLabel(current.id), sub: '不在线' }] : []),
   ];
   const selected = options.find((o) => o.id === (t.assignTo || '')) || options[0];
@@ -3846,7 +3846,7 @@ function assignBox(t) {
     el('button', {
       class: 'assign-btn', 'aria-haspopup': 'listbox', 'aria-expanded': open ? 'true' : 'false',
       onclick: (e) => { e.stopPropagation(); assignOpen = open ? null : t.id; renderDrawer(false); },
-    }, selected.av, selected.id ? selected.name : '不指派（同角色谁都能领）', icon('chev-down', 'chev')),
+    }, selected.av, selected.id ? selected.name : '不指派（同角色均可领取）', icon('chev-down', 'chev')),
     open ? el('div', { class: 'assign-menu', role: 'listbox' }, options.map((o, i) => [
       i === 1 ? el('div', { class: 'sep' }) : null,
       el('button', {
@@ -3855,10 +3855,10 @@ function assignBox(t) {
       }, o.av, el('span', { class: 'name' }, o.name, el('span', { class: 'sub' }, o.sub)), o === selected ? icon('tick', 'ok') : null),
     ])) : null);
   let hint;
-  if (!t.assignTo) hint = `想交给某个 worker（比如难的任务交给 Claude 的窗口），在这里选它。只有它能领，它优先领。只能选 ${t.role} 角色在线的 worker。`;
-  else if (!current || current.status !== 'online') hint = `${t.assignTo} 现在不在线，这个任务会一直等它。它回不来的话，改派给别人或选「不指派」。`;
-  else if (current.currentTask) hint = `${agentLabel(t.assignTo)} 正在做 ${current.currentTask}，做完就领这个${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
-  else hint = `${agentLabel(t.assignTo)} 下一次来领任务时就会领到它${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
+  if (!t.assignTo) hint = `如需交由特定 worker 处理（例如将复杂任务交给 Claude 窗口），可在此选择。指派后仅该 worker 可领取，且优先领取。仅可选择 ${t.role} 角色的在线 worker。`;
+  else if (!current || current.status !== 'online') hint = `${t.assignTo} 当前不在线，该任务将持续等待。如其无法恢复，请改派其他 worker 或选择「不指派」。`;
+  else if (current.currentTask) hint = `${agentLabel(t.assignTo)} 正在处理 ${current.currentTask}，完成后将领取此任务${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
+  else hint = `${agentLabel(t.assignTo)} 下次领取任务时将领取此任务${t.dependsOn.length ? '（依赖通过后）' : ''}。`;
   return [
     el('h4', null, '指派给'),
     picker,
@@ -3872,8 +3872,8 @@ function priorityBox(t) {
   return [
     el('h4', null, '派发顺序'),
     el('p', { class: 'hint' }, on
-      ? `已设为优先：${t.role} 的 worker 下一个先领它${t.dependsOn.length ? '（依赖通过后）' : ''}。`
-      : `急着要的话可以设为优先，${t.role} 的 worker 下一个先领它，不用等前面排着的任务。正在做别的任务的 worker 不会被打断。`),
+      ? `已设为优先：${t.role} 角色的 worker 将优先领取此任务${t.dependsOn.length ? '（依赖通过后）' : ''}。`
+      : `如需尽快处理，可设为优先：${t.role} 角色的 worker 将优先领取此任务，无需排队。正在处理其他任务的 worker 不受影响。`),
     el('div', { class: 'prompt' },
       el('button', {
         class: on ? 'btn' : 'btn primary',
@@ -3883,7 +3883,7 @@ function priorityBox(t) {
             const res = await fetch('/api/tasks/priority', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, top: !on }) });
             const out = await res.json();
             priorityError = out.ok ? null : out.message;
-          } catch { priorityError = '连不上 ateam 服务。'; }
+          } catch { priorityError = '无法连接 ateam 服务。'; }
           await poll();
           renderDrawer(false);
         },
@@ -3898,12 +3898,12 @@ let reclaimError = null;
 function reclaimBox(t) {
   const armed = reclaimArm === t.id;
   return [
-    el('h4', null, '原窗口没了？'),
+    el('h4', null, '原窗口已关闭？'),
     el('p', { class: 'hint' }, isDemoTask(t)
-      ? (armed ? `确定收回？${agentLabel(t.assignee)} 会被标记为掉线，这次演播记为中断，演播卡回到待演播。` : `如果 ${agentLabel(t.assignee)} 的窗口已经关了或 token 用完，可以立即收回，演播卡回到待演播，派发恢复。`)
+      ? (armed ? `确认收回？${agentLabel(t.assignee)} 将被标记为离线，本次演播记为中断，演播卡回到待演播。` : `如 ${agentLabel(t.assignee)} 的窗口已关闭或 token 已用尽，可立即收回，演播卡回到待演播并恢复派发。`)
       : armed
-      ? `确定收回？${agentLabel(t.assignee)} 会被标记为掉线，任务退回待领取，由同角色的 worker 接手，已有改动保留。`
-      : `如果 ${agentLabel(t.assignee)} 的窗口已经关了或 token 用完，不必等它超时掉线，可以立即收回，交给新 worker 接手。窗口只是停住了的话，用顶部的叫醒话就行。`),
+      ? `确认收回？${agentLabel(t.assignee)} 将被标记为离线，任务退回待领取，由同角色 worker 接手，已有改动保留。`
+      : `如 ${agentLabel(t.assignee)} 的窗口已关闭或 token 已用尽，无需等待超时，可立即收回并交由新 worker 接手。如窗口仅停止响应，使用唤醒提示词即可。`),
     el('div', { class: 'prompt' },
       el('button', {
         class: armed ? 'btn primary' : 'btn',
@@ -3915,7 +3915,7 @@ function reclaimBox(t) {
             const res = await fetch('/api/reclaim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, text: '用户在看板上收回' }) });
             const out = await res.json();
             reclaimError = out.ok ? null : out.message;
-          } catch { reclaimError = '连不上 ateam 服务。'; }
+          } catch { reclaimError = '无法连接 ateam 服务。'; }
           await poll();
           renderDrawer(false);
         },
@@ -3935,7 +3935,7 @@ function agentName(id) {
   return data.state.agents.find((a) => a.id === id)?.name || id;
 }
 function agentLabel(id) {
-  if (id === 'user') return '你';
+  if (id === 'user') return '用户';
   const name = data.state.agents.find((a) => a.id === id)?.name;
   return name ? `${name}（${id}）` : id;
 }
@@ -3978,44 +3978,44 @@ function installGuide() {
   const profiles = info.profiles || [];
   if (!profiles.includes(installProfile)) installProfile = profiles[0] || null;
   const done = (ok, text) => (ok ? el('p', { class: 'hint install-done' }, `✓ ${text}`) : null);
-  const project = (data.root || '<你的项目>').replace(/^\/Users\/[^/]+/, '~');
+  const project = (data.root || '<项目目录>').replace(/^\/Users\/[^/]+/, '~');
   const port = data.port || 7700;
   const step = (title, hint, cmd) => el('div', { class: 'wcard' },
     el('div', { class: 'wcard-head' }, el('b', null, title)),
     hint ? el('p', { class: 'hint' }, hint) : null,
     cmd ? promptBlock(cmd, renderHelper) : null);
   return [
-    el('p', { class: 'hint' }, '只需要做一次。命令在终端里运行。'),
-    step('① 注册 ateam 命令', '能打印出命令列表就成功了。',
+    el('p', { class: 'hint' }, '仅需执行一次，以下命令在终端中运行。'),
+    step('① 注册 ateam 命令', '输出命令列表即表示安装成功。',
       `cd ${tool}\nnpm link\nateam help`),
-    step('提示找不到 ateam？', 'npm 的全局目录不在 PATH 里。运行下面这行把它加进 ~/.zshrc，然后开一个新终端再试。',
+    step('提示找不到 ateam 命令？', 'npm 全局目录不在 PATH 中。运行以下命令将其加入 ~/.zshrc，然后在新终端中重试。',
       'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
-    step('② 安装 skill', '把「使用说明书」交给 AI：leader 用的放到 Claude Code，worker 用的放到 DeepSeek Harness。用链接的方式放，以后说明书更新了自动生效。提示「已存在」的话，先删掉那个旧文件夹再运行。',
+    step('② 安装 skill', '为 AI 安装 skill：leader 的 skill 安装到 Claude Code，worker 的 skill 安装到 DeepSeek Harness。采用符号链接方式，skill 更新后自动生效。如提示「已存在」，请先删除旧文件夹后重新运行。',
       `mkdir -p ~/.claude/skills ${skillsDir}\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ${skillsDir}/ateam-worker`),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
-    step('③ 在项目根目录启动服务', '项目必须是 git 仓库。这个终端窗口一直开着；看到「项目目录」那一行是你要开发的项目就对了。',
+    step('③ 在项目根目录启动服务', '项目须为 git 仓库。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。',
       `cd ${project}\nateam serve`),
-    step('同时开第二个项目？', `在那个项目的目录里同样运行 ateam serve 就行：${port} 被占用时会自动换成下一个空闲端口（启动信息里会写），那个项目里的 leader 和 worker 会自动找到它，不用设置什么。看板要打开新端口的地址。`, null),
-    el('p', { class: 'hint' }, '装好之后：切到「leader」页开 leader，切到「worker」页开 worker。'),
+    step('同时运行多个项目？', `在另一项目目录中同样运行 ateam serve 即可：${port} 被占用时自动使用下一个空闲端口（见启动信息），该项目的 leader 和 worker 会自动连接，无需额外配置。看板请访问新端口地址。`, null),
+    el('p', { class: 'hint' }, '安装完成后，在「leader」页启动 leader，在「worker」页添加 worker。'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
-    el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试用的浏览器')),
-    el('p', { class: 'hint' }, '只有要用 test worker 做测试或演播时才需要，只做一次。test worker 会自己打开一个专门的 Chrome 窗口来点页面，这个 Chrome 和你平时用的分开，不会动你的书签和登录，也不会每次弹「允许远程调试」的框。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试浏览器')),
+    el('p', { class: 'hint' }, '仅在使用 test worker 进行测试或演播时需要，只需配置一次。test worker 将打开独立的 Chrome 窗口操作页面，与日常使用的 Chrome 相互隔离，不影响书签和登录状态，也不会反复弹出「允许远程调试」提示。'),
     info.browserSkill === 'linked'
-      ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, '① 把浏览器说明书交给 DeepSeek Harness')), done(true, `已装好（${skillsDir}/browser-cdp-setup）`))
-      : step('① 把浏览器说明书交给 DeepSeek Harness', `test worker 靠这份说明书连浏览器、避开常见的坑。${info.browserSkill === 'copied' ? '那里已经有一份复制过去的旧文件夹，下面会先把它删掉再换成链接。' : ''}`,
+      ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, '① 为 DeepSeek Harness 安装浏览器 skill')), done(true, `已安装（${skillsDir}/browser-cdp-setup）`))
+      : step('① 为 DeepSeek Harness 安装浏览器 skill', `test worker 依据该 skill 连接浏览器并规避常见问题。${info.browserSkill === 'copied' ? '目标位置已存在复制的旧文件夹，以下命令将先删除再创建链接。' : ''}`,
         `${info.browserSkill === 'copied' ? `rm -rf ${skillsDir}/browser-cdp-setup\n` : ''}ln -s ${tool}/skills/browser-cdp-setup ${skillsDir}/browser-cdp-setup`),
     installStep2(info, installProfile),
-    step('③ 剩下的交给 test worker', '开 test worker 后，它会自己打开测试专用的 Chrome（一个新窗口，和你平时用的分开）并检查能不能用。第一次要测的网站还没登录时，它会停下来提问（看板上卡片进「等待答复」），你在那个新窗口里登录一次就行，之后一直有效。', null),
+    step('③ 由 test worker 完成后续配置', 'test worker 启动后将自动打开测试专用的 Chrome（独立窗口）并完成自检。被测网站首次未登录时，test worker 会发起提问（任务进入「等待答复」），在该窗口中登录一次即可，登录状态长期有效。', null),
   ];
 }
 
 // 可选的浏览器第 ② 步：profile 从本机读出来；有多个就让用户选；已经配好就只显示「已配好」
 function installStep2(info, profile) {
-  const title = el('div', { class: 'wcard-head' }, el('b', null, '② 让 DeepSeek Harness 认这个浏览器'));
+  const title = el('div', { class: 'wcard-head' }, el('b', null, '② 在 DeepSeek Harness 中配置浏览器'));
   if (!info.profiles) return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, '读取中…'));
-  if (info.failed) return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, '读不到本机的 DeepSeek Harness 配置（ateam 服务是旧版本），重启 ateam serve 后再看。'));
+  if (info.failed) return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, '无法读取本机 DeepSeek Harness 配置（ateam 服务版本过旧），请重启 ateam serve 后重试。'));
   if (!info.profiles.length) {
-    return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, `在 ${info.profilesDir} 下没找到 DeepSeek Harness 的配置。先装好并打开一次 DeepSeek Harness，再回到这里。`));
+    return el('div', { class: 'wcard' }, title, el('p', { class: 'hint' }, `在 ${info.profilesDir} 下未找到 DeepSeek Harness 配置。请先安装并启动一次 DeepSeek Harness。`));
   }
   const pick = info.profiles.length > 1 ? el('label', { class: 'install-pick' }, '配置：', (() => {
     const sel = el('select', { class: 'setting-select', onchange: (e) => { installProfile = e.target.value; renderHelper(true); } },
@@ -4023,13 +4023,13 @@ function installStep2(info, profile) {
     sel.value = profile;
     sel.addEventListener('click', (e) => e.stopPropagation());
     return sel;
-  })(), el('span', { class: 'hint' }, '（你平时开 worker 用的那个）')) : null;
+  })(), el('span', { class: 'hint' }, '（启动 worker 时使用的配置）')) : null;
   if (info.cdpConfigured?.[profile]) {
-    return el('div', { class: 'wcard' }, title, pick, el('p', { class: 'hint install-done' }, `✓ 「${profile}」已经配好了。改过配置后要在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次才生效。`));
+    return el('div', { class: 'wcard' }, title, pick, el('p', { class: 'hint install-done' }, `✓ 「${profile}」已配置完成。修改配置后，需在 DeepSeek Harness 菜单中点击「Restart App and Host」重启方可生效。`));
   }
   const file = `${info.profilesDir}/${profile}/cordis.patch.yml`.replace(/^\/Users\/[^/]+/, '~');
   return el('div', { class: 'wcard' }, title, pick,
-    el('p', { class: 'hint' }, '在终端运行下面这段（把设置加到 DeepSeek Harness 的配置文件末尾），然后在 DeepSeek Harness 菜单里点「Restart App and Host」重启一次。'),
+    el('p', { class: 'hint' }, '在终端运行以下命令（将设置追加到 DeepSeek Harness 配置文件末尾），然后在 DeepSeek Harness 菜单中点击「Restart App and Host」重启。'),
     promptBlock(`cat >> ${file} <<'EOF'\n- id: dsh-cdp\n  name: '@dougen/dsh-cdp'\n  config:\n    dataDir: ${info.home}/.chrome-agent\nEOF`, renderHelper));
 }
 
@@ -4043,11 +4043,11 @@ function leadPrompt() {
 
 // 标准角色：看板上总是列出来，leader skill 里也按这几个拆任务
 const STANDARD_ROLES = [
-  { key: 'product', label: '产品', what: '写产品文档，不写代码' },
+  { key: 'product', label: '产品', what: '编写产品文档，不涉及代码' },
   { key: 'frontend', label: '前端', what: '页面和交互' },
   { key: 'backend', label: '后端', what: '接口和数据' },
-  { key: 'test', label: '测试', what: '按验收标准验证，写报告' },
-  { key: 'critic', label: '审卡', what: '挑任务卡的毛病，不写代码' },
+  { key: 'test', label: '测试', what: '按验收标准测试并编写报告' },
+  { key: 'critic', label: '审卡', what: '审核任务卡质量，不涉及代码' },
 ];
 
 function workerPrompt(role) {
@@ -4112,7 +4112,7 @@ async function staleAction(path, body) {
     const res = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const out = await res.json();
     staleError = out.ok ? null : out.message;
-  } catch { staleError = '连不上 ateam 服务。'; }
+  } catch { staleError = '无法连接 ateam 服务。'; }
   await poll();
   renderStaleDialog();
 }
@@ -4130,21 +4130,21 @@ function renderStaleDialog() {
     const t = data.state.tasks.find((x) => x.id === a.currentTask);
     return el('div', { class: 'stale-item' },
       el('div', { class: 'wcard-head', style: 'margin-bottom: 8px' }, avatar(a.id, a.role),
-        el('span', { class: 'who-line' }, el('b', null, agentLabel(a.id)), el('span', { class: 'hint' }, `${a.role} · ${Math.round((Date.now() - a.lastSeenAt) / 60000)} 分钟没动静`))),
-      el('p', null, '手上是 ', el('b', null, `${a.currentTask}${t ? ` ${t.title}` : ''}`), '。'),
-      el('p', { class: 'hint' }, '它可能在跑很长的命令（导入数据、构建），也可能窗口停了或 token 用完了。去它的 agent 窗口看一眼：'),
+        el('span', { class: 'who-line' }, el('b', null, agentLabel(a.id)), el('span', { class: 'hint' }, `${a.role} · ${Math.round((Date.now() - a.lastSeenAt) / 60000)} 分钟无活动`))),
+      el('p', null, '当前任务：', el('b', null, `${a.currentTask}${t ? ` ${t.title}` : ''}`), '。'),
+      el('p', { class: 'hint' }, '该 worker 可能正在执行耗时命令（如导入数据、构建），也可能窗口已停止或 token 已用尽。请检查其 agent 窗口：'),
       el('div', { class: 'actions' },
-        el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); staleAction('/api/agents/still-there', { id: a.id }); } }, '还在干活，继续等'),
-        el('button', { class: 'btn warn', onclick: (e) => { e.stopPropagation(); staleAction('/api/reclaim', { id: a.currentTask, text: '用户确认原窗口没了' }); } }, '窗口没了，换人接手'),
-        el('button', { class: 'btn ghost', onclick: (e) => { e.stopPropagation(); staleLater.add(a.id); renderStaleDialog(); } }, '稍后再说')),
-      el('p', { class: 'hint' }, '窗口还在但停住了：把下面这句叫醒话发给它，不用换人。'),
+        el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); staleAction('/api/agents/still-there', { id: a.id }); } }, '仍在工作，继续等待'),
+        el('button', { class: 'btn warn', onclick: (e) => { e.stopPropagation(); staleAction('/api/reclaim', { id: a.currentTask, text: '用户确认原窗口没了' }); } }, '窗口已关闭，转交接手'),
+        el('button', { class: 'btn ghost', onclick: (e) => { e.stopPropagation(); staleLater.add(a.id); renderStaleDialog(); } }, '稍后处理')),
+      el('p', { class: 'hint' }, '窗口仍在但已停止响应：发送以下唤醒提示词即可，无需转交。'),
       promptBlock(wakePrompt(a), renderStaleDialog));
   });
   box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   fill(box, el('div', { class: 'modal', onclick: (e) => e.stopPropagation() },
-    modalHead(list.length > 1 ? `${list.length} 个 worker 可能停了` : 'worker 可能停了', null),
+    modalHead(list.length > 1 ? `${list.length} 个 worker 无响应` : 'worker 无响应', null),
     el('div', { class: 'modal-body' },
-      el('p', { class: 'lead' }, '任务还在它手上，不会自动交给别人。你确认之后才会换人。'),
+      el('p', { class: 'lead' }, '任务仍由该 worker 持有，不会自动转交，确认后才会更换。'),
       items,
       staleError ? el('p', { class: 'hint', style: 'color: var(--rework)' }, staleError) : null)));
   box.hidden = false;
@@ -4292,31 +4292,31 @@ function attentionItems() {
   if (!data) return [];
   const items = [];
   for (const j of data.state.jobs.slice().reverse()) {
-    if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待你验收`, body: `${j.id} ${j.title} 待你验收` });
+    if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待验收`, body: `${j.id} ${j.title} 待验收` });
   }
   for (const [role, ts] of (frozenDemo() ? new Map() : rolesNeedingWorkers())) {
-    items.push({ key: `needs:${role.toLowerCase()}`, role, tasks: ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、'), text: `${role} 缺 worker`, body: `${role} 的任务没人做，需要开一个 ${role} worker` });
+    items.push({ key: `needs:${role.toLowerCase()}`, role, tasks: ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、'), text: `${role} 缺少 worker`, body: `${role} 角色的任务无人处理，需启动一个 ${role} worker` });
   }
-  if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 的代码已更新，请重启 ateam serve' });
+  if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 代码已更新，请重启 ateam serve' });
   for (const t of data.state.tasks) {
     if ((t.critiques || []).some(awaitingUser)) {
-      items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧等你决定`, body: `${t.id} ${t.title}：审卡和 leader 有分歧，等你决定` });
+      items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧待决定`, body: `${t.id} ${t.title}：审卡与 leader 存在分歧，待决定` });
     }
   }
   for (const t of data.state.tasks) {
     if (!t.assignTo || (t.status !== 'pending' && t.status !== 'held')) continue;
     const a = data.state.agents.find((x) => x.id === t.assignTo);
     if (!a || a.status !== 'online') {
-      items.push({ key: `assign:${t.id}`, text: `${t.id} 指派的 ${t.assignTo} 不在线`, body: `${t.id} 指派给了 ${t.assignTo}，但它不在线，任务在等它` });
+      items.push({ key: `assign:${t.id}`, text: `${t.id} 指派的 ${t.assignTo} 不在线`, body: `${t.id} 已指派给 ${t.assignTo}，但其不在线，任务处于等待中` });
     }
   }
   for (const a of data.state.agents) {
     const cancelled = pendingCancel(a);
     if (cancelled) {
-      items.push({ key: `cancel:${a.id}:${cancelled.id}`, text: `${a.id} 还在做已作废的 ${cancelled.id}`, body: `${cancelled.id} 已作废，但 ${a.id} 还不知道，可以去它的窗口叫停` });
+      items.push({ key: `cancel:${a.id}:${cancelled.id}`, text: `${a.id} 仍在处理已作废的 ${cancelled.id}`, body: `${cancelled.id} 已作废，但 ${a.id} 尚未收到通知，可在其窗口中叫停` });
     }
     if (a.status === 'online' && a.stale && a.currentTask) {
-      items.push({ key: `quiet:${a.id}`, text: `${a.id} 可能停了`, body: `${a.id} 很久没动静（手上 ${a.currentTask}），请确认窗口还在不在` });
+      items.push({ key: `quiet:${a.id}`, text: `${a.id} 无响应`, body: `${a.id} 长时间无活动（当前任务 ${a.currentTask}），请确认窗口状态` });
     }
   }
   for (const c of data.doctor ?? []) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, body: c.detail });
@@ -4324,8 +4324,8 @@ function attentionItems() {
   const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
   if (busy && data.leader && (data.leader.away || !data.leader.online)) {
     items.push(data.leader.away
-      ? { key: 'leader', text: '无 leader 模式', body: 'leader 不在线：等答复、待 review 的卡先放下，worker 转做没有依赖的卡。leader 回来后会按顺序处理' }
-      : { key: 'leader', text: 'leader 未连接', body: 'leader 没有连接，需求还没做完' });
+      ? { key: 'leader', text: '无 leader 模式', body: 'leader 不在线：等待答复、待 review 的任务已搁置，worker 转做无依赖的任务。leader 恢复后将依次处理' }
+      : { key: 'leader', text: 'leader 未连接', body: 'leader 未连接，仍有未完成的需求' });
   }
   return items;
 }
@@ -4356,7 +4356,7 @@ function checkNotify(items) {
   if (!fresh.length) return;
   for (const i of fresh) notifyDone.add(i.key);
   const project = (data.root || '').split('/').filter(Boolean).pop() || '';
-  const body = fresh.length === 1 ? fresh[0].body : `${fresh.length} 件事需要你处理：${fresh.map((i) => i.text).join('；')}`;
+  const body = fresh.length === 1 ? fresh[0].body : `${fresh.length} 项待处理：${fresh.map((i) => i.text).join('；')}`;
   try {
     const n = new Notification(`ateam${project ? ` · ${project}` : ''}`, { body, tag: `ateam-${project}`, silent: true });
     n.onclick = () => { window.focus(); n.close(); };
@@ -4374,7 +4374,7 @@ async function enableNotify() {
   try { await Notification.requestPermission(); } catch {}
   renderNotifyButton();
   if (Notification.permission === 'granted') {
-    try { new Notification('ateam 通知已开启', { body: '有需求待验收、任务缺 worker、leader 掉线时会在这里提醒你。看板标签页要开着（可以在后台）。', silent: true }); } catch {}
+    try { new Notification('ateam 通知已开启', { body: '需求待验收、任务缺少 worker、leader 离线时将在此提醒。请保持看板标签页打开（可在后台）。', silent: true }); } catch {}
   }
 }
 
@@ -4402,7 +4402,7 @@ function renderAttention() {
   const btn = document.getElementById('attention');
   if (!items.length) { btn.hidden = true; return; }
   btn.hidden = false;
-  fill(btn, '需要你处理', el('span', { class: 'cnt' }, String(items.length)));
+  fill(btn, '待处理', el('span', { class: 'cnt' }, String(items.length)));
   btn.title = items.map((i) => i.text).join('\n');
 }
 
@@ -4495,7 +4495,7 @@ function goAttention(key) {
 const needsExpanded = new Set(); // 「需要你处理」里展开了提示词的缺人角色
 const ATT_KIND = {
   needs: ['缺人', 'asking'], stale: ['重启', 'rework'], dispute: ['分歧', 'submitted'], assign: ['指派', 'working'],
-  cancel: ['作废', 'rework'], quiet: ['停了', 'asking'], leader: ['leader', 'rework'],
+  cancel: ['作废', 'rework'], quiet: ['无响应', 'asking'], leader: ['leader', 'rework'],
 };
 // 弹框：待验收的需求可以勾选后一次验收通过；其它事每件一行，点「去处理」跳过去
 let acceptPick = null;    // 勾选的需求编号；null 表示还没动过，默认全选
@@ -4519,7 +4519,7 @@ function renderAttentionList() {
   allBox.indeterminate = picked.length > 0 && !allOn;
   allBox.addEventListener('change', () => { acceptPick = new Set(allOn ? [] : jobs.map((j) => j.id)); acceptConfirm = false; renderAttentionList(); });
   const acceptSec = jobs.length ? [
-    el('label', { class: 'acc-head', title: allOn ? '全不选' : '全选' }, allBox, `待你验收（${jobs.length}）`),
+    el('label', { class: 'acc-head', title: allOn ? '全不选' : '全选' }, allBox, `待验收（${jobs.length}）`),
     el('div', { class: 'acc-list' }, jobs.map((j) => {
       const tasks = data.state.tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
       const box2 = el('input', { type: 'checkbox' });
@@ -4527,7 +4527,7 @@ function renderAttentionList() {
       box2.addEventListener('change', () => { if (box2.checked) acceptPick.add(j.id); else acceptPick.delete(j.id); acceptConfirm = false; renderAttentionList(); });
       return el('label', { class: `acc-row${box2.checked ? ' on' : ''}` }, box2,
         el('span', { class: 'txt' }, el('b', null, j.id), j.title, el('div', { class: 'hint' }, `${tasks.length} 个任务 · ${fmtTime(j.updatedAt)} 提交汇报`)),
-        el('button', { class: 'btn sm', onclick: (e) => { e.preventDefault(); e.stopPropagation(); attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); } }, '看汇报'));
+        el('button', { class: 'btn sm', onclick: (e) => { e.preventDefault(); e.stopPropagation(); attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); } }, '查看汇报'));
     })),
     el('div', { class: 'acc-foot' },
       acceptMsg ? el('span', { class: 'hint', style: 'margin-right: auto' }, acceptMsg) : null,
@@ -4541,27 +4541,27 @@ function renderAttentionList() {
             const res = await fetch('/api/jobs/accept', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: picked.map((j) => j.id) }) });
             const out = await res.json();
             acceptMsg = out.ok ? `已验收通过 ${picked.length} 个需求。` : out.message;
-          } catch { acceptMsg = '连不上 ateam 服务。'; }
+          } catch { acceptMsg = '无法连接 ateam 服务。'; }
           acceptPick = null;
           await poll();
           renderAttentionList();
         }),
-      }, acceptConfirm ? `确认验收通过这 ${picked.length} 个` : `验收通过选中的（${picked.length}）`)),
+      }, acceptConfirm ? `确认验收 ${picked.length} 个需求` : `验收所选（${picked.length}）`)),
   ] : (acceptMsg ? el('p', { class: 'hint' }, acceptMsg) : null);
 
   const otherSec = others.length ? [
-    jobs.length ? el('div', { class: 'att-head' }, el('h4', null, `其它（${others.length}）`)) : null,
+    jobs.length ? el('div', { class: 'att-head' }, el('h4', null, `其他（${others.length}）`)) : null,
     others.map((i) => {
       // 缺人：不跳走，就地展开开 worker 的提示词
       const role = i.key.startsWith('needs:') ? i.role : null;
       const open = role && needsExpanded.has(role);
       return [el('div', { class: 'att-row' },
-        el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其它'), el('span', null, i.body)),
+        el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其他'), el('span', null, i.body)),
         i.key === 'stale' ? el('span', { class: 'hint' }, '见右上角提示')
-          : role ? el('button', { class: 'btn sm', onclick: stop(() => { open ? needsExpanded.delete(role) : needsExpanded.add(role); renderAttentionList(); }) }, open ? '收起' : '开 worker')
+          : role ? el('button', { class: 'btn sm', onclick: stop(() => { open ? needsExpanded.delete(role) : needsExpanded.add(role); renderAttentionList(); }) }, open ? '收起' : '添加 worker')
           : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理')),
         open ? el('div', { class: 'att-prompt' },
-          el('p', { class: 'hint' }, `任务：${i.tasks}。打开一个新的 agent 窗口（可以换账号），工作目录选项目目录，把下面这句话发给它，它会自动接手。想给窗口起名字，就在第一行末尾加「，名字 账号B」。`),
+          el('p', { class: 'hint' }, `任务：${i.tasks}。新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送以下提示词，worker 将自动接手。如需命名，在第一行末尾添加「，名字 账号B」。`),
           promptBlock(workerPrompt(role), renderAttentionList)) : null];
     }),
   ] : null;
@@ -4571,7 +4571,7 @@ function renderAttentionList() {
   const r = document.getElementById('attention').getBoundingClientRect();
   box.style.setProperty('--arrow-x', `${Math.max(16, window.innerWidth - 20 - (r.left + r.width / 2) - 5)}px`);
   fill(box, el('div', { class: 'modal att-modal', onclick: (e) => e.stopPropagation() },
-    modalHead(`需要你处理（${items.length}）`, () => { attentionOpen = false; renderAttentionList(); }),
+    modalHead(`待处理事项（${items.length}）`, () => { attentionOpen = false; renderAttentionList(); }),
     el('div', { class: 'modal-body' }, acceptSec, otherSec)));
   box.hidden = false;
 }

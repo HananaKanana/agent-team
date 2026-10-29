@@ -122,3 +122,4 @@
 
 1. [ ] 重启 ateam serve 后 `.ateam/` 下出现 board.json、runtime.json、archive/（已验收和作废的需求一个一个文件），state.json 变成 state.json.bak；`.ateam/.gitignore` 里有 runtime.json；worker 心跳时 board.json 不变，卡状态变了才变；看板数据和重启前一样
 2. [ ] `ateam doctor` 列出自检结果全部 ✓；某项没过时看板「待处理」里出现「自检：…有问题」
+3. [ ] 重启 ateam serve 后 `.ateam/demos/` 下出现每个演播需求一个文件（如 J33.json），`board.json` 里不再有演播需求；跑一次预演或演播，只有对应的 demos 文件变化，`board.json` 不变；作废一个演播需求后，它的文件从 demos/ 移到 archive/

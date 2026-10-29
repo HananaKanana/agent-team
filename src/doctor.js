@@ -56,7 +56,7 @@ export async function runDoctor({ root, install }) {
   const ignored = existsSync(ignore) ? readFileSync(ignore, 'utf8').split(/\r?\n/).map((l) => l.trim()) : [];
   out.push({
     key: 'ignore', title: '.ateam 的提交范围', ok: ignored.includes('runtime.json'),
-    detail: ignored.includes('runtime.json') ? 'board.json、archive/ 提交；runtime.json、端口文件不提交' : '.ateam/.gitignore 里缺 runtime.json，worker 状态会被提交进仓库。重启 ateam serve 会自动补上',
+    detail: ignored.includes('runtime.json') ? 'board.json、demos/、archive/ 提交；runtime.json、端口文件不提交' : '.ateam/.gitignore 里缺 runtime.json，worker 状态会被提交进仓库。重启 ateam serve 会自动补上',
   });
 
   // 测试用的浏览器（可选）：装了 browser-cdp-setup 才检查

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import http from 'node:http';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,7 @@ import { addRule, needsTidy, rulesFor, sectionCounts, unreceived } from './rules
 import { runDoctor } from './doctor.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
+import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
@@ -198,15 +199,33 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
   // 和项目规则（长期有效的约定）
-  // 测试卡：项目配了自己的报告模板（比如客户给的，只能是 .md）就附上全文
-  function testTemplateFor(task, full) {
-    const path = store.config().testTemplate;
-    if (!path || task.kind === 'demo' || !/^(test|qa|测试)$/i.test(String(task.role ?? '').trim())) return null;
-    const out = { path };
-    if (full) {
-      try { out.text = readFileSync(join(root, path), 'utf8'); } catch (err) { out.error = `读不到模板文件：${err.message}`; }
+  // 测试报告模板：.ateam/test-template.md，用户在看板「设置 → 测试报告模板」里编辑（比如按客户的格式）。
+  // 没有这个文件（没改过、或重置了）就用 ateam 自带的
+  const testTemplateFile = join(dataDir, 'test-template.md');
+  const MAX_TEST_TEMPLATE = 30 * 1024;
+  function readTestTemplate() {
+    try { return readFileSync(testTemplateFile, 'utf8'); } catch { return ''; }
+  }
+  function writeTestTemplate(text) {
+    if (typeof text !== 'string') throw new AteamError('INVALID', '模板内容必须是文本。');
+    if (Buffer.byteLength(text) > MAX_TEST_TEMPLATE) throw new AteamError('INVALID', '测试报告模板超过 30KB，请精简。');
+    if (!text.trim() || text.trim() === DEFAULT_TEST_TEMPLATE.trim()) {
+      // 清空或和自带的一样：删掉文件，回到自带模板（以后自带模板更新也能跟上）
+      try { unlinkSync(testTemplateFile); } catch {}
+      return '';
     }
-    return out;
+    mkdirSync(dataDir, { recursive: true });
+    const tmp = `${testTemplateFile}.tmp`;
+    writeFileSync(tmp, `${text.trimEnd()}\n`);
+    renameSync(tmp, testTemplateFile);
+    return readTestTemplate();
+  }
+  // 测试卡：项目改过模板就附上全文（custom 为 true），没改过用 format.js 里自带的
+  function testTemplateFor(task, full) {
+    if (task.kind === 'demo' || !/^(test|qa|测试)$/i.test(String(task.role ?? '').trim())) return null;
+    const text = readTestTemplate();
+    if (!text.trim()) return null;
+    return full ? { custom: true, text } : { custom: true };
   }
 
   function withRules(result) {
@@ -531,11 +550,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return { dismissed };
     },
     'POST /api/agents/still-there': (b) => ({ agent: store.keepWaiting(String(b.id ?? '')) }),
-    'POST /api/settings': (b) => {
-      const tpl = typeof b.testTemplate === 'string' ? b.testTemplate.trim().replace(/^\.\//, '') : '';
-      if (tpl && !/\.md$/i.test(tpl)) throw new AteamError('INVALID', '测试报告模板只能是 Markdown（.md）。客户给的是 Excel / Word 的话，先让 leader 派一张卡把它转成 .md 模板，再填转好的路径。');
-      if (tpl && !existsSync(join(root, tpl))) throw new AteamError('INVALID', `项目里找不到 ${tpl}。先把模板文件放进项目（建议提交进 git），再填它的相对路径。`);
-      return { settings: store.setSettings(b) };
+    'POST /api/settings': (b) => ({ settings: store.setSettings(b) }),
+    // 没改过、或重置了：返回自带模板，custom 为 false
+    'GET /api/test-template': () => {
+      const text = readTestTemplate();
+      return { text: text.trim() ? text : DEFAULT_TEST_TEMPLATE, custom: !!text.trim(), default: DEFAULT_TEST_TEMPLATE };
+    },
+    'POST /api/test-template': (b) => {
+      const text = writeTestTemplate(b.text);
+      return { text: text.trim() ? text : DEFAULT_TEST_TEMPLATE, custom: !!text.trim(), default: DEFAULT_TEST_TEMPLATE };
     },
     'POST /api/agents/keep': (b) => ({ kept: store.keepAgents(b.ids) }),
     'POST /api/reclaim': (b) => {

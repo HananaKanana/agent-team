@@ -173,75 +173,73 @@ export function testReportPath(task) {
   return paths[0] ? `${paths[0]}/${task.id}-测试报告${ext}` : `${task.id}-测试报告${ext}`;
 }
 
-// 项目自己的文本模板：替换占位符。{{卡号}} {{标题}} {{测试人}} {{验收标准}}（编号列表），
-// {{#每条}}…{{/每条}} 按验收标准重复，里面用 {{序号}} {{验收标准}}
-function fillTemplate(text, task, agentId) {
+// 测试报告模板的占位符：{{卡号}} {{标题}} {{测试人}} {{验收标准}}（编号列表），
+// {{#每条}}…{{/每条}} 按验收标准重复，里面用 {{序号}} {{验收标准}}。验收标准里的 | 转义，免得把表格拆开
+export function fillTestTemplate(text, task, agentId) {
   const acc = task.acceptance?.length ? task.acceptance : ['<这张卡没写验收标准，按描述自己列出要测的点>'];
-  return text
-    .replace(/\{\{#每条\}\}([\s\S]*?)\{\{\/每条\}\}/g, (_, block) => acc.map((a, i) => block.replace(/\{\{序号\}\}/g, String(i + 1)).replace(/\{\{验收标准\}\}/g, oneLine(a))).join(''))
+  const one = (a) => oneLine(a).replace(/\|/g, '\\|');
+  return String(text)
+    .replace(/\{\{#每条\}\}\n?([\s\S]*?)\{\{\/每条\}\}\n?/g, (_, block) => acc.map((a, i) => block.replace(/\{\{序号\}\}/g, String(i + 1)).replace(/\{\{验收标准\}\}/g, one(a))).join(''))
     .replace(/\{\{卡号\}\}/g, task.id)
     .replace(/\{\{标题\}\}/g, task.title)
     .replace(/\{\{测试人\}\}/g, agentId)
-    .replace(/\{\{验收标准\}\}/g, acc.map((a, i) => `${i + 1}. ${oneLine(a)}`).join('\n'));
+    .replace(/\{\{验收标准\}\}/g, acc.map((a, i) => `${i + 1}. ${one(a)}`).join('\n'));
 }
 
-// 按卡填好的测试报告模板（格式见 skills/ateam-worker/test-report-template.md）
-function testReportTemplate(task, agentId) {
-  const acc = task.acceptance?.length ? task.acceptance : ['<这张卡没写验收标准，按描述自己列出要测的点>'];
-  const cell = (s) => oneLine(s).replace(/\|/g, '\\|');
-  return [
-    `# ${task.id} 测试报告：${task.title}`,
-    '',
-    `- 测试人：${agentId}`,
-    '- 环境：<被测地址>，视口 <宽x高>，账号：<角色名，不写口令>',
-    '- 时间：开始 <MM-DD HH:mm> / 结束 —',
-    '- 用例审核：未审',
-    '- 结论：进行中',
-    '',
-    '## 汇总',
-    '',
-    '| # | 验收标准 | 结果 |',
-    '|---|---|---|',
-    ...acc.map((a, i) => `| ${i + 1} | ${cell(a)} | 未测 |`),
-    '',
-    '## 用例',
-    '',
-    ...acc.flatMap((a, i) => [
-      `### ${i + 1}. ${oneLine(a)}`,
-      '',
-      '- 结果：未测',
-      '- 测试数据：<要造什么，统一用「测试-」开头；不需要写「无」>',
-      '- 步骤：',
-      '  1. <打开哪个页面>',
-      '  2. <点什么、填什么>',
-      '- 期望：<页面上应该看到什么>',
-      '- 实际：',
-      '- 问题（不通过时填）：',
-      '',
-    ]),
-    '## 测试数据清理',
-    '',
-    '- <造过的数据逐条列出>：已删除 / 保留（原因）',
-    '',
-    '## 遗留问题与建议',
-    '',
-    '- 无',
-  ].join('\n');
-}
+// ateam 自带的测试报告模板。项目可以在看板「设置 → 测试报告模板」里改，存在 .ateam/test-template.md
+export const DEFAULT_TEST_TEMPLATE = `# {{卡号}} 测试报告：{{标题}}
+
+- 测试人：{{测试人}}
+- 环境：<被测地址>，视口 <宽x高>，账号：<角色名，不写口令>
+- 时间：开始 <MM-DD HH:mm> / 结束 —
+- 用例审核：未审
+- 结论：进行中
+
+## 汇总
+
+| # | 验收标准 | 结果 |
+|---|---|---|
+{{#每条}}
+| {{序号}} | {{验收标准}} | 未测 |
+{{/每条}}
+
+## 用例
+
+{{#每条}}
+### {{序号}}. {{验收标准}}
+
+- 结果：未测
+- 测试数据：<要造什么，统一用「测试-」开头；不需要写「无」>
+- 步骤：
+  1. <打开哪个页面>
+  2. <点什么、填什么>
+- 期望：<页面上应该看到什么>
+- 实际：
+- 问题（不通过时填）：
+
+{{/每条}}
+## 测试数据清理
+
+- <造过的数据逐条列出>：已删除 / 保留（原因）
+
+## 遗留问题与建议
+
+- 无
+`;
 
 // withTemplate：领卡、接手时附模板；答复、打回、重复 wait 时只提醒流程，不再整份重复
 function testProgressRule(agentId, task, withTemplate = true, tpl = null) {
   const n = task.acceptance?.length || 'N';
   const file = testReportPath(task);
-  // 项目配了自己的模板（客户要求的格式）：按它写，栏目和写法不改；ateam 的流程照旧
-  const custom = !!tpl;
+  // 项目改过模板（比如按客户要求的格式）：按它写，栏目和写法不改；ateam 的流程照旧
+  const custom = !!tpl?.custom;
   const reworked = task.rejectCount > 0 || task.history?.some((h) => h.type === 'answered' && /用例/.test(h.text ?? ''));
   return [
     '',
     '## 测试流程（按顺序做，每一步都留在磁盘上，掉线了接手的人能接着做）',
     '',
     custom
-      ? `1. **建报告**：这个项目规定用自己的测试报告模板 \`${tpl.path}\`（比如客户给的），**栏目、顺序、写法都按它来，不要改成别的格式、不要加删栏目**。下面是按这张卡填好占位符的内容，原样存成 \`${file}\`。每条验收标准都要在报告里有对应的用例，结果那一栏没开始的写「未测」。${tpl.error ? `（${tpl.error}，先 ateam ask 说明）` : ''}`
+      ? `1. **建报告**：这个项目规定了自己的测试报告格式（比如客户要求的），**栏目、顺序、写法都按下面的模板来，不要改成别的格式、不要加删栏目**。下面是按这张卡填好的内容，原样存成 \`${file}\`。每条验收标准都要在报告里有对应的用例，结果那一栏没开始的写「未测」。`
       : `1. **建报告**：把下面的模板原样存成 \`${file}\`（已经按这张卡填好了验收标准，每条「未测」）。`,
     `2. **设计用例**：每条验收标准补上测试数据、步骤、期望；正常流程之外，容易出问题的边界、异常、权限情况${custom ? '按模板的编号方式补成单独的用例' : '作为 1a、1b… 补在对应条目下面'}。结果都还是「未测」。写完运行 ateam ask --as ${agentId} "用例已写好，请审核：${file}"，然后 ateam wait 等答复。**答复「用例通过」才开测**；有修改意见就改完再 ask 一次。${reworked ? '（这张卡的用例已经审过的话——历史里有「用例通过」的答复——只要不改用例，就不用再审，直接执行。）' : ''}`,
     `3. **逐条执行**：开始操作浏览器前报一次 ateam progress --as ${agentId} "开始测：<先测哪条>"。**每测完一条，先把结果（通过 / 不通过、实际看到的、问题）写进报告，再报进度**：ateam progress --as ${agentId} "第 1/${n} 条 通过：<看到了什么>，已写入报告"。测到一半要停，先在报告里标「测到一半：<到哪了>」。`,
@@ -251,9 +249,7 @@ function testProgressRule(agentId, task, withTemplate = true, tpl = null) {
     '',
     '**⚠ 测试时最容易忘的事：报进度。** 在浏览器里操作不会调用 ateam，服务看不到你在干活；用户在看板上也只能看到进度笔记。两次进度之间不要超过 5 分钟；一条要测很久（等数据、等定时任务）先带 --expect <分钟> 报备。宁可多报，不要少报。',
     '',
-    ...(!withTemplate ? [] : custom && tpl.text != null
-      ? [`### 报告模板（项目规定的 ${tpl.path}）`, '', '````', fillTemplate(tpl.text, task, agentId), '````']
-      : ['### 报告模板', '', '```markdown', testReportTemplate(task, agentId), '```']),
+    ...(withTemplate ? [custom ? '### 报告模板（项目规定的格式）' : '### 报告模板', '', '````markdown', fillTestTemplate(tpl?.text ?? DEFAULT_TEST_TEMPLATE, task, agentId).trimEnd(), '````'] : []),
   ];
 }
 

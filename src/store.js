@@ -31,8 +31,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     leaderAwayMin: { type: 'int', min: 1, max: 120, def: () => 10 },
     // 演播视口：预演按它录，演播沿用这张卡预演时记下的尺寸
     demoViewport: { type: 'size', def: () => '1600x800' },
-    // 测试报告模板：项目里的 .md 文件路径（相对项目目录），比如客户给的模板转成的；空 = 用 ateam 自带的
-    testTemplate: { type: 'path', def: () => '' },
   };
 
   function config() {
@@ -770,12 +768,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!spec) continue;
       if (value === null) { delete state.settings[key]; continue; }
       if (spec.type === 'bool') { state.settings[key] = !!value; continue; }
-      if (spec.type === 'path') {
-        const v = String(value).trim().replace(/^\.\//, '');
-        if (v && (v.startsWith('/') || v.split('/').includes('..') || !/\.md$/i.test(v))) throw new AteamError('INVALID', `${key} 要写项目目录里 .md 文件的相对路径，比如 docs/test/客户测试用例模板.md。`);
-        if (v) state.settings[key] = v; else delete state.settings[key];
-        continue;
-      }
       if (spec.type === 'size') {
         const m = String(value).trim().toLowerCase().match(VIEWPORT_RE);
         if (!m || [m[1], m[2]].some((v) => Number(v) < 320 || Number(v) > 7680)) throw new AteamError('INVALID', `${key} 要写成 宽x高，比如 1600x800（宽高在 320 到 7680 之间）。`);

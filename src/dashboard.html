@@ -224,9 +224,11 @@ input[type="checkbox"]:not(.switch):checked::after {
 .warn-text { color: var(--rework); }
 .install-done { color: var(--approved); font-weight: 600; }
 .install-pick { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
-.setting:has(> .setting-text) { flex-wrap: wrap; }
-.setting > .setting-text { order: 1; width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
-.setting > .setting-text:focus { outline: none; border-color: var(--brand); }
+.tpl-head { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.tpl-head b { font-size: 13px; }
+.tpl-badge { padding: 1px 7px; border-radius: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--sunken); }
+.tpl-badge.custom { color: var(--brand-ink); background: var(--brand-soft); }
+.tpl-preview { margin-top: 10px; padding: 14px 18px; max-height: 460px; overflow: auto; border-radius: 6px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); font-size: 13px; }
 .setting-num { width: 72px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
 .rules-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--sunken); }
@@ -1762,8 +1764,6 @@ const SETTING_ITEMS = [
   { group: 'leader' },
   { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在「使用说明 → leader」里点「下线」才进入。开着时，leader 掉线（超过下面的时间既没挂着监听、也没执行命令）也自动进入，重新挂上监听或执行命令就自动退出。token 用完后它的后台监听最多还会挂半小时，这段时间仍算在线。' },
   { key: 'leaderAwayMin', type: 'int', label: '断开多久算掉线（分钟）', hint: '只在上面的自动开关开着时有用。' },
-  { group: '测试' },
-  { key: 'testTemplate', type: 'text', label: '测试报告模板', placeholder: '留空 = 用 ateam 自带的模板', hint: '客户要求用他们的测试用例模板时，把模板文件放进项目（建议提交进 git），在这里填它的相对路径，比如 docs/test/客户测试用例模板.md。之后 test worker 都按这个模板写报告。只能是 Markdown（.md）：客户给的是 Excel / Word，先让 leader 派一张卡把它转成 .md 模板（交付时要 Excel，也可以再派一张卡把报告转回去）。模板里可以写占位符：{{卡号}} {{标题}} {{测试人}} {{验收标准}}，{{#每条}}…{{/每条}} 之间按验收标准逐条重复（里面用 {{序号}} {{验收标准}}）。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';
@@ -1801,10 +1801,6 @@ function settingsPage() {
         input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
         input.checked = !!cfg[it.key];
         input.addEventListener('change', () => saveSetting(it.key, input.checked));
-      } else if (it.type === 'text') {
-        input = el('input', { type: 'text', class: 'setting-text', placeholder: it.placeholder || '' });
-        input.value = String(cfg[it.key] ?? '');
-        input.addEventListener('change', () => saveSetting(it.key, input.value));
       } else {
         input = el('input', { type: 'number', class: 'setting-num', min: '1', step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);
@@ -1814,6 +1810,8 @@ function settingsPage() {
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, it.hint)));
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
+    el('div', { class: 'helper-sec' }, el('h4', null, '测试')),
+    testTemplateEditor(),
     el('div', { class: 'helper-sec' }, el('h4', null, '本设备')),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -1851,6 +1849,90 @@ function settingsPage() {
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '悬停显示依赖关系'),
         el('span', { class: 'hint' }, '鼠标停在卡上时，给它依赖的卡和在等它的卡加框、标上「在等」。关着时卡片上的「等依赖」和右键菜单里的相关卡照常可用。只对这台设备的这个浏览器生效。')));
     })(),
+  ];
+}
+
+// 测试报告模板编辑器：存在 .ateam/test-template.md。没改过、或重置了，显示和使用 ateam 自带的模板
+let testTpl = { loaded: false, loading: false, saved: '', draft: '', custom: false, def: '', status: '', mode: 'edit' };
+async function loadTestTpl() {
+  if (testTpl.loading) return;
+  testTpl.loading = true;
+  try {
+    const json = await (await fetch('/api/test-template', { cache: 'no-store' })).json();
+    if (!json.ok) throw new Error(json.message);
+    testTpl = { ...testTpl, loaded: true, saved: json.text, draft: json.text, custom: json.custom, def: json.default, status: '' };
+  } catch {
+    testTpl = { ...testTpl, loaded: true, status: '读取失败，请确认服务是新版本（重启 ateam serve）。' };
+  }
+  testTpl.loading = false;
+  renderHelper(true);
+}
+async function saveTestTpl(text, okMsg) {
+  try {
+    const res = await fetch('/api/test-template', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.message);
+    testTpl = { ...testTpl, saved: json.text, draft: json.text, custom: json.custom, def: json.default, status: json.custom ? okMsg : '已恢复成 ateam 自带的模板。' };
+  } catch (err) {
+    testTpl = { ...testTpl, status: `保存失败：${err.message}` };
+  }
+  renderHelper(true);
+}
+// 预览用的示例卡
+const TPL_SAMPLE = { id: 'T12', title: '登录页测试', acceptance: ['输错密码提示「用户名或密码错误」', '登录成功后跳到首页，右上角显示用户名'] };
+function fillTestTemplate(text, task, agentId) { // 同 src/format.js 的 fillTestTemplate
+  const one = (a) => String(a).replace(/\s+/g, ' ').trim().replace(/\|/g, '\\|');
+  return String(text)
+    .replace(/\{\{#每条\}\}\n?([\s\S]*?)\{\{\/每条\}\}\n?/g, (_, block) => task.acceptance.map((a, i) => block.replace(/\{\{序号\}\}/g, String(i + 1)).replace(/\{\{验收标准\}\}/g, one(a))).join(''))
+    .replace(/\{\{卡号\}\}/g, task.id).replace(/\{\{标题\}\}/g, task.title).replace(/\{\{测试人\}\}/g, agentId)
+    .replace(/\{\{验收标准\}\}/g, task.acceptance.map((a, i) => `${i + 1}. ${one(a)}`).join('\n'));
+}
+function testTemplateEditor() {
+  if (!testTpl.loaded) { loadTestTpl(); return el('p', { class: 'hint' }, '读取中……'); }
+  const dirty = testTpl.draft !== testTpl.saved;
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
+  const setMode = (m) => stop(() => { testTpl.mode = m; renderHelper(true); });
+  const saveBtn = el('button', { class: 'btn primary sm', disabled: !dirty, onclick: stop(() => saveTestTpl(testTpl.draft, '已保存。之后领到的测试卡按这个模板写报告。')) }, '保存');
+  const undoBtn = el('button', { class: 'btn ghost sm', disabled: !dirty, onclick: stop(() => { testTpl = { ...testTpl, draft: testTpl.saved, status: '' }; renderHelper(true); }) }, '撤销修改');
+  const resetBtn = el('button', {
+    class: 'btn ghost sm', disabled: !testTpl.custom && !dirty,
+    onclick: stop(() => openConfirm({
+      title: '重置为自带模板？', body: '自定义的模板会被删除（.ateam/test-template.md），之后测试卡用 ateam 自带的模板。', ok: '重置',
+      run: async () => { await saveTestTpl('', ''); return { ok: true }; },
+    })),
+  }, '重置为自带模板');
+  let body;
+  if (testTpl.mode === 'view') {
+    const box = el('div', { class: 'tpl-preview md' });
+    box.innerHTML = renderMarkdown(fillTestTemplate(testTpl.draft, TPL_SAMPLE, 'test-1')); // renderMarkdown 先转义了 HTML
+    body = box;
+  } else {
+    const area = el('textarea', { class: 'rules-editor tpl-editor', spellcheck: 'false' });
+    area.value = testTpl.draft;
+    area.addEventListener('click', (e) => e.stopPropagation());
+    area.addEventListener('input', () => {
+      testTpl.draft = area.value;
+      saveBtn.disabled = testTpl.draft === testTpl.saved;
+      undoBtn.disabled = saveBtn.disabled;
+      resetBtn.disabled = !testTpl.custom && saveBtn.disabled;
+    });
+    body = area;
+  }
+  const code = (t) => el('code', {}, t);
+  return [
+    el('div', { class: 'tpl-head' }, el('b', null, '测试报告模板'),
+      el('span', { class: `tpl-badge${testTpl.custom ? ' custom' : ''}` }, testTpl.custom ? '自定义' : 'ateam 自带')),
+    el('p', { class: 'hint' }, 'test worker 领到测试卡时按这个模板建报告（Markdown）。客户要求用他们的格式，就在这里改成客户的栏目；客户给的是 Excel / Word，让 leader 派一张卡转成 Markdown 贴进来。占位符：',
+      code('{{卡号}}'), ' ', code('{{标题}}'), ' ', code('{{测试人}}'), ' ', code('{{验收标准}}'), '（编号列表）；', code('{{#每条}}'), '…', code('{{/每条}}'),
+      ' 之间按验收标准逐条重复，里面用 ', code('{{序号}}'), ' ', code('{{验收标准}}'), '。'),
+    el('div', { class: 'rules-bar' },
+      el('div', { class: 'seg' },
+        el('button', { class: testTpl.mode !== 'view' ? 'on' : '', onclick: setMode('edit') }, '编辑'),
+        el('button', { class: testTpl.mode === 'view' ? 'on' : '', onclick: setMode('view') }, '用示例卡预览'))),
+    body,
+    el('div', { class: 'rules-foot' }, saveBtn, undoBtn, resetBtn,
+      testTpl.status ? el('span', { class: 'hint' }, testTpl.status) : null,
+      el('span', { class: 'path' }, testTpl.custom ? '保存在 .ateam/test-template.md' : '没改过：用 ateam 自带的')),
   ];
 }
 
@@ -2055,7 +2137,7 @@ function renderHelper(force = false) {
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
   if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
-  if (!force && helper.tab === 'settings' && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('setting-text')) && panel.contains(document.activeElement)) return;
+  if (!force && helper.tab === 'settings' && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('tpl-editor')) && panel.contains(document.activeElement)) return;
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;
   const online = agents.filter((a) => a.status === 'online');

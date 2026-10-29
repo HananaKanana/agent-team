@@ -1858,7 +1858,9 @@ async function loadTestTpl() {
   try {
     const json = await (await fetch('/api/test-template', { cache: 'no-store' })).json();
     if (!json.ok) throw new Error(json.message);
-    testTpl = { ...testTpl, loaded: true, saved: json.text, draft: json.text, custom: json.custom, def: json.default, status: '' };
+    // 上次没保存的修改保留着（比如切到别的页又切回来）
+    const keep = testTpl.draft !== testTpl.saved;
+    testTpl = { ...testTpl, loaded: true, saved: json.text, draft: keep ? testTpl.draft : json.text, custom: json.custom, def: json.default, status: keep ? '有未保存的修改。' : '' };
   } catch {
     testTpl = { ...testTpl, loaded: true, status: '读取失败，请确认服务是新版本（重启 ateam serve）。' };
   }
@@ -2161,7 +2163,7 @@ function renderHelper(force = false) {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = ['lead', 'install', 'rules', 'settings'].includes(helper.tab) ? helper.tab : 'worker';
+  const tab = ['lead', 'install', 'rules', 'tests', 'settings'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
     onclick: (e) => {
@@ -2169,6 +2171,7 @@ function renderHelper(force = false) {
       helper = { ...helper, tab: key };
       dismissAllArm = false;
       if (key === 'rules') loadRules();
+      if (key === 'tests' && !testTpl.loading) testTpl.loaded = false; // 每次切进来重新读，别处改过也能看到
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
       settingsMsg = '';
       renderHelper(true);

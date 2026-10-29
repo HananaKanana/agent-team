@@ -164,19 +164,79 @@ const CRITIQUE_STATUS = {
 
 // 测试卡常见的毛病：一进浏览器就忘了报进度，看板上一直没动静，15 分钟后还会被当成停住
 const isTestRole = (role) => /^(test|qa|测试)$/i.test(String(role ?? '').trim());
-function testProgressRule(agentId, task) {
-  const n = task.acceptance?.length;
+// 测试报告放哪：任务路径里有 .md 文件就用它，否则放在第一个路径下面
+export function testReportPath(task) {
+  const paths = (task.paths ?? []).map((p) => String(p).replace(/\/+$/, ''));
+  const md = paths.find((p) => p.endsWith('.md'));
+  if (md) return md;
+  return paths[0] ? `${paths[0]}/${task.id}-测试报告.md` : `${task.id}-测试报告.md`;
+}
+
+// 按卡填好的测试报告模板（格式见 skills/ateam-worker/test-report-template.md）
+function testReportTemplate(task, agentId) {
+  const acc = task.acceptance?.length ? task.acceptance : ['<这张卡没写验收标准，按描述自己列出要测的点>'];
+  const cell = (s) => oneLine(s).replace(/\|/g, '\\|');
+  return [
+    `# ${task.id} 测试报告：${task.title}`,
+    '',
+    `- 测试人：${agentId}`,
+    '- 环境：<被测地址>，视口 <宽x高>，账号：<角色名，不写口令>',
+    '- 时间：开始 <MM-DD HH:mm> / 结束 —',
+    '- 用例审核：未审',
+    '- 结论：进行中',
+    '',
+    '## 汇总',
+    '',
+    '| # | 验收标准 | 结果 |',
+    '|---|---|---|',
+    ...acc.map((a, i) => `| ${i + 1} | ${cell(a)} | 未测 |`),
+    '',
+    '## 用例',
+    '',
+    ...acc.flatMap((a, i) => [
+      `### ${i + 1}. ${oneLine(a)}`,
+      '',
+      '- 结果：未测',
+      '- 测试数据：<要造什么，统一用「测试-」开头；不需要写「无」>',
+      '- 步骤：',
+      '  1. <打开哪个页面>',
+      '  2. <点什么、填什么>',
+      '- 期望：<页面上应该看到什么>',
+      '- 实际：',
+      '- 问题（不通过时填）：',
+      '',
+    ]),
+    '## 测试数据清理',
+    '',
+    '- <造过的数据逐条列出>：已删除 / 保留（原因）',
+    '',
+    '## 遗留问题与建议',
+    '',
+    '- 无',
+  ].join('\n');
+}
+
+// withTemplate：领卡、接手时附模板；答复、打回、重复 wait 时只提醒流程，不再整份重复
+function testProgressRule(agentId, task, withTemplate = true) {
+  const n = task.acceptance?.length || 'N';
+  const file = testReportPath(task);
+  const reworked = task.rejectCount > 0 || task.history?.some((h) => h.type === 'answered' && /用例/.test(h.text ?? ''));
   return [
     '',
-    '**⚠ 测试时最容易忘的事：报进度。** 在浏览器里操作不会调用 ateam，服务看不到你在干活；用户在看板上也只能看到进度笔记。所以：',
-    '- **报告边测边写，不要测完才写**：你随时可能掉线，接手的人只能看到磁盘上的报告。开测前先在任务路径里建好报告文件，列出全部验收标准、每条标「未测」；**每测完一条，先把这一条的结果（通过 / 不通过、操作步骤、看到的现象、问题）写进报告，再报进度**。',
-    `- **每核对完一条验收标准，立刻报一次**：ateam progress --as ${agentId} "第 1/${n || 'N'} 条 通过：<看到了什么>，已写入报告"（不通过就写「不通过：<现象>」）`,
-    `- 开始操作浏览器前先报一次「开始测：<先测哪条>，报告已建好」；一条要测很久（等数据、等定时任务），先报备：ateam progress --as ${agentId} "<在等什么>" --expect <分钟>`,
-    '- 不管测到哪，**两次进度之间不要超过 5 分钟**。宁可多报，不要少报。',
+    '## 测试流程（按顺序做，每一步都留在磁盘上，掉线了接手的人能接着做）',
+    '',
+    `1. **建报告**：把下面的模板原样存成 \`${file}\`（已经按这张卡填好了验收标准，每条「未测」）。`,
+    `2. **设计用例**：每条验收标准补上测试数据、步骤、期望；正常流程之外，容易出问题的边界、异常、权限情况作为 1a、1b… 补在对应条目下面。结果都还是「未测」。写完运行 ateam ask --as ${agentId} "用例已写好，请审核：${file}"，然后 ateam wait 等答复。**答复「用例通过」才开测**；有修改意见就改完再 ask 一次。${reworked ? '（这张卡的用例已经审过的话——历史里有「用例通过」的答复——只要不改用例，就不用再审，直接执行。）' : ''}`,
+    `3. **逐条执行**：开始操作浏览器前报一次 ateam progress --as ${agentId} "开始测：<先测哪条>"。**每测完一条，先把结果（通过 / 不通过、实际看到的、问题）写进报告，再报进度**：ateam progress --as ${agentId} "第 1/${n} 条 通过：<看到了什么>，已写入报告"。测到一半要停，先在报告里标「测到一半：<到哪了>」。`,
+    '4. **收尾**：清理造的数据并在「测试数据清理」里逐条写明；填好开头的结论、结束时间和汇总表，再 ateam submit。',
+    '',
+    '**⚠ 测试时最容易忘的事：报进度。** 在浏览器里操作不会调用 ateam，服务看不到你在干活；用户在看板上也只能看到进度笔记。两次进度之间不要超过 5 分钟；一条要测很久（等数据、等定时任务）先带 --expect <分钟> 报备。宁可多报，不要少报。',
+    '',
+    ...(withTemplate ? ['### 报告模板', '', '```markdown', testReportTemplate(task, agentId), '```'] : []),
   ];
 }
 
-function footer(agentId, task) {
+function footer(agentId, task, kind) {
   return [
     '',
     '',
@@ -186,7 +246,7 @@ function footer(agentId, task) {
     '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
-    ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task) : []),
+    ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind)) : []),
   ].join('\n');
 }
 
@@ -270,7 +330,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
     case 'handoff':
       out = `# ⚠ 接手任务 ${title}\n\n`
         + '上一位 worker 中途掉线。先阅读下方历史，再在任务路径所在的 git 仓库里运行 git log --oneline -5 和 git status 了解现状（多仓库时用 git -C <仓库目录> ...），在已有改动基础上继续，不要从头做起。\n\n'
-        + (task.kind !== 'demo' && isTestRole(task.role) ? '这是测试卡：先读任务路径里已有的测试报告，已经标了通过 / 不通过的条目不要重测，从第一条「未测」或「测到一半」的接着测，结果继续写进同一份报告。\n\n' : '')
+        + (task.kind !== 'demo' && isTestRole(task.role) ? `这是测试卡：先读已有的测试报告 \`${testReportPath(task)}\`（没有就按下面流程从第 1 步建）。用例还没审过（历史里没有「用例通过」的答复）就先把用例写完提交审核；审过了就接着执行：已经标了通过 / 不通过的条目不要重测，从第一条「未测」或「测到一半」的接着测，结果继续写进同一份报告，开头「测试人」后面补上「接手：你的编号，从第 N 条开始」。\n\n` : '')
         + `${formatTask(task)}${deliverySection(delivery)}`;
       break;
     case 'own':
@@ -307,7 +367,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
-  return out + footer(agentId, task);
+  return out + footer(agentId, task, kind);
 }
 
 // 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用

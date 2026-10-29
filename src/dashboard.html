@@ -224,6 +224,9 @@ input[type="checkbox"]:not(.switch):checked::after {
 .warn-text { color: var(--rework); }
 .install-done { color: var(--approved); font-weight: 600; }
 .install-pick { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+.setting:has(> .setting-text) { flex-wrap: wrap; }
+.setting > .setting-text { order: 1; width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.setting > .setting-text:focus { outline: none; border-color: var(--brand); }
 .setting-num { width: 72px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
 .rules-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--sunken); }
@@ -1759,6 +1762,8 @@ const SETTING_ITEMS = [
   { group: 'leader' },
   { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在「使用说明 → leader」里点「下线」才进入。开着时，leader 掉线（超过下面的时间既没挂着监听、也没执行命令）也自动进入，重新挂上监听或执行命令就自动退出。token 用完后它的后台监听最多还会挂半小时，这段时间仍算在线。' },
   { key: 'leaderAwayMin', type: 'int', label: '断开多久算掉线（分钟）', hint: '只在上面的自动开关开着时有用。' },
+  { group: '测试' },
+  { key: 'testTemplate', type: 'text', label: '测试报告模板', placeholder: '留空 = 用 ateam 自带的模板', hint: '客户要求用他们的测试用例模板时，把模板文件放进项目（建议提交进 git），在这里填它的相对路径，比如 docs/test/客户测试用例模板.md。之后 test worker 都按这个模板写报告。Markdown / 文本模板可以写占位符：{{卡号}} {{标题}} {{测试人}} {{验收标准}}，{{#每条}}…{{/每条}} 之间按验收标准逐条重复（里面用 {{序号}} {{验收标准}}）。Excel、Word 模板 worker 会复制一份再填。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';
@@ -1796,6 +1801,10 @@ function settingsPage() {
         input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
         input.checked = !!cfg[it.key];
         input.addEventListener('change', () => saveSetting(it.key, input.checked));
+      } else if (it.type === 'text') {
+        input = el('input', { type: 'text', class: 'setting-text', placeholder: it.placeholder || '' });
+        input.value = String(cfg[it.key] ?? '');
+        input.addEventListener('change', () => saveSetting(it.key, input.value));
       } else {
         input = el('input', { type: 'number', class: 'setting-num', min: '1', step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);
@@ -2046,7 +2055,7 @@ function renderHelper(force = false) {
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
   if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
-  if (!force && helper.tab === 'settings' && document.activeElement?.classList?.contains('setting-num') && panel.contains(document.activeElement)) return;
+  if (!force && helper.tab === 'settings' && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('setting-text')) && panel.contains(document.activeElement)) return;
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
   const { agents, tasks } = data.state;
   const online = agents.filter((a) => a.status === 'online');

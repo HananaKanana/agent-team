@@ -164,12 +164,26 @@ const CRITIQUE_STATUS = {
 
 // 测试卡常见的毛病：一进浏览器就忘了报进度，看板上一直没动静，15 分钟后还会被当成停住
 const isTestRole = (role) => /^(test|qa|测试)$/i.test(String(role ?? '').trim());
-// 测试报告放哪：任务路径里有 .md 文件就用它，否则放在第一个路径下面
-export function testReportPath(task) {
+// 测试报告放哪：任务路径里直接写了报告文件就用它，否则放在第一个路径下面。
+// 扩展名跟模板走（项目配了 Excel / Word 模板，报告也是那个格式）
+export function testReportPath(task, tpl) {
+  const ext = tpl?.ext || '.md';
   const paths = (task.paths ?? []).map((p) => String(p).replace(/\/+$/, ''));
-  const md = paths.find((p) => p.endsWith('.md'));
-  if (md) return md;
-  return paths[0] ? `${paths[0]}/${task.id}-测试报告.md` : `${task.id}-测试报告.md`;
+  const file = paths.find((p) => p.toLowerCase().endsWith(ext.toLowerCase()));
+  if (file) return file;
+  return paths[0] ? `${paths[0]}/${task.id}-测试报告${ext}` : `${task.id}-测试报告${ext}`;
+}
+
+// 项目自己的文本模板：替换占位符。{{卡号}} {{标题}} {{测试人}} {{验收标准}}（编号列表），
+// {{#每条}}…{{/每条}} 按验收标准重复，里面用 {{序号}} {{验收标准}}
+function fillTemplate(text, task, agentId) {
+  const acc = task.acceptance?.length ? task.acceptance : ['<这张卡没写验收标准，按描述自己列出要测的点>'];
+  return text
+    .replace(/\{\{#每条\}\}([\s\S]*?)\{\{\/每条\}\}/g, (_, block) => acc.map((a, i) => block.replace(/\{\{序号\}\}/g, String(i + 1)).replace(/\{\{验收标准\}\}/g, oneLine(a))).join(''))
+    .replace(/\{\{卡号\}\}/g, task.id)
+    .replace(/\{\{标题\}\}/g, task.title)
+    .replace(/\{\{测试人\}\}/g, agentId)
+    .replace(/\{\{验收标准\}\}/g, acc.map((a, i) => `${i + 1}. ${oneLine(a)}`).join('\n'));
 }
 
 // 按卡填好的测试报告模板（格式见 skills/ateam-worker/test-report-template.md）
@@ -217,26 +231,35 @@ function testReportTemplate(task, agentId) {
 }
 
 // withTemplate：领卡、接手时附模板；答复、打回、重复 wait 时只提醒流程，不再整份重复
-function testProgressRule(agentId, task, withTemplate = true) {
+function testProgressRule(agentId, task, withTemplate = true, tpl = null) {
   const n = task.acceptance?.length || 'N';
-  const file = testReportPath(task);
+  const file = testReportPath(task, tpl);
+  // 项目配了自己的模板（客户要求的格式）：按它写，栏目和写法不改；ateam 的流程照旧
+  const custom = !!tpl;
+  const custText = custom && tpl.text != null;
   const reworked = task.rejectCount > 0 || task.history?.some((h) => h.type === 'answered' && /用例/.test(h.text ?? ''));
   return [
     '',
     '## 测试流程（按顺序做，每一步都留在磁盘上，掉线了接手的人能接着做）',
     '',
-    `1. **建报告**：把下面的模板原样存成 \`${file}\`（已经按这张卡填好了验收标准，每条「未测」）。`,
-    `2. **设计用例**：每条验收标准补上测试数据、步骤、期望；正常流程之外，容易出问题的边界、异常、权限情况作为 1a、1b… 补在对应条目下面。结果都还是「未测」。写完运行 ateam ask --as ${agentId} "用例已写好，请审核：${file}"，然后 ateam wait 等答复。**答复「用例通过」才开测**；有修改意见就改完再 ask 一次。${reworked ? '（这张卡的用例已经审过的话——历史里有「用例通过」的答复——只要不改用例，就不用再审，直接执行。）' : ''}`,
+    custom
+      ? `1. **建报告**：这个项目规定用自己的测试报告模板 \`${tpl.path}\`（比如客户给的），**栏目、顺序、写法都按它来，不要改成别的格式、不要加删栏目**。${custText ? `下面是按这张卡填好占位符的内容，原样存成 \`${file}\`` : `把它复制成 \`${file}\`（cp 原文件，保留格式），再在副本里填写`}。每条验收标准都要在报告里有对应的用例，结果那一栏没开始的写「未测」。${tpl.error ? `（${tpl.error}，先 ateam ask 说明）` : ''}`
+      : `1. **建报告**：把下面的模板原样存成 \`${file}\`（已经按这张卡填好了验收标准，每条「未测」）。`,
+    `2. **设计用例**：每条验收标准补上测试数据、步骤、期望；正常流程之外，容易出问题的边界、异常、权限情况${custom ? '按模板的编号方式补成单独的用例' : '作为 1a、1b… 补在对应条目下面'}。结果都还是「未测」。写完运行 ateam ask --as ${agentId} "用例已写好，请审核：${file}"，然后 ateam wait 等答复。**答复「用例通过」才开测**；有修改意见就改完再 ask 一次。${reworked ? '（这张卡的用例已经审过的话——历史里有「用例通过」的答复——只要不改用例，就不用再审，直接执行。）' : ''}`,
     `3. **逐条执行**：开始操作浏览器前报一次 ateam progress --as ${agentId} "开始测：<先测哪条>"。**每测完一条，先把结果（通过 / 不通过、实际看到的、问题）写进报告，再报进度**：ateam progress --as ${agentId} "第 1/${n} 条 通过：<看到了什么>，已写入报告"。测到一半要停，先在报告里标「测到一半：<到哪了>」。`,
-    '4. **收尾**：清理造的数据并在「测试数据清理」里逐条写明；填好开头的结论、结束时间和汇总表，再 ateam submit。',
+    custom
+      ? '4. **收尾**：清理造的数据（模板里有对应栏目就写在那，没有就写进提交说明）；按模板填好结论、汇总这类栏目，再 ateam submit。'
+      : '4. **收尾**：清理造的数据并在「测试数据清理」里逐条写明；填好开头的结论、结束时间和汇总表，再 ateam submit。',
     '',
     '**⚠ 测试时最容易忘的事：报进度。** 在浏览器里操作不会调用 ateam，服务看不到你在干活；用户在看板上也只能看到进度笔记。两次进度之间不要超过 5 分钟；一条要测很久（等数据、等定时任务）先带 --expect <分钟> 报备。宁可多报，不要少报。',
     '',
-    ...(withTemplate ? ['### 报告模板', '', '```markdown', testReportTemplate(task, agentId), '```'] : []),
+    ...(!withTemplate || (custom && !custText) ? [] : custom
+      ? [`### 报告模板（项目规定的 ${tpl.path}）`, '', '````', fillTemplate(tpl.text, task, agentId), '````']
+      : ['### 报告模板', '', '```markdown', testReportTemplate(task, agentId), '```']),
   ];
 }
 
-function footer(agentId, task, kind) {
+function footer(agentId, task, kind, tpl) {
   return [
     '',
     '',
@@ -246,7 +269,7 @@ function footer(agentId, task, kind) {
     '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
-    ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind)) : []),
+    ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');
 }
 
@@ -330,7 +353,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
     case 'handoff':
       out = `# ⚠ 接手任务 ${title}\n\n`
         + '上一位 worker 中途掉线。先阅读下方历史，再在任务路径所在的 git 仓库里运行 git log --oneline -5 和 git status 了解现状（多仓库时用 git -C <仓库目录> ...），在已有改动基础上继续，不要从头做起。\n\n'
-        + (task.kind !== 'demo' && isTestRole(task.role) ? `这是测试卡：先读已有的测试报告 \`${testReportPath(task)}\`（没有就按下面流程从第 1 步建）。用例还没审过（历史里没有「用例通过」的答复）就先把用例写完提交审核；审过了就接着执行：已经标了通过 / 不通过的条目不要重测，从第一条「未测」或「测到一半」的接着测，结果继续写进同一份报告，开头「测试人」后面补上「接手：你的编号，从第 N 条开始」。\n\n` : '')
+        + (task.kind !== 'demo' && isTestRole(task.role) ? `这是测试卡：先读已有的测试报告 \`${testReportPath(task, result.testTemplate)}\`（没有就按下面流程从第 1 步建）。用例还没审过（历史里没有「用例通过」的答复）就先把用例写完提交审核；审过了就接着执行：已经标了通过 / 不通过的条目不要重测，从第一条「未测」或「测到一半」的接着测，结果继续写进同一份报告，并在测试人那一栏注明「接手：你的编号，从第 N 条开始」。\n\n` : '')
         + `${formatTask(task)}${deliverySection(delivery)}`;
       break;
     case 'own':
@@ -367,7 +390,7 @@ export function formatWait(result, agentId, waiting, round = 0) {
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
-  return out + footer(agentId, task, kind);
+  return out + footer(agentId, task, kind, result.testTemplate);
 }
 
 // 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用

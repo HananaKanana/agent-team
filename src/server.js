@@ -198,13 +198,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 新领到、接手、继续的任务附上：所属需求的说明（这次需求的设计文档、计划在哪等，只对这个需求的任务有效）
   // 和项目规则（长期有效的约定）
-  // 测试卡：项目配了自己的报告模板（比如客户给的）就附上；文本格式的附全文，Excel / Word 这类只给路径
-  const TEXT_TEMPLATE = /\.(md|markdown|txt|csv)$/i;
+  // 测试卡：项目配了自己的报告模板（比如客户给的，只能是 .md）就附上全文
   function testTemplateFor(task, full) {
     const path = store.config().testTemplate;
     if (!path || task.kind === 'demo' || !/^(test|qa|测试)$/i.test(String(task.role ?? '').trim())) return null;
-    const out = { path, ext: (path.match(/\.[^./]+$/) || [''])[0] };
-    if (full && TEXT_TEMPLATE.test(path)) {
+    const out = { path };
+    if (full) {
       try { out.text = readFileSync(join(root, path), 'utf8'); } catch (err) { out.error = `读不到模板文件：${err.message}`; }
     }
     return out;
@@ -534,6 +533,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/agents/still-there': (b) => ({ agent: store.keepWaiting(String(b.id ?? '')) }),
     'POST /api/settings': (b) => {
       const tpl = typeof b.testTemplate === 'string' ? b.testTemplate.trim().replace(/^\.\//, '') : '';
+      if (tpl && !/\.md$/i.test(tpl)) throw new AteamError('INVALID', '测试报告模板只能是 Markdown（.md）。客户给的是 Excel / Word 的话，先让 leader 派一张卡把它转成 .md 模板，再填转好的路径。');
       if (tpl && !existsSync(join(root, tpl))) throw new AteamError('INVALID', `项目里找不到 ${tpl}。先把模板文件放进项目（建议提交进 git），再填它的相对路径。`);
       return { settings: store.setSettings(b) };
     },

@@ -1763,7 +1763,7 @@ const SETTING_ITEMS = [
   { key: 'autoNoLeader', type: 'bool', label: 'leader 掉线时自动进入无 leader 模式', hint: '关着时，只有你在「使用说明 → leader」里点「下线」才进入。开着时，leader 掉线（超过下面的时间既没挂着监听、也没执行命令）也自动进入，重新挂上监听或执行命令就自动退出。token 用完后它的后台监听最多还会挂半小时，这段时间仍算在线。' },
   { key: 'leaderAwayMin', type: 'int', label: '断开多久算掉线（分钟）', hint: '只在上面的自动开关开着时有用。' },
   { group: '测试' },
-  { key: 'testTemplate', type: 'text', label: '测试报告模板', placeholder: '留空 = 用 ateam 自带的模板', hint: '客户要求用他们的测试用例模板时，把模板文件放进项目（建议提交进 git），在这里填它的相对路径，比如 docs/test/客户测试用例模板.md。之后 test worker 都按这个模板写报告。Markdown / 文本模板可以写占位符：{{卡号}} {{标题}} {{测试人}} {{验收标准}}，{{#每条}}…{{/每条}} 之间按验收标准逐条重复（里面用 {{序号}} {{验收标准}}）。Excel、Word 模板 worker 会复制一份再填。' },
+  { key: 'testTemplate', type: 'text', label: '测试报告模板', placeholder: '留空 = 用 ateam 自带的模板', hint: '客户要求用他们的测试用例模板时，把模板文件放进项目（建议提交进 git），在这里填它的相对路径，比如 docs/test/客户测试用例模板.md。之后 test worker 都按这个模板写报告。只能是 Markdown（.md）：客户给的是 Excel / Word，先让 leader 派一张卡把它转成 .md 模板（交付时要 Excel，也可以再派一张卡把报告转回去）。模板里可以写占位符：{{卡号}} {{标题}} {{测试人}} {{验收标准}}，{{#每条}}…{{/每条}} 之间按验收标准逐条重复（里面用 {{序号}} {{验收标准}}）。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';

@@ -3023,8 +3023,10 @@ function demoRow(t) {
   const open = () => { view.task = t.id; saveView(); renderDrawer(true); };
   // 行里有按钮，行本身不能也是 button：用可聚焦的 div
   return el('div', {
-    class: 'demo-row', role: 'button', tabindex: '0', title: `${t.id} ${t.title}`,
+    class: 'demo-row', 'data-id': t.id, role: 'button', tabindex: '0', title: `${t.id} ${t.title}`,
     onclick: open, onkeydown: (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(); } },
+    // 右键：和看板上的卡一样，有打开详情、收回、作废、复制
+    oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openCardMenu(t.id, e.clientX, e.clientY); },
   },
     el('div', null,
       el('div', { class: 't' }, el('span', { class: 'key' }, t.id), t.title,
@@ -4738,7 +4740,7 @@ if (new URLSearchParams(location.search).has('inputlog')) {
   addEventListener('pointerdown', (e) => {
     clearTimeout(press);
     if (!touchScroll || e.button !== 0) return;
-    const c = e.target.closest('.card[data-id], .job[data-job], .job-mini[data-job]');
+    const c = e.target.closest('.card[data-id], .demo-row[data-id], .job[data-job], .job-mini[data-job]');
     if (!c) return;
     const { clientX: x, clientY: y } = e;
     press = setTimeout(() => {

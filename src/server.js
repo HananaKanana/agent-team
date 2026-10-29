@@ -291,6 +291,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   let doctor = null; // 自检结果，启动后在后台跑一次
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
+  // 启动时按当前版本的文件布局写一遍（新加的拆分方式马上生效，不用等第一次状态变化；内容没变的文件不会重写）
+  saveState(dataDir, store.state);
 
   // 每次状态变化：落盘，并在下一轮事件循环唤醒挂起的请求。
   // 唤醒过程本身（nextFor 的 touch、takeEvents）也会触发 onChange，用 waking 标记避免循环。

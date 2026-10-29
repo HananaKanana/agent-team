@@ -19,6 +19,12 @@ function readJson(file) {
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
+// 需求该放在哪：已验收 / 已作废的进 archive，没结束的演播需求进 demos，其余在 board.json
+function placeOf(job) {
+  if (DONE.has(job.status)) return 'archive';
+  return job.demo ? 'demos' : 'board';
+}
+
 export function loadState(dir) {
   const board = join(dir, 'board.json');
   if (!existsSync(board)) {
@@ -28,16 +34,34 @@ export function loadState(dir) {
   const state = { ...readJson(board) };
   const runtime = join(dir, 'runtime.json');
   if (existsSync(runtime)) Object.assign(state, readJson(runtime));
+  // 每个需求可能出现在几处（保存到一半进程退出：新位置写好了、旧位置还没删）。
+  // 取和自己状态对得上的那一份；都对得上（比如刚验收：board 里是进行中、archive 里是已验收）取更新时间晚的。
+  // 它的卡也只取那一份里的
+  const sources = [{ from: 'board', jobs: state.jobs ?? [], tasks: state.tasks ?? [] }];
   for (const sub of ['archive', 'demos']) {
     const folder = join(dir, sub);
     if (!existsSync(folder)) continue;
     for (const name of readdirSync(folder)) {
       if (!name.endsWith('.json')) continue;
       const { job, tasks } = readJson(join(folder, name));
-      if (job) state.jobs.push(job);
-      state.tasks.push(...(tasks ?? []));
+      if (job) sources.push({ from: sub, jobs: [job], tasks: tasks ?? [] });
     }
   }
+  const pick = new Map(); // 需求编号 → 取哪个来源
+  for (const src of sources) {
+    for (const job of src.jobs) {
+      const had = pick.get(job.id);
+      const fits = placeOf(job) === src.from;
+      const hadFits = had && placeOf(had.job) === had.from;
+      const newer = had && (job.updatedAt ?? 0) > (had.job.updatedAt ?? 0);
+      if (!had || (fits && !hadFits) || (fits === hadFits && newer)) pick.set(job.id, { from: src.from, job });
+    }
+  }
+  state.jobs = [...pick.values()].map((x) => x.job);
+  state.tasks = sources.flatMap((src) => src.tasks.filter((t) => {
+    const p = pick.get(t.jobId);
+    return p ? p.from === src.from : src.from === 'board';
+  }));
   state.jobs.sort(byId);
   state.tasks.sort(byId);
   state.agents ??= [];
@@ -60,37 +84,44 @@ function writeIfChanged(file, value) {
   written.set(file, text);
 }
 
-// 一个需求连同它的卡写成一个文件；folder 里不再属于这一类的文件删掉（需求重新打开、演播需求作废进了归档……）
+// 一个需求连同它的卡写成一个文件
 function writeJobFiles(dir, folder, jobs, tasks) {
-  const ids = new Set(jobs.map((j) => j.id));
   for (const job of jobs) {
     writeIfChanged(join(dir, folder, `${job.id}.json`), { job, tasks: tasks.filter((t) => t.jobId === job.id) });
   }
+}
+// folder 里不再属于这一类的文件删掉（需求重新打开、演播需求作废进了归档……）
+function dropStale(dir, folder, keep) {
   for (const name of readdirSync(join(dir, folder))) {
-    if (name.endsWith('.json') && !ids.has(name.slice(0, -5))) {
+    if (name.endsWith('.json') && !keep.has(name.slice(0, -5))) {
       unlinkSync(join(dir, folder, name));
       written.delete(join(dir, folder, name));
     }
   }
 }
 
+// 顺序：先写新位置，再写 board.json，最后删旧位置。中途退出最多留下重复的一份（读的时候按状态取对的那份），不会丢需求
 export function saveState(dir, state) {
   mkdirSync(join(dir, 'archive'), { recursive: true });
   mkdirSync(join(dir, 'demos'), { recursive: true });
-  const done = new Set(state.jobs.filter((j) => DONE.has(j.status)).map((j) => j.id));
-  const demo = new Set(state.jobs.filter((j) => j.demo && !done.has(j.id)).map((j) => j.id));
+  const at = new Map(state.jobs.map((j) => [j.id, placeOf(j)]));
+  const inPlace = (where) => state.jobs.filter((j) => at.get(j.id) === where);
+  writeJobFiles(dir, 'archive', inPlace('archive'), state.tasks);
+  writeJobFiles(dir, 'demos', inPlace('demos'), state.tasks);
+
   const board = {};
   for (const key of BOARD_KEYS) if (key in state) board[key] = state[key];
-  board.jobs = state.jobs.filter((j) => !done.has(j.id) && !demo.has(j.id));
-  board.tasks = state.tasks.filter((t) => !done.has(t.jobId) && !demo.has(t.jobId));
+  board.jobs = inPlace('board');
+  // 找不到需求的卡（不该出现）也留在 board.json，不丢
+  board.tasks = state.tasks.filter((t) => (at.get(t.jobId) ?? 'board') === 'board');
   writeIfChanged(join(dir, 'board.json'), board);
 
   const runtime = {};
   for (const [key, value] of Object.entries(state)) if (!BOARD_KEYS.includes(key)) runtime[key] = value;
   writeIfChanged(join(dir, 'runtime.json'), runtime);
 
-  writeJobFiles(dir, 'archive', state.jobs.filter((j) => done.has(j.id)), state.tasks);
-  writeJobFiles(dir, 'demos', state.jobs.filter((j) => demo.has(j.id)), state.tasks);
+  dropStale(dir, 'archive', new Set(inPlace('archive').map((j) => j.id)));
+  dropStale(dir, 'demos', new Set(inPlace('demos').map((j) => j.id)));
   // 老版本的单个状态文件：拆分写好后改名留作备份
   const old = join(dir, 'state.json');
   if (existsSync(old)) renameSync(old, `${old}.bak`);

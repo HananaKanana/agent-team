@@ -76,11 +76,11 @@ export async function ensureGitRepo(root) {
 export function ensureGitignore(root) {
   const dir = join(root, '.ateam');
   mkdirSync(dir, { recursive: true });
-  // .ateam/ 自带的 .gitignore：卡和需求（board.json、archive/）、项目规则要提交；一直在变的运行状态、端口、临时文件、
+  // .ateam/ 自带的 .gitignore：卡和需求（board.json、demos/、archive/）、项目规则、测试报告模板要提交；一直在变的运行状态、端口、临时文件、
   // 老版本状态文件的备份不提交。老项目缺的行补上
   const own = join(dir, '.gitignore');
   const want = ['port', '*.tmp', 'runtime.json', 'state.json.bak'];
-  const have = existsSync(own) ? readFileSync(own, 'utf8') : '# ateam 自动生成：卡和需求（board.json、archive/）、项目规则提交；运行状态、端口、临时文件不提交\n';
+  const have = existsSync(own) ? readFileSync(own, 'utf8') : '# ateam 自动生成：卡和需求（board.json、demos/、archive/）、项目规则、测试报告模板提交；运行状态、端口、临时文件不提交\n';
   const lines = have.split(/\r?\n/).map((l) => l.trim());
   const missing = want.filter((w) => !lines.includes(w));
   if (missing.length || !existsSync(own)) writeFileSync(own, `${have}${have.endsWith('\n') ? '' : '\n'}${missing.join('\n')}${missing.length ? '\n' : ''}`);

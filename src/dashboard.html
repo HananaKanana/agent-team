@@ -1106,6 +1106,13 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline .when { color: var(--faint); font-size: 12px; }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
 .timeline .text { white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; margin-top: 2px; color: var(--ink); }
+.timeline .text.md { white-space: normal; line-height: 1.65; }
+.timeline .text.md > :first-child { margin-top: 0; }
+.timeline .text.md > :last-child { margin-bottom: 0; }
+.timeline .text.md h1, .timeline .text.md h2, .timeline .text.md h3, .timeline .text.md h4 { font-size: 13px; font-weight: 650; margin: 12px 0 4px; }
+.timeline .text.md p { margin: 4px 0; }
+.timeline .text.md ul, .timeline .text.md ol { margin: 4px 0; padding-left: 20px; }
+.timeline .text.md pre { font-size: 12px; }
 
 .md h1, .md h2, .md h3 { color: var(--ink); margin: 14px 0 6px; }
 .md h1 { font-size: 19px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14px; }
@@ -3255,7 +3262,7 @@ function renderDrawer(fresh) {
       const [label, color] = HISTORY[h.type] || [h.type, 'pending'];
       return el('li', { class: `c-${color}` },
         el('div', null, el('span', { class: 'what' }, label), ' ', el('span', { class: 'when' }, `${fmtTime(h.ts)}  ${agentLabel(h.actor)}`)),
-        h.text ? el('div', { class: 'text' }, h.text) : null,
+        h.text ? timelineText(h.text) : null,
         h.commit ? el('div', { class: 'when' }, '提交 ', el('code', null, h.commit)) : null);
     })),
     demo ? null : replyBox(t)));
@@ -3263,6 +3270,15 @@ function renderDrawer(fresh) {
   drawer.scrollTop = scroll;
   drawer.classList.toggle('wide', drawerWide);
   if (fresh) drawer.querySelector('.close').focus();
+}
+
+// 时间线里的文字：worker 的交付说明、进度常按 Markdown 写（## 小标题、- 列表、代码块），像 Markdown 的就渲染，其余原样显示
+const MD_HINT = /^\s*(#{1,6}\s|[-*]\s|\d+\.\s|```|\|.*\|\s*$|>\s)/m;
+function timelineText(text) {
+  if (!MD_HINT.test(text) && !/\*\*[^*]+\*\*|`[^`\n]+`/.test(text)) return el('div', { class: 'text' }, text);
+  const box = el('div', { class: 'text md' });
+  box.innerHTML = renderMarkdown(text); // renderMarkdown 先转义了 HTML
+  return box;
 }
 
 // ---------- 卡片右键菜单 ----------

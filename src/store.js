@@ -312,7 +312,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function join(role, name = '', wantId = '') {
     role = requireText(role, '角色（--role）');
-    if (role.toLowerCase() === 'lead') throw new AteamError('INVALID', 'lead 是 leader 专用的名字（项目规则里 ## lead 段只给 leader），worker 请用别的角色名。');
+    if (['lead', 'leader'].includes(role.toLowerCase())) throw new AteamError('INVALID', `${role} 是 leader 专用的名字（项目规则里 ## leader 段只给 leader），worker 请用别的角色名。`);
     name = String(name ?? '').trim().slice(0, 40);
     const ts = now();
     const { id, revive, refused } = claimId(role, wantId);

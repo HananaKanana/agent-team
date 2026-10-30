@@ -527,7 +527,9 @@ const commands = {
 
   async status({ flags }) {
     const { state, pending, root, repos, stale } = await request('GET', '/api/state');
-    return formatStatus({ ...state, stale }, pending, flags.job, root, repos, !!flags.all);
+    const { lead } = await request('GET', '/api/rules');
+    const checks = lead ? `\n\n## leader 规则（项目规则 ## leader 段：review、自己改代码、推送时照做）\n\n${lead}` : '';
+    return `${formatStatus({ ...state, stale }, pending, flags.job, root, repos, !!flags.all)}${checks}`;
   },
 
   // 审卡。审卡 worker：ateam critique --as critic-1 ok T5 T6 ／ issue T5 "<问题和建议>" [--because "和 T12 冲突"]
@@ -582,7 +584,7 @@ const commands = {
   async show({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam show T3');
     const { task, review, leadRules } = await request('GET', `/api/task?id=${encodeURIComponent(id)}`);
-    const checks = leadRules ? `## review 时按项目规则（## lead 段）检查\n\n${leadRules}\n\n` : '';
+    const checks = leadRules ? `## review 时按项目规则（## leader 段）检查\n\n${leadRules}\n\n` : '';
     return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatReview(review)}${checks}${formatTask(task)}`;
   },
 

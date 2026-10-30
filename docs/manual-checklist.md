@@ -94,7 +94,7 @@
 3. [ ] `ateam rules add "…" --role test` 不带 `--user-approved` 被拒，说明写「将在 test 段加一条」；带上后加到 test 段末尾（没有 test 段就新建）；`set --file` 不带授权被拒并列出各段条数变化
 4. [ ] 看板 使用说明 →「项目规则」：编辑框下方「预览 <角色> 会收到」随输入实时变化；保存不需要额外确认
 5. [ ] 写一段 `## 全员`：`ateam rules` 和看板预览上方都提示「这些段目前没有角色会收到：全员」
-6. [ ] 规则里写一段 `## lead`：worker 领卡收不到这一段；看板和 `ateam rules` 不提示「没有角色会收到」；leader `ateam show T?`（有提交的卡）在 review 摘要后出现「review 时按项目规则（## lead 段）检查」；`ateam join --role lead` 被拒
+6. [ ] 规则里写一段 `## leader`（`## lead` 也认）：worker 领卡收不到这一段；看板和 `ateam rules` 不提示「没有角色会收到」；`ateam status` 末尾显示这一段；leader `ateam show T?`（有提交的卡）在 review 摘要后也显示；`ateam join --role leader` 被拒
 
 ## 看板交互
 

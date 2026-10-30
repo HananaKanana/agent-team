@@ -583,7 +583,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const rules = readRules();
       const role = url.searchParams.get('role');
       const roles = knownRoles();
-      return { rules, ...(role ? { forRole: rulesFor(rules, role) } : {}), unreceived: unreceived(rules, roles), needsTidy: needsTidy(rules), roles };
+      return { rules, lead: leadRules(rules).trim(), ...(role ? { forRole: rulesFor(rules, role) } : {}), unreceived: unreceived(rules, roles), needsTidy: needsTidy(rules), roles };
     },
     'POST /api/rules': (b) => ({ rules: approvedRules(b.text, !!b.userApproved, countsChange(readRules(), String(b.text ?? ''))) }),
     'POST /api/rules/add': (b) => {

@@ -920,9 +920,9 @@ html.touch-mode .side-hold { opacity: 1; }
 .side-hold.on:hover { background: color-mix(in srgb, var(--asking) 24%, var(--surface)); color: var(--asking); }
 .lane-held { padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 600; color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, transparent); }
 .lane.held { background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 5%, transparent) 10px 20px); }
-/* 整个需求暂停领取：左侧需求项和待领取列一样的斜纹 */
+/* 整个需求暂停领取：左侧需求项和待领取列完全一样的效果（同样的底色 + 斜纹），选中时靠蓝色边框区分 */
 .job.paused, .job.paused:hover, .job.paused[aria-current="true"], .job.paused[aria-current="true"]:hover,
-.job-mini.paused, .job-mini.paused:hover, .job-mini.paused[aria-current="true"] { background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 3%, transparent) 10px 20px); }
+.job-mini.paused, .job-mini.paused:hover, .job-mini.paused[aria-current="true"] { background-color: var(--sunken); background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 5%, transparent) 10px 20px); }
 .job.paused:not([aria-current="true"]) .title { color: var(--muted); }
 .lane.held h3::before { background: var(--asking); }
 .lane.held .card { opacity: .62; }

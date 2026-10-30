@@ -77,6 +77,9 @@
 
 1. [ ] 两张卡改同一个目录，一张有人在做：另一张不派，卡片计时处写「等 T? 交」，同角色空闲 worker 的等待说明里写原因；那张提交后另一张照常派出
 2. [ ] leader `ateam show T?`（有提交的卡）：开头有 review 摘要，列出改了的文件、+/− 行数、「新文件」、不在任务路径里的文件标 ⚠
+3. [ ] leader 对进行中的卡 `ateam task edit T? --desc-file ... --accept ...`：成功，输出写明已通知 worker；worker 下一次 progress / wait / submit 收到「leader 修改了这张卡的描述、验收标准，以卡片最新内容为准」及新内容；看板卡片显示新描述，时间线「修改 · 已通知」；改进行中卡的 --role 或 --after 被拒
+4. [ ] `ateam task add ... --paths a --paths b --after T1 --after T2`：路径是 a、b，依赖是 T1、T2；`--title x --title y` 报错「写了两遍」
+5. [ ] 新卡和一个暂停领取的需求里的卡路径重叠：「⚠ 路径重叠」里那张卡标「暂停领取中」，建议给暂停的卡加 --after 新卡，而不是反过来
 
 ## 无 leader 模式
 
@@ -91,6 +94,7 @@
 3. [ ] `ateam rules add "…" --role test` 不带 `--user-approved` 被拒，说明写「将在 test 段加一条」；带上后加到 test 段末尾（没有 test 段就新建）；`set --file` 不带授权被拒并列出各段条数变化
 4. [ ] 看板 使用说明 →「项目规则」：编辑框下方「预览 <角色> 会收到」随输入实时变化；保存不需要额外确认
 5. [ ] 写一段 `## 全员`：`ateam rules` 和看板预览上方都提示「这些段目前没有角色会收到：全员」
+6. [ ] 规则里写一段 `## lead`：worker 领卡收不到这一段；看板和 `ateam rules` 不提示「没有角色会收到」；leader `ateam show T?`（有提交的卡）在 review 摘要后出现「review 时按项目规则（## lead 段）检查」；`ateam join --role lead` 被拒
 
 ## 看板交互
 

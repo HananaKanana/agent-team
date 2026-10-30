@@ -9,7 +9,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
-import { addRule, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
+import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { runDoctor } from './doctor.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
@@ -615,10 +615,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'GET /api/task': async (_b, url) => {
       const task = store.getTask(url.searchParams.get('id') ?? '');
       if (!task.commits?.length || task.kind === 'demo') return { task };
+      const lead = leadRules(readRules()).trim();
       const files = await commitStats(root, task.commits);
       const norm = (p) => String(p).trim().replace(/^\.\//, '').replace(/\/+$/, '');
       const inPaths = (f) => task.paths.map(norm).some((p) => p === '' || p === '.' || f === p || f.startsWith(`${p}/`));
-      return { task, review: files.map((f) => ({ ...f, outside: !inPaths(f.file) })) };
+      return { task, review: files.map((f) => ({ ...f, outside: !inPaths(f.file) })), ...(lead ? { leadRules: lead } : {}) };
     },
   };
 

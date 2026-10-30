@@ -1,5 +1,5 @@
 // 项目规则按角色分段：`## ALL` 段和第一个小标题之前的内容发给所有人，
-// `## backend`、`## frontend, test` 这类段只发给标题里的角色。
+// `## backend`、`## frontend, test` 这类段只发给标题里的角色，`## lead` 段只给 leader（review 时附在 ateam show 里）。
 // 看板 src/dashboard.html 里有一份同样规则的解析（预览用），两边改动要保持一致。
 
 const HEADING = /^## (.*)$/;
@@ -103,8 +103,17 @@ export function sectionCounts(text) {
 }
 
 // 小标题里写了、但没有任何卡或 worker 是这个角色的名字（比如写成了 ## 全员）
+// `## lead` 段只给 leader 看（review 的编译、检查命令这类），不发给任何 worker
+export const LEAD_ROLE = 'lead';
+export function leadRules(text) {
+  return parseRules(text)
+    .filter((s) => s.roles !== 'all' && s.roles.includes(LEAD_ROLE) && hasContent(s.body))
+    .map((s) => s.body.trim())
+    .join('\n\n');
+}
+
 export function unreceived(text, knownRoles = []) {
-  const known = new Set(knownRoles.map((r) => String(r).trim().toLowerCase()));
+  const known = new Set([...knownRoles.map((r) => String(r).trim().toLowerCase()), LEAD_ROLE]);
   const out = [];
   for (const s of parseRules(text)) {
     if (s.roles === 'all') continue;

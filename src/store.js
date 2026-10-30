@@ -166,7 +166,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       .filter((t) => t.id !== task.id && !isDemo(t) && !['approved', 'cancelled'].includes(t.status)
         && !before.has(t.id) && !ancestors(t.dependsOn).has(task.id)
         && pathsOverlap(task.paths, t.paths))
-      .map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee, paths: t.paths }));
+      .map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee, paths: t.paths, onHold: !!t.onHold, jobOnHold: !!state.jobs.find((j) => j.id === t.jobId)?.onHold }));
   }
 
   // ---------- 需求与任务 ----------
@@ -243,8 +243,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function editTask(taskId, patch = {}) {
     const task = getTask(taskId);
     if (isDemo(task)) return editDemo(task, patch);
-    if (task.status !== 'pending' && task.status !== 'held') {
-      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，只有 pending 或 held 的任务可以修改。`);
+    // 已经有人拿着的卡（进行中、等答复、待 review）：也能改，卡片保持最新；改了什么自动作为补充说明发给拿着它的 worker。
+    // 角色和依赖这时改没有意义（已经派出去了），不让改
+    const held = ['working', 'asking', 'submitted'].includes(task.status);
+    if (!held && task.status !== 'pending' && task.status !== 'held') {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 当前状态是 ${task.status}，已经结束，不能修改。需要补做就加新任务。`);
+    }
+    if (held && (patch.role !== undefined || patch.dependsOn !== undefined)) {
+      throw new AteamError('BAD_STATE', `任务 ${task.id} 已经派给 ${task.assignee ?? 'worker'}（${task.status}），不能再改角色和依赖。只改标题、描述、验收标准、路径。`);
     }
     const changes = [];
     if (patch.title !== undefined) { task.title = requireText(patch.title, '任务标题'); changes.push('标题'); }
@@ -267,7 +273,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       changes.push('依赖');
     }
     if (changes.length === 0) throw new AteamError('INVALID', '没有要修改的内容。请至少提供 --title、--role、--desc-file、--accept、--paths、--after 中的一项。');
-    addHistory(task, 'edited', 'lead', `修改了${changes.join('、')}`);
+    if (held) {
+      const parts = [`leader 修改了这张卡的${changes.join('、')}，**以卡片最新内容为准**（和你之前看到的不一致时按下面的来）：`];
+      if (patch.title !== undefined) parts.push(`标题：${task.title}`);
+      if (patch.paths !== undefined) parts.push(`允许改动的路径：${task.paths.join('、')}`);
+      if (patch.acceptance !== undefined) parts.push(`验收标准：\n${task.acceptance.map((a, i) => `${i + 1}. ${a}`).join('\n')}`);
+      if (patch.description !== undefined) parts.push(`描述：\n${task.description || '（无）'}`);
+      const line = parts.join('\n\n');
+      task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${line}` : line;
+    }
+    addHistory(task, 'edited', 'lead', `修改了${changes.join('、')}${held ? '（已通知拿着它的 worker）' : ''}`);
     task.rev = (task.rev ?? 0) + 1; // 卡改过了，审卡 worker 会再审一次
     changed();
     return task;
@@ -297,6 +312,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function join(role, name = '', wantId = '') {
     role = requireText(role, '角色（--role）');
+    if (role.toLowerCase() === 'lead') throw new AteamError('INVALID', 'lead 是 leader 专用的名字（项目规则里 ## lead 段只给 leader），worker 请用别的角色名。');
     name = String(name ?? '').trim().slice(0, 40);
     const ts = now();
     const { id, revive, refused } = claimId(role, wantId);

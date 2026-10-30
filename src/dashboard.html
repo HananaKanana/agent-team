@@ -2021,7 +2021,7 @@ function hasContent(body) {
 }
 
 function unreceivedRoles(text, known) {
-  const set = new Set(known.map((r) => r.toLowerCase()));
+  const set = new Set([...known.map((r) => r.toLowerCase()), 'lead']); // ## lead 段给 leader，不算没人收
   const out = [];
   for (const x of parseRules(text)) {
     if (x.roles === 'all') continue;

@@ -30,6 +30,8 @@ const DEFAULT_HOLD_SEC = 90;
 
 const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck']);
 const REPEATABLE_FLAGS = new Set(['accept']);
+// 本来就能写多个值（逗号分隔）的参数：写了几遍就合并，不悄悄只留最后一个
+const LIST_FLAGS = new Set(['paths', 'after']);
 
 const USAGE = `用法：ateam <命令> [参数]
 
@@ -110,7 +112,9 @@ function parseArgs(argv) {
       if (value === undefined) fail(`参数 --${name} 缺少值。运行 ateam help 查看用法。`);
     }
     if (REPEATABLE_FLAGS.has(name)) (flags[name] ??= []).push(value);
-    else flags[name] = value;
+    else if (flags[name] === undefined) flags[name] = value;
+    else if (LIST_FLAGS.has(name)) flags[name] = `${flags[name]},${value}`;
+    else fail(`参数 --${name} 写了两遍（${flags[name]}、${value}），不知道用哪个。只写一遍。`);
   }
   return { flags, positional };
 }
@@ -187,11 +191,18 @@ function holdSeconds(flags) {
 function overlapWarning(task, overlaps) {
   if (!overlaps?.length) return '';
   const lines = ['', '', `⚠ 路径重叠：${task.id} 和下面的任务会改同一批文件，又没有先后依赖，可能被两个 worker 同时改：`];
+  // 对方暂停领取（卡或整个需求）：它现在不会派发，让它排到新卡后面才对，不该让新卡等它
+  const paused = (t) => !!(t.onHold || t.jobOnHold);
   for (const t of overlaps) {
     const who = t.assignee ? `，${t.assignee} 在做` : '';
-    lines.push(`- ${t.id} ${t.title}（${t.status}${who}，路径 ${t.paths.join('、')}）`);
+    lines.push(`- ${t.id} ${t.title}（${t.status}${who}${paused(t) ? '，暂停领取中' : ''}，路径 ${t.paths.join('、')}）`);
   }
-  lines.push(`同时改同一个文件，提交时会把对方改到一半的内容一起带进去，或者互相冲突。建议：用 ateam task edit ${task.id} --after ${[...new Set([...task.dependsOn, ...overlaps.map((t) => t.id)])].join(',')} 让它排在后面；或者把它们合成一个任务；确定改的是文件里互不相干的部分，也可以不管。`);
+  const active = overlaps.filter((t) => !paused(t));
+  const held = overlaps.filter(paused);
+  lines.push('同时改同一个文件，提交时会把对方改到一半的内容一起带进去，或者互相冲突。建议：');
+  if (active.length) lines.push(`- 让 ${task.id} 排在后面：ateam task edit ${task.id} --after ${[...new Set([...task.dependsOn, ...active.map((t) => t.id)])].join(',')}；或者把它们合成一个任务。`);
+  if (held.length) lines.push(`- 暂停领取的 ${held.map((t) => t.id).join('、')} 现在不会派发：给它们加依赖、排到 ${task.id} 后面（ateam task edit <编号> --after ${task.id}，记得带上它原有的依赖），不要让 ${task.id} 等它们。`);
+  lines.push('- 确定改的是文件里互不相干的部分，也可以不管。');
   return lines.join('\n');
 }
 
@@ -386,7 +397,8 @@ const commands = {
     if (flags.after !== undefined) body.dependsOn = splitList(flags.after);
     const { task, overlaps } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
-    return `已修改任务 ${task.id}。${overlapWarning(task, overlaps)}${next}`;
+    const told = ['working', 'asking', 'submitted'].includes(task.status) ? `${task.assignee ?? 'worker'} 正拿着这张卡：改动已作为补充说明发给它（它下一次调用 ateam 命令时收到，提交前一定会看到），不用再 ateam note。` : '';
+    return `已修改任务 ${task.id}。${told}${overlapWarning(task, overlaps)}${next}`;
   },
 
   async dismiss({ flags, positional }) {
@@ -569,8 +581,9 @@ const commands = {
 
   async show({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam show T3');
-    const { task, review } = await request('GET', `/api/task?id=${encodeURIComponent(id)}`);
-    return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatReview(review)}${formatTask(task)}`;
+    const { task, review, leadRules } = await request('GET', `/api/task?id=${encodeURIComponent(id)}`);
+    const checks = leadRules ? `## review 时按项目规则（## lead 段）检查\n\n${leadRules}\n\n` : '';
+    return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatReview(review)}${checks}${formatTask(task)}`;
   },
 
   async 'demo add'({ flags }) {

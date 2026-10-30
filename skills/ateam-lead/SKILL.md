@@ -38,18 +38,23 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 - 测试任务提交的报告里有问题时：照常 review 报告（报告写清楚了就通过），再按问题给对应角色加修复任务，修完再加一个测试任务复测。全部通过后才写汇报。
 - 告诉用户要开哪些 worker 时，把 product、test 也算上（比如「需要 1 个 product、1 个 backend、1 个 frontend、1 个 test」）。产品任务在最前、测试任务在最后，同一个窗口不能换角色，所以要分别开。
 
-1. 先定**接口约定**：接口路径、请求和响应格式、共享的类型和常量。写进每个相关任务的描述。
+1. 先定**接口约定**：接口路径、请求和响应格式、共享的类型和常量。写进每个相关任务的描述（前后端两边都写，原样一致）。约定写全了，前后端就能**同时开工**，见下面「前后端并行」。
 2. 建需求：`ateam job new "<标题>" --desc-file job.md`。需求说明只写几句概要（用户选了什么、任务顺序、设计文档和计划文件在哪、这次需求所有任务都要注意的事），它会附在这个需求的每个任务后面发给 worker；细节写进各任务的描述，不要把整份计划塞进来。写错了用 `ateam job edit J1 [--title "..."] [--desc-file job.md]` 改
 3. 加任务：
 
    ```
    ateam task add --job J1 --role backend --paths server/ --title "登录接口" \
      --desc-file t1.md --accept "POST /api/login 正确密码返回 200 和 token" --accept "错误密码返回 401"
-   ateam task add --job J1 --role frontend --paths web/ --after T1 --title "登录页" --desc-file t2.md --accept "..."
+   ateam task add --job J1 --role frontend --paths web/ --title "登录页" --desc-file t2.md --accept "..."
+   ateam task add --job J1 --role test --paths docs/test/ --after T1,T2 --title "登录测试" --desc-file t3.md --accept "..."
    ```
 
+   上面前端卡没有 `--after T1`：接口约定已经写进两张卡，前后端同时派，测试卡等两边都通过。
+
    - `role` 必须和 worker 加入时的角色一致。角色是**工作分类**（product、frontend、backend、test），任务按分类派：同一分类的任务只会派给这个分类的 worker。
-   - 每个任务只属于一个分类。一个功能既有前端又有后端，就拆成两个任务（前端任务 `--after` 后端任务）。
+   - 每个任务只属于一个分类。一个功能既有前端又有后端，就拆成两个任务。
+   - **前后端并行**：接口约定（路径、字段、返回结构、错误码）已经写全在两张卡里时，前端卡**不要** `--after` 后端卡，两边同时派——开发卡不做联调，前端照约定写、编译也不依赖后端，排先后只会让前端白等。测试卡 `--after` 两边。只有接口没法事先说清、要等后端实现出来才知道形状时，才让前端 `--after` 后端，并在前端卡描述里写明在等什么。
+   - 依赖和路径重叠是两回事：前后端并行了，路径仍不能重叠（见下一条）。
    - 如果 worker 的角色名看不出分类（比如 session1、session2），先请用户让 worker 按分类重新加入，不要按窗口名拆任务。
    - 角色标错了：`ateam task edit T3 --role backend` 改（只有待领取或已挂起的任务能改）。
    - **同时进行的任务 `paths` 不能重叠。** 服务只提交任务路径内的改动，这是隔离的唯一手段。`task add` / `task edit` 输出「⚠ 路径重叠」时，按提示加 `--after` 让它排在后面，或者把两个任务合成一个；确定改的是同一文件里互不相干的部分才可以不管。
@@ -60,7 +65,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
    - **改规则必须用户同意**：`ateam rules add` / `set` 不带 `--user-approved` 会被拒绝，拒绝信息写明要改什么——把它给用户看，用户同意后加 `--user-approved` 重新运行。不要自己替用户同意。
    - 用户提出新的通用要求，或者 review 时发现 worker 反复犯同一类错（比如漏 import、忘了编译），先判断这条给谁：`ateam rules add "<一条规则>" --role backend`（几个角色共用写 `--role frontend,test`，不要抄两份；拿不准就不带 `--role`，加到全员）。
    - 整理或挪动已有规则（比如 `ateam rules` 提醒「还没按角色分段」）：先把「哪条归哪段」列给用户看，用户同意后写好新文件，`ateam rules set --file rules.md --user-approved`。
-   - 有先后关系就用 `--after`，依赖的任务通过后才会派发。
+   - 有真正的先后关系才用 `--after`（要用到对方的产出：产品文档、后端还没定形的接口、上一张卡改出来的代码），依赖的任务通过后才会派发。能靠事先写清约定解开的先后，就写清约定、并行派。
    - 用户可能在看板上把某个任务「指派给」某个 worker（`ateam status` 里显示「用户指派给 backend-3」），只有那个 worker 能领。这是用户的决定，不要改；那个 worker 不在线导致任务卡住时，提醒用户去看板上改派。
    - 同角色的任务默认按编号顺序派发。用户说某件事急（比如插进来一个紧急修复），加任务时带 `--top`，或者对已有任务 `ateam task top T5`，同角色的 worker 下一个先领它（取消：`ateam task top T5 --off`）。优先不会越过依赖，也不会打断正在做的任务。
    - **暂停领取**：用户说某张卡或某个需求先别做（等确认、等别的事），`ateam task hold T5 "<原因>"` 或整个需求 `ateam job hold J3 "<原因>"`，卡留在待领取但不派发，之后新加的卡也一样；恢复加 `--off`。只在用户要求时用，正在做的卡不受影响。用户也可能直接在看板上暂停，`ateam status` 里会标「暂停领取」。

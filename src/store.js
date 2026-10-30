@@ -52,11 +52,18 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     state.events.push({ id: state.seq.event, ts: now(), type, text: '', ...fields, delivered: false });
   }
 
+  // agent 在 shell 里用普通引号传多行文字时，换行常变成字面的 \n（两个字符）。整段没有真换行、
+  // 却有两处以上 \n 的，当成换行还原（只出现一处的不动，免得误伤代码里的 "\n"）
+  function unescapeNewlines(text) {
+    if (text.includes('\n') || (text.match(/\\n/g) ?? []).length < 2) return text;
+    return text.replace(/\\n/g, '\n');
+  }
+
   function requireText(value, what) {
     if (typeof value !== 'string' || !value.trim()) {
       throw new AteamError('INVALID', `${what}不能为空。请补上${what}后重试。`);
     }
-    return value.trim();
+    return unescapeNewlines(value.trim());
   }
 
   function cleanList(list, what) {

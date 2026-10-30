@@ -3279,6 +3279,8 @@ function renderDrawer(fresh) {
 // 时间线里的文字：worker 的交付说明、进度常按 Markdown 写（## 小标题、- 列表、代码块），像 Markdown 的就渲染，其余原样显示
 const MD_HINT = /^\s*(#{1,6}\s|[-*]\s|\d+\.\s|```|\|.*\|\s*$|>\s)/m;
 function timelineText(text) {
+  // 老数据：换行被存成了字面的 \n（同 src/store.js 的 unescapeNewlines）
+  if (!text.includes('\n') && (text.match(/\\n/g) || []).length >= 2) text = text.replace(/\\n/g, '\n');
   if (!MD_HINT.test(text) && !/\*\*[^*]+\*\*|`[^`\n]+`/.test(text)) return el('div', { class: 'text' }, text);
   const box = el('div', { class: 'text md' });
   box.innerHTML = renderMarkdown(text); // renderMarkdown 先转义了 HTML

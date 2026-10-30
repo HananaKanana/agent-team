@@ -920,6 +920,10 @@ html.touch-mode .side-hold { opacity: 1; }
 .side-hold.on:hover { background: color-mix(in srgb, var(--asking) 24%, var(--surface)); color: var(--asking); }
 .lane-held { padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 600; color: var(--asking); background: color-mix(in srgb, var(--asking) 14%, transparent); }
 .lane.held { background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 5%, transparent) 10px 20px); }
+/* 整个需求暂停领取：左侧需求项和待领取列一样的斜纹 */
+.job.paused, .job.paused:hover, .job.paused[aria-current="true"], .job.paused[aria-current="true"]:hover,
+.job-mini.paused, .job-mini.paused:hover, .job-mini.paused[aria-current="true"] { background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 7%, transparent) 10px 20px); }
+.job.paused:not([aria-current="true"]) .title { color: var(--muted); }
 .lane.held h3::before { background: var(--asking); }
 .lane.held .card { opacity: .62; }
 .lane.held .card:hover { opacity: 1; }
@@ -2302,13 +2306,14 @@ function renderJobs() {
       el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
       el('div', { class: 'sub' }, el('span', { class: 'tag' }, '演播'), el('span', null, live ? (live.status === 'demoing' ? `${modeWord(live)}中` : DEMO_STATUS[live.status][0]) : `${jt.length} 张演播卡`)));
     }
+    const paused = j.onHold && j.status !== 'accepted' && j.status !== 'cancelled';
     return el('button', {
-      class: `job${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id, 'aria-current': view.job === j.id ? 'true' : 'false',
+      class: `job${j.status === 'cancelled' ? ' dropped' : ''}${paused ? ' paused' : ''}`, 'data-job': j.id, 'aria-current': view.job === j.id ? 'true' : 'false',
       onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
       oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openJobMenu(j.id, e.clientX, e.clientY); },
     },
     el('div', { class: 'title' }, el('span', { class: 'jid' }, j.id), j.title),
-    el('div', { class: 'sub' }, j.status === 'accepted' ? el('span', { class: 'accepted' }, '✓ 已验收') : el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
+    el('div', { class: 'sub' }, j.status === 'accepted' ? el('span', { class: 'accepted' }, '✓ 已验收') : paused ? el('span', { class: 'lane-held', title: '该需求已暂停领取' }, '已暂停') : el('span', null, JOB_STATUS[j.status] || j.status), el('span', null, `${done}/${jt.length} 已通过`)),
     jt.length ? strip(jt, false) : null);
   };
   const newest = jobs.slice().reverse();
@@ -2378,7 +2383,7 @@ function renderJobs() {
       const jt = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
       const doneN = jt.filter((t) => t.status === 'approved').length;
       return el('button', {
-        class: `job-mini${j.status === 'accepted' ? ' ok' : ''}${j.status === 'cancelled' ? ' dropped' : ''}`, 'data-job': j.id,
+        class: `job-mini${j.status === 'accepted' ? ' ok' : ''}${j.status === 'cancelled' ? ' dropped' : ''}${j.onHold && j.status !== 'accepted' && j.status !== 'cancelled' ? ' paused' : ''}`, 'data-job': j.id,
         'aria-current': view.job === j.id ? 'true' : 'false',
         title: `${j.id} ${j.title}\n${j.demo ? `${jt.length} 张演播卡` : `${doneN}/${jt.length} 已通过`}`,
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },

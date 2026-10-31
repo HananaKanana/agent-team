@@ -1,23 +1,24 @@
 # agent-team
 
-本地任务协调服务 `ateam`：Claude Code 当 leader，带领若干 worker（agent 窗口，目前用 DeepSeek Harness；test worker 用它的 dsh-cdp 插件操作浏览器，见 `skills/browser-cdp-setup`），在同一台电脑、同一个项目目录里协作开发。leader 负责拆任务、派任务、review、汇报，worker 负责领任务、干活、提交。worker 可能因为 token 用完而中途掉线，用户换账号开新窗口后，新 worker 接手继续。
+本地任务协调服务 `ateam`：Claude Code 当 leader，带领若干 worker（agent 窗口，目前用 DeepSeek Harness 或 WorkBuddy；test worker 用 DeepSeek Harness 的 dsh-cdp 插件操作浏览器，见 `skills/browser-cdp-setup`），在同一台电脑、同一个项目目录里协作开发。leader 负责拆任务、派任务、review、汇报，worker 负责领任务、干活、提交。worker 可能因为 token 用完而中途掉线，用户换账号开新窗口后，新 worker 接手继续。
 
 ## 文档
 
-- 设计：`docs/superpowers/specs/2026-10-03-agent-team-design.md`（已经过用户审阅确认）
-- 实施计划：`docs/superpowers/plans/2026-10-03-agent-team.md`（8 个任务）
+- 使用说明：`README.md`
+- 手工核对清单：`docs/manual-checklist.md`，按功能分组。新条目放进对应的 `## 功能` 组并在组内编号，不要追加到文件末尾
+- 工具后 hook：`docs/worker-hook-setup.md`
+- 各功能的设计和计划：`docs/superpowers/specs/`、`docs/superpowers/plans/`。这些是当时的记录，现状以代码和 README 为准
 
 ## 当前进度
 
-**以实施计划里的勾选框为准。** 每完成一个步骤，就把对应的 `- [ ]` 改成 `- [x]`，和代码一起提交。新会话接手时，先看计划里第一个没勾的步骤，从那里继续。
-
-执行方式还没确定，开工前问用户选哪种：
-- 子代理逐个执行：subagent-driven-development
-- 当前会话直接执行：executing-plans（之前推荐的是这种）
+最初的实施计划已经完成，项目处于持续迭代中，按用户当前的要求改。没有待接手的计划步骤。
 
 ## 约定
 
 - 和用户交流用中文。
 - 零依赖、ESM、Node ≥ 18。
-- 不新写测试代码。每个任务用 scratchpad 里的一次性探测脚本验证，跑完删除，不进仓库（见计划中的 Global Constraints）。
-- 不做浏览器或 UI 验证，看板交给用户手工核对。
+- 直接提交到 main；用户明确要求才推送。
+- 不新写测试代码。需要验证时用 scratchpad 里的一次性探测脚本，跑完删除，不进仓库；探测用临时目录和临时端口，不碰用户的项目和 agent 平台配置。
+- 不做浏览器或 UI 验证，看板交给用户手工核对。报告时如实说明验证到哪一步。
+- 看板上显示的文字用专业的书面语，不用口头表达。
+- 改了功能要同步相关的文字：`README.md`、`skills/`、看板的说明和命令输出，并给核对清单加条目。

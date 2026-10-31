@@ -3319,6 +3319,8 @@ function renderDrawer(fresh) {
 
 // 消息的已读状态：字段不存在是功能上线前的旧记录，不显示
 function readFlags(h) {
+  // 已经写下状态的旧记录也只显示这几类：提问、答复、用户发的话
+  if (h.type !== 'asked' && h.type !== 'answered' && h.actor !== 'user') return [];
   const flag = (who, at, tip) => el('span', { class: at ? 'read-flag read' : 'read-flag', title: at ? `${fmtTime(at)} 已读。${tip}` : tip }, `${who}${at ? '已读' : '未读'}`);
   const flags = [];
   if (h.workerReadAt !== undefined) {

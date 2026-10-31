@@ -8,7 +8,7 @@ export function emptyState() {
   return { seq: { job: 0, task: 0, event: 0 }, jobs: [], tasks: [], agents: [], events: [] };
 }
 
-const READ_BY_EVENT = new Set(['user_reply', 'user_message', 'question', 'submitted']);
+const READ_BY_EVENT = new Set(['user_reply', 'user_message', 'question']);
 
 // leaseMs：多久没动静算「可能停了」。手上有进行中任务的 worker 只标记、提醒用户，任务不动，
 // 用户确认窗口没了（看板上点「换人接手」，或 leader 问过用户后 ateam reclaim）才转手；
@@ -50,7 +50,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 消息的已读状态：null 表示未读；没有这个字段的是这个功能之前的旧记录。
-  // leader 发的 worker 读，worker 发的 leader 读，用户发的两边都读
+  // 只跟踪提问（leader 读）、答复（worker 读）和用户发的话（两边都读），进度、交付、leader 的补充说明不跟踪
   function trackRead(task, by) {
     const entry = task.history.at(-1);
     entry.workerReadAt = null;
@@ -61,17 +61,17 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     task.history.at(-1).leaderReadAt = null;
   }
 
-  function markLeaderRead(task, includeProgress) {
+  function markLeaderRead(task) {
     let dirty = false;
     for (const h of task.history) {
-      if (h.leaderReadAt === null && (includeProgress || h.type !== 'progress')) { h.leaderReadAt = now(); dirty = true; }
+      if (h.leaderReadAt === null) { h.leaderReadAt = now(); dirty = true; }
     }
     return dirty;
   }
 
-  // ateam show：leader 看了整张卡，进度也算读过（进度不发事件）
+  // ateam show：leader 看了整张卡，卡上的话都算读过
   function leaderOpenedTask(taskId) {
-    if (markLeaderRead(getTask(taskId), true)) changed();
+    if (markLeaderRead(getTask(taskId))) changed();
   }
 
   // 已读指内容已经送进 worker 的上下文，不代表它已经照做
@@ -979,7 +979,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     } else {
       addHistory(task, 'progress', agent.id, text);
     }
-    trackLeaderRead(task);
     const note = takeNote(task);
     changed();
     return note ? { ...task, note } : task;
@@ -1024,7 +1023,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     commit = list.length ? list.join('、') : null;
     task.status = 'submitted';
     addHistory(task, 'submitted', agent.id, summary, commit);
-    trackLeaderRead(task);
     emit('submitted', {
       taskId: task.id, agentId: agent.id,
       text: commit ? `${task.id} 已提交 ${commit}：${summary}` : `${task.id} 已提交（无代码改动）：${summary}`,
@@ -1208,7 +1206,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const line = by === 'user' ? `（用户直接说）${text}` : text;
     task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${line}` : line;
     addHistory(task, 'note', by, text);
-    trackRead(task, by);
+    if (by === 'user') trackRead(task, by);
     changed();
     return task;
   }
@@ -1999,7 +1997,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       // leader 的监听收到事件，事件对应的话就算 leader 已读
       if (READ_BY_EVENT.has(e.type) && e.taskId) {
         const task = state.tasks.find((t) => t.id === e.taskId);
-        if (task) markLeaderRead(task, false);
+        if (task) markLeaderRead(task);
       }
     }
     const delivered = state.events.filter((e) => e.delivered);

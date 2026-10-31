@@ -1185,6 +1185,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const note = task.pendingNote;
     if (!note || task.noteSentByHook === note) return null;
     task.noteSentByHook = note;
+    addHistory(task, 'note_delivered', agent.id, '工具调用结束后送达');
     changed();
     return { taskId: task.id, note };
   }
@@ -1192,6 +1193,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function takeNote(task) {
     const note = task.pendingNote;
     if (!note) return null;
+    // hook 已经送过同样内容的，这里只是补送一遍，不再记
+    if (task.noteSentByHook !== note) addHistory(task, 'note_delivered', task.assignee ?? 'worker', '调用 ateam 时送达');
     delete task.pendingNote;
     delete task.noteSentByHook;
     changed();

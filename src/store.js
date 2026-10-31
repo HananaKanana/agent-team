@@ -1226,7 +1226,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function noteForHookSession(session) {
     const agentId = agentIdOfHookSession(session);
-    return agentId ? noteForHook(agentId) : null;
+    if (!agentId) return null;
+    // 工具调用后 hook 在跑，说明 worker 正在干活：算一次心跳，长时间不调用 ateam 也不会被当成无响应。
+    // 不算 lastCallAt：那是 worker 自己的调用
+    const agent = findAgent(agentId);
+    if (agent?.status === 'online' && !agent.dismissed) {
+      agent.lastSeenAt = now();
+      clearStale(agent);
+      changed();
+    }
+    return noteForHook(agentId);
   }
 
   // agent 平台的工具后 hook 来取：worker 干活的两步之间就能看到留言，不用等它调用 ateam。

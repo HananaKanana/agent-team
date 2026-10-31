@@ -127,6 +127,7 @@
 14. [ ] 消息已读标签：提问显示 leader 已读状态；leader 的答复和补充说明显示 worker 已读状态；用户发的消息和答复同时显示 worker 和 leader 已读状态；进度、交付不显示标签（包括之前已记录的）；悬停可见已读时间和送达方式
 15. [ ] 重启 ateam serve 后，不等 worker 调用 ateam，直接给干活中的 worker 留言：标签很快变为「worker 已读」
 16. [ ] worker 后台挂着 wait 时调用 job_output / TaskOutput：调用被拦下，提示结束本轮，worker 随后结束本轮；wait 结束收到通知后，读取不被拦
+17. [ ] 安装了 hook 的 worker 连续干活超过「无响应判定时长」不调用 ateam：不弹无响应提示，心跳时间持续更新；窗口真的停了时，超过判定时长后照常提示
 
 ## test worker 与浏览器
 

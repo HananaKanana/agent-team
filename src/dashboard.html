@@ -1800,7 +1800,7 @@ async function dismissAgents(body) {
 const SETTING_ITEMS = [
   { group: 'worker' },
   { key: 'idleMin', type: 'num', label: '空闲申请下线时长（分钟）', hint: 'worker 空闲超过该时长后向 leader 申请下线，避免空等消耗 token。' },
-  { key: 'leaseMin', type: 'num', label: '无响应判定时长（分钟）', hint: '持有任务的 worker 超过该时长无活动时，弹窗请求确认其状态；空闲 worker 直接判定为离线。执行耗时命令前已报备的 worker 不受影响。' },
+  { key: 'leaseMin', type: 'num', label: '无响应判定时长（分钟）', hint: '持有任务的 worker 超过该时长无活动时，弹窗请求确认其状态；空闲 worker 直接判定为离线。活动从最后一次调用 ateam 或工具调用（已安装 hook 时）算起；执行耗时命令前已报备的 worker 不受影响。' },
   { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少保留一个 worker', hint: '开启后，某一角色的最后一个 worker 下线需经用户同意（leader 会先行征询）。关闭后 leader 可直接让其下线。' },
   { group: '审卡' },
   { key: 'criticAutoLeave', type: 'bool', label: '审核完成后自动下线', hint: '审卡 worker 审核完所有待审任务后自动下线（新启动的同样适用），有新任务需审核时再启动。关闭后审卡 worker 常驻，仅在用户要求时下线。' },

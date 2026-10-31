@@ -42,6 +42,8 @@ ateam hook install --platform dsh        # 或 --platform workbuddy
 
 此外还有一条读后台输出之前的 hook：worker 的 `ateam wait` 还在挂着时，拦下 `job_output` / `TaskOutput`，并让它结束本轮，避免它一直占着一轮消耗 token。wait 结束后不拦。
 
+每次工具调用后 hook 运行时，也算 worker 的一次活动：安装了 hook 的 worker 只要还在操作，就不会因为长时间不调用 ateam 而被提示无响应。
+
 ## 局限
 
 - 只在工具调用结束后送达。worker 卡在一条长命令里时，要等这条命令结束。

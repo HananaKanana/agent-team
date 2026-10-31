@@ -8,8 +8,8 @@
 
 | 平台 | 状态 |
 |---|---|
-| DeepSeek Harness | 桥接包的代码和文档确认支持；未实际运行 |
-| WorkBuddy | 支持 PostToolUse；`additionalContext` 是否进入模型上下文未确认 |
+| DeepSeek Harness | 桥接包的代码和文档确认支持 |
+| WorkBuddy | 引擎代码确认支持，日志确认 hook 会运行；留言注入还没有实际跑过 |
 
 等待时的送达不靠这个 hook：`ateam wait` 挂着时，有消息会马上返回。后台长等待见 `skills/ateam-worker/SKILL.md` 的「运行命令的规则」。
 

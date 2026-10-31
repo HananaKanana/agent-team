@@ -310,11 +310,16 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
     const d = new Date();
     return [
       `暂无任务（第 ${next} 轮等待，${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}）。`,
-      `请立即运行下一轮：ateam wait --as ${agentId}${timeout ? ` --timeout ${timeout}` : ''} --round ${next}${timeout ? '（用和这次相同的方式运行）' : ''}`,
+      ...(timeout ? [
+        `请立即用和这次相同的方式运行下一轮：ateam wait --as ${agentId} --timeout ${timeout} --round ${next}`,
+      ] : [
+        `如果你的 bash 工具有 run_in_background 参数（DeepSeek Harness、WorkBuddy 都有）：后台运行 ateam wait --as ${agentId} --timeout 1800 --round ${next}，然后结束本轮，有消息时会被唤醒，不要再前台循环。`,
+        `没有这个参数才前台运行：ateam wait --as ${agentId} --round ${next}`,
+      ]),
       '',
       ...(why.length ? [...why, ''] : []),
       '这是正常的等待，不是工作结束：leader 随时可能派任务、打回或答复。',
-      '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
+      '不要向用户总结或提问，也不要自己改轮次号（每次都不同是正常的）。除了后台等待，不要结束本轮。只有用户明确叫你停下时才停。',
     ].join('\n');
   }
   if (result.kind === 'message') {

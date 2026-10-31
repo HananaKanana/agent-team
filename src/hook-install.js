@@ -22,6 +22,11 @@ function hookEntry() {
   return { hooks: [{ type: 'command', command: hookCommand(), timeout: 5 }] };
 }
 
+// WorkBuddy 把非 0 退出当成拦截，node 路径随它升级失效时不能影响 worker，所以兜底成功退出
+function workbuddyEntry() {
+  return { hooks: [{ type: 'command', command: `${hookCommand()} 2>/dev/null || true`, timeout: 5 }] };
+}
+
 function isOurEntry(entry) {
   return (entry?.hooks ?? []).some((h) => String(h?.command ?? '').includes(COMMAND_MARK));
 }
@@ -99,11 +104,14 @@ function installWorkbuddy() {
   const file = workbuddySettingsFile();
   const settings = readSettings(file);
   const list = settings.hooks?.PostToolUse ?? [];
-  if (list.some(isOurEntry)) return `hook 已安装（${file}），不需要操作。`;
+  const entry = workbuddyEntry();
+  const ours = list.find(isOurEntry);
+  if (ours?.hooks?.[0]?.command === entry.hooks[0].command) return `hook 已安装（${file}），不需要操作。`;
   copyFileSync(file, `${file}.bak.ateam`);
-  settings.hooks = { ...settings.hooks, PostToolUse: [...list, hookEntry()] };
+  settings.hooks = { ...settings.hooks, PostToolUse: [...list.filter((e) => !isOurEntry(e)), entry] };
   writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
-  return `hook 已写入 ${file}，重启会话或在 /hooks 面板确认后生效。WorkBuddy 是否把内容交给模型尚未确认；不生效时留言仍在下一次调用 ateam 时送达。${MANUAL}`;
+  if (ours) return `hook 已安装（${file}），配置已更新，不需要操作。`;
+  return `hook 已写入 ${file}，重启会话或在 /hooks 面板确认后生效。${MANUAL}`;
 }
 
 function uninstallDsh(flags) {

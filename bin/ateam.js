@@ -452,7 +452,7 @@ const commands = {
     if (flags.after !== undefined) body.dependsOn = splitList(flags.after);
     const { task, overlaps } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
-    const told = ['working', 'asking', 'submitted'].includes(task.status) ? `${task.assignee ?? 'worker'} 正拿着这张卡：改动已作为补充说明发给它（它下一次调用 ateam 命令时收到，提交前一定会看到），不用再 ateam note。` : '';
+    const told = ['working', 'asking', 'submitted'].includes(task.status) ? `${task.assignee ?? 'worker'} 正拿着这张卡：改动已作为补充说明发给它（当前操作结束或下一次调用 ateam 时收到，提交前一定会看到），不用再 ateam note。` : '';
     return `已修改任务 ${task.id}。${told}${overlapWarning(task, overlaps)}${next}`;
   },
 
@@ -617,7 +617,7 @@ const commands = {
   async note({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam note T5 "<补充说明>"');
     const { task } = await request('POST', '/api/note', { id, text: positional[1] ?? '' });
-    return `已给 ${task.id} 的 worker（${task.assignee}）留了补充说明，它下一次调用 ateam 命令时收到；提交前一定会看到。`;
+    return `已给 ${task.id} 的 worker（${task.assignee}）留了补充说明。启用了工具后 hook 时，它在当前操作结束后收到；否则在下一次调用 ateam 时收到。提交前一定会看到。`;
   },
 
   // 全部能审的卡（审卡用；leader 也能看）

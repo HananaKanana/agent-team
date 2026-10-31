@@ -3755,7 +3755,7 @@ function replyBox(t) {
   area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
   const foot = mine.error ? el('span', { class: 'hint err' }, mine.error)
     : mine.sent ? el('span', { class: 'hint' }, mine.sent)
-    : el('span', { class: 'hint' }, asking ? '将同时发送给 worker 和 leader，leader 不会重复答复 · ' : review ? 'leader 将在 review 时查看；如被打回，worker 也会收到 · ' : 'worker 将在下次调用 ateam 时收到，并同步通知 leader · ', el('kbd', null, '⌘↩'), ' 发送');
+    : el('span', { class: 'hint' }, asking ? '将同时发送给 worker 和 leader，leader 不会重复答复 · ' : review ? 'leader 将在 review 时查看；如被打回，worker 也会收到 · ' : 'worker 通常在当前操作结束后收到，并同步通知 leader；是否已读见时间线标签 · ', el('kbd', null, '⌘↩'), ' 发送');
   return el('div', { class: `reply-box${asking ? ' asking' : ''}` },
     el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : '补充说明'),
     el('div', { class: 'composer', onclick: () => area.focus() }, area,

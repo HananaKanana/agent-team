@@ -50,7 +50,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 消息的已读状态：null 表示未读；没有这个字段的是这个功能之前的旧记录。
-  // 只跟踪提问（leader 读）、答复（worker 读）和用户发的话（两边都读），进度、交付、leader 的补充说明不跟踪
+  // 只跟踪提问（leader 读）、答复和补充说明（worker 读）、用户发的话（两边都读），进度、交付不跟踪
   function trackRead(task, by) {
     const entry = task.history.at(-1);
     entry.workerReadAt = null;
@@ -1206,7 +1206,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const line = by === 'user' ? `（用户直接说）${text}` : text;
     task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${line}` : line;
     addHistory(task, 'note', by, text);
-    if (by === 'user') trackRead(task, by);
+    trackRead(task, by);
     changed();
     return task;
   }

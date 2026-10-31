@@ -4092,15 +4092,16 @@ function hookStep(info) {
   const title = el('div', { class: 'wcard-head' }, el('b', null, '③ 为 worker 安装 hook'));
   const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时也不会持续消耗 token。请在终端中运行，不要交给 worker：agent 平台通常只允许 worker 写入项目目录。只安装实际使用的平台即可。');
   const rows = [];
+  // 命令始终显示，装好了也能复制（换电脑、平台升级后要重装）；状态写在命令下面
   if (info.profiles?.length) {
-    rows.push(info.hookInstalled
-      ? done(true, 'DeepSeek Harness 已安装，通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。')
-      : promptBlock('ateam hook install --platform dsh', renderHelper));
+    rows.push(el('p', { class: 'hint' }, el('b', null, 'DeepSeek Harness')),
+      promptBlock('ateam hook install --platform dsh', renderHelper),
+      info.hookInstalled ? done(true, '已安装，通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。') : el('p', { class: 'hint' }, '尚未安装。'));
   }
   if (info.workbuddyHook !== null && info.workbuddyHook !== undefined) {
-    rows.push(info.workbuddyHook
-      ? done(true, 'WorkBuddy 已安装，重启会话后生效。')
-      : promptBlock('ateam hook install --platform workbuddy', renderHelper));
+    rows.push(el('p', { class: 'hint' }, el('b', null, 'WorkBuddy')),
+      promptBlock('ateam hook install --platform workbuddy', renderHelper),
+      info.workbuddyHook ? done(true, '已安装，重启会话后生效。') : el('p', { class: 'hint' }, '尚未安装。'));
   }
   if (!rows.length) rows.push(el('p', { class: 'hint' }, '未检测到 DeepSeek Harness 或 WorkBuddy。安装并启动一次后，刷新本页。'));
   return el('div', { class: 'wcard' }, title, hint, ...rows,

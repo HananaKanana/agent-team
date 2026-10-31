@@ -319,7 +319,7 @@ worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没�
 
 ### 想让 worker 干活中途就看到留言
 
-默认情况下，留言要等 worker 下一次调用 ateam 才送达。启用 agent 平台的工具后 hook（DSH、WorkBuddy 等），worker 每完成一步操作就能看到，做法见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+默认情况下，留言要等 worker 下一次调用 ateam 才送达。启用 agent 平台的工具后 hook（DSH、WorkBuddy 等），worker 每完成一步操作就能看到，worker 加入时会自动安装，重启平台后生效，详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
 
 ### 更新了 agent-team 的代码之后
 

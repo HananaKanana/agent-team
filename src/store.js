@@ -524,6 +524,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function nextFor(agentId) {
     const agent = touch(agentId);
 
+    // 直接发给这个 worker 的消息（它手上没有能留言的卡时才走这里，见 messageAgent）
+    if (agent.pendingMessage) {
+      const text = agent.pendingMessage;
+      delete agent.pendingMessage;
+      changed();
+      return { kind: 'message', text };
+    }
+
     // 手上的任务刚被作废：先告诉它，再谈领新任务
     if (agent.cancelNotice && !agent.currentTask) {
       const notice = takeCancelNotice(agent);
@@ -555,6 +563,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (agent.currentTask) {
       const task = getTask(agent.currentTask);
       if (isDemo(task)) return demoNext(task);
+      if (task.status === 'asking' && task.pendingNote) {
+        // 等答复时收到留言：叫醒它看一眼，问题还在等答复
+        return { kind: 'asking_note', task, text: takeNote(task) };
+      }
       if (task.status !== 'working') {
         // asking / submitted：等答复或 review 结果。无 leader 模式下有别的卡能做，就把这张先放下，转做别的
         if (!(state.noLeader && candidatesFor(agent, task).length)) return null;
@@ -1277,6 +1289,25 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
+  // 直接发给 worker：手上有进行中的卡就当作这张卡的补充说明，否则等它的 wait 收
+  function messageAgent(agentId, text, by = 'lead') {
+    text = requireText(text, '消息');
+    const agent = findAgent(agentId);
+    if (!agent) throw new AteamError('NOT_FOUND', `没有编号为 ${agentId} 的 worker。`);
+    if (agent.status !== 'online' || agent.dismissed) throw new AteamError('BAD_STATE', `${agentId} 不在线，收不到消息。`);
+    const task = agent.currentTask ? getTask(agent.currentTask) : null;
+    const viaNote = task && !isDemo(task) && (task.status === 'working' || task.status === 'asking');
+    if (viaNote) {
+      noteTask(task.id, text, by);
+    } else {
+      const line = by === 'user' ? `（用户直接说）${text}` : text;
+      agent.pendingMessage = agent.pendingMessage ? `${agent.pendingMessage}\n\n${line}` : line;
+    }
+    if (by === 'user') emit('user_message', { agentId: agent.id, taskId: viaNote ? task.id : undefined, text: `用户给 ${agent.id} 发了消息：${text}` });
+    changed();
+    return { agentId: agent.id, taskId: viaNote ? task.id : null };
+  }
+
   function release(taskId) {
     const task = getTask(taskId);
     if (task.status !== 'held') {
@@ -1924,7 +1955,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHook, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHook, messageAgent, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

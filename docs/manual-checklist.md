@@ -116,6 +116,12 @@
 4. [ ] 按 `docs/worker-hook-setup.md` 启用 hook 后：worker 正在连续干活（中途不调用 ateam）时在看板留言，它在下一个工具调用结束后就看到「# ateam 补充说明」并照做；同一条留言不会在之后的工具调用后重复出现，下一次 progress / wait / submit 还会再带一遍
 5. [ ] 启用 hook 后：两个 worker 在同一目录干活，给其中一张卡留言，只有拿着这张卡的 worker 收到；在没有 ateam 的项目里用 DSH 不受影响；停掉 ateam 服务时 worker 照常干活，不报错
 6. [ ] 未启用 hook，或平台运行了 hook 但没把内容交给模型：留言仍在 worker 下一次 progress / wait / submit 时送达，和原来一样
+7. [ ] DeepSeek Harness 的 worker 后台运行 `ateam wait --timeout 1800` 后结束本轮：看板显示在线，不被判无响应；派任务、打回、答复、留言时它被唤醒并立刻处理；30 分钟没有消息时它只重新挂一次
+8. [ ] 没有后台能力的平台：worker 继续前台运行 `ateam wait`（90 秒一轮），行为和原来一样；同一 worker 又跑一条 wait 时，旧的那条输出「已被另一条 ateam wait 取代」并退出
+9. [ ] 卡在等答复时 `ateam note`：挂着的 wait 马上返回「# 补充说明」，卡仍是等答复，答复照常送达
+10. [ ] `ateam message --to <编号>` 和看板 worker 卡片上的「发消息」：空闲的 worker 马上收到「# 消息」；进行中的 worker 按补充说明收到；不在线的编号报错；用户从看板发时 leader 收到 user_message 事件；写字时页面刷新不丢字
+11. [ ] 新 worker 加入：自动运行 `ateam hook install`，首次转告用户需要重启后继续工作，不自己重启；再次运行显示「已安装」；安装失败时继续工作，留言按默认方式送达
+12. [ ] 使用说明的安装页有「可选：实时送达消息」一节；未安装时显示安装、重启、停用步骤，安装后显示「已写入配置」；`ateam hook uninstall` 后恢复未安装状态
 
 ## test worker 与浏览器
 

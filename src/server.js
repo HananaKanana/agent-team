@@ -136,7 +136,10 @@ function installInfo() {
     try { text = readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8'); } catch {}
     return [p, /id:\s*dsh-cdp[\s\S]*?dataDir:/.test(text)];
   }));
-  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, toolDir: TOOL_DIR };
+  const hookInstalled = profiles.some((p) => {
+    try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('# ateam hook begin'); } catch { return false; }
+  });
+  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, toolDir: TOOL_DIR };
 }
 
 export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
@@ -531,6 +534,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because, b.basis) }),
     'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text, b.basis) }),
     'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side, b.text) }),
+    'POST /api/message': (b) => store.messageAgent(String(b.to ?? ''), b.text, b.by === 'user' ? 'user' : 'lead'),
     'POST /api/note': (b) => ({ task: store.noteTask(requireId(b), b.text) }),
     'GET /api/cards': (_b, url) => ({ cards: store.cards({ jobId: url.searchParams.get('job') ?? '', todo: url.searchParams.get('todo') === '1' }) }),
     'POST /api/tasks/assign': (b) => ({ task: store.assignTask(requireId(b), b.to) }),
@@ -637,7 +641,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     const agentId = body.as;
     // 先结束同一 worker 的旧挂起，再派发：否则旧挂起可能在下一轮 wake 里再收到同一个任务
     const old = waiters.get(agentId);
-    if (old) finishWaiter(agentId, old, 200, { ok: true, result: null, waiting: store.waitingInfo(agentId) });
+    if (old) finishWaiter(agentId, old, 200, { ok: true, result: null, superseded: true, waiting: store.waitingInfo(agentId) });
 
     const result = store.nextFor(agentId); // 先 touch，掉线的 worker 在这里拿到 LEASE_LOST
     if (result) return send(res, 200, { ok: true, result: withRules(result) });

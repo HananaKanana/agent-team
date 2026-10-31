@@ -40,7 +40,8 @@ const USAGE = `用法：ateam <命令> [参数]
 
 worker
   ateam join --role <角色> [--id <编号>] [--name <名字>]
-  ateam wait --as <ID> [--timeout 90] [--round N]
+  ateam hook install [--platform dsh|workbuddy]（让 worker 干活中途就能看到留言）
+  ateam wait --as <ID> [--timeout 90] [--round N]（--timeout 可以很长，比如后台运行时用 1800）
   ateam progress --as <ID> "<笔记>" [--expect <分钟>]
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
@@ -73,6 +74,7 @@ leader
   ateam critique --as <ID> ok T5 [T6 ...] ／ issue T5 "<问题和建议>" --basis "<依据>" [--because "<重新审的原因>"]
   ateam critique agree T5 "<打算怎么改>" --basis "<依据>" ／ dispute T5 "<为什么不改>" --basis "<依据>" ／ done T5 "<改了什么>"
   ateam note T5 "<给正在做的 worker 的补充说明>"
+  ateam message --to <ID> "<直接发给 worker 的消息，包括手上没有卡的>"
   ateam rules [--role <角色>] | add "<一条规则>" [--role a,b] [--user-approved] | set --file rules.md [--user-approved]（改规则必须用户同意）
   ateam jobs [--all] [--grep <关键词>]
   ateam job show J1
@@ -273,9 +275,15 @@ async function postToolHook() {
 }
 
 const commands = {
-  async hook({ positional }) {
-    if (positional[0] !== 'post-tool') fail('用法：ateam hook post-tool（由 agent 平台的 PostToolUse hook 调用，不用手工运行）');
-    return postToolHook();
+  async hook({ flags, positional }) {
+    if (positional[0] === 'post-tool') return postToolHook();
+    if (positional[0] !== 'install' && positional[0] !== 'uninstall') fail('用法：ateam hook install ／ uninstall [--platform dsh|workbuddy] [--profile <名字>] [--dsh-version <版本号>]');
+    const { installHook, uninstallHook } = await import('../src/hook-install.js');
+    try {
+      return positional[0] === 'install' ? installHook(flags) : uninstallHook(flags);
+    } catch (err) {
+      fail(`${err.message}${err.stderr ? `\n${String(err.stderr).trim().slice(-500)}` : ''}\n没有安装成功不影响工作：留言仍在下一次调用 ateam 时送达，继续主循环即可。`);
+    }
   },
   async serve({ flags }) {
     const { startServer } = await import('../src/server.js');
@@ -317,9 +325,18 @@ const commands = {
 
   async wait({ flags }) {
     const as = requireAs(flags);
-    const data = await request('POST', '/api/wait', { as }, holdSeconds(flags));
+    // 长等待拆成多次短请求：服务端单次最多挂 110 秒，Node fetch 也有 5 分钟的响应头超时
+    const until = Date.now() + holdSeconds(flags) * 1000;
+    let data;
+    for (;;) {
+      const left = (until - Date.now()) / 1000;
+      data = await request('POST', '/api/wait', { as }, Math.max(1, Math.min(left, DEFAULT_HOLD_SEC)));
+      if (data?.result || data?.superseded || until - Date.now() < 1000) break;
+    }
+    // 同一 worker 又跑了一条 wait：这条让位，不再和它互相顶掉
+    if (data?.superseded) return `这次等待已被另一条 ateam wait --as ${as} 取代，不需要处理。`;
     const round = Number.parseInt(flags.round ?? '0', 10);
-    return formatWait(data?.result ?? null, as, data?.waiting, Number.isFinite(round) && round > 0 ? round : 0);
+    return formatWait(data?.result ?? null, as, data?.waiting, Number.isFinite(round) && round > 0 ? round : 0, flags.timeout);
   },
 
   async progress({ flags, positional }) {
@@ -590,6 +607,13 @@ const commands = {
   },
 
   // 给正在做的 worker 补充说明，它下一次调用 progress / wait / submit 时收到
+  async message({ flags, positional }) {
+    if (!flags.to) fail('缺少 --to <worker 编号>。示例：ateam message --to frontend-1 "<消息>"');
+    const text = requireArg(positional[0], '消息', `ateam message --to ${flags.to} "<消息>"`);
+    const { agentId, taskId } = await request('POST', '/api/message', { to: flags.to, text });
+    return taskId ? `已作为 ${taskId} 的补充说明发给 ${agentId}。` : `已发给 ${agentId}，它的 ateam wait 会收到。`;
+  },
+
   async note({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam note T5 "<补充说明>"');
     const { task } = await request('POST', '/api/note', { id, text: positional[1] ?? '' });

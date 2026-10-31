@@ -1637,6 +1637,9 @@ function isStale(a) {
 
 let helper = { open: false, focus: null };
 let dismissAllArm = false; // 「全部下线」两步确认
+let msgArm = null; // 正在给哪个 worker 写消息
+const msgDrafts = new Map(); // worker 编号 → 没发出去的草稿
+let msgState = { id: null, sending: false, error: '', sent: '' };
 let dismissArm = null; // 单个 worker 下线的两步确认（手上有任务，或是本角色最后一个时）
 
 // 本角色唯一在线的 worker（已安排「做完再下线」的不算）：每个角色至少留一个，下线前要用户确认
@@ -1681,6 +1684,33 @@ function lastClaimSince(agentId, since) {
     for (const h of x.history) if (h.type === 'claimed' && h.actor === agentId && h.ts >= since && (!best || h.ts > best.ts)) best = { id: x.id, ts: h.ts };
   }
   return best?.id ?? null;
+}
+
+function messageBox(a) {
+  const mine = msgState.id === a.id ? msgState : { sending: false, error: '', sent: '' };
+  const area = el('textarea', { class: 'reply-input msg-input', rows: '3', placeholder: `填写给 ${agentLabel(a.id)} 的消息…` });
+  area.value = msgDrafts.get(a.id) || '';
+  const send = async () => {
+    const text = area.value.trim();
+    if (!text || msgState.sending) return;
+    area.blur(); // 输入框有焦点时面板不重画，先放开，才看得到「发送中」和结果
+    msgState = { id: a.id, sending: true, error: '', sent: '' };
+    renderHelper(true);
+    const out = await post('/api/message', { to: a.id, text, by: 'user' });
+    if (out.ok) { msgDrafts.delete(a.id); msgState = { id: a.id, sending: false, error: '', sent: out.taskId ? `已作为 ${out.taskId} 的补充说明发送，并同步通知 leader。` : '已发送，并同步通知 leader。' }; }
+    else msgState = { id: a.id, sending: false, error: out.message || '发送失败。', sent: '' };
+    await poll();
+    renderHelper(true);
+  };
+  area.addEventListener('input', () => { msgDrafts.set(a.id, area.value); });
+  area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); } });
+  const foot = mine.error ? el('span', { class: 'hint err' }, mine.error)
+    : mine.sent ? el('span', { class: 'hint' }, mine.sent)
+    : el('span', { class: 'hint' }, '将同时通知 leader · ⌘↩ 发送');
+  return el('div', { class: 'reply-box' },
+    el('div', { class: 'composer', onclick: () => area.focus() }, area,
+      el('div', { class: 'reply-foot' }, foot,
+        el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送'))));
 }
 
 function dismissButtons(a) {
@@ -2150,6 +2180,7 @@ function renderHelper(force = false) {
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
   if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
   if (!force && helper.tab === 'settings' && document.activeElement?.classList?.contains('setting-num') && panel.contains(document.activeElement)) return;
+  if (!force && document.activeElement?.classList?.contains('msg-input') && panel.contains(document.activeElement)) return;
   // 正在编辑测试报告模板：同项目规则，轮询不重画
   if (!force && helper.tab === 'tests' && panel.querySelector('.tpl-page')) return;
   if (helper.mode === 'offline') { renderOfflinePanel(panel); return; }
@@ -2229,7 +2260,10 @@ function renderHelper(force = false) {
           a.leaveAsked ? el('span', { class: 'pill', title: '空闲超时，已向 leader 申请下线' }, '申请下线') : null,
           a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审核完待审任务后下线' : '完成当前任务后下线，不再领取新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完后下线' : '完成后下线') : null,
           pendingCancel(a) ? el('span', { class: 'pill', title: '该 worker 仍在处理已作废的任务' }, `${pendingCancel(a).id} 已作废，尚未通知到`) : null),
-        dismissArm === a.id ? null : el('span', { class: 'wcard-acts' }, dismissButtons(a))),
+        dismissArm === a.id ? null : el('span', { class: 'wcard-acts' },
+          el('button', { class: 'btn ghost sm', title: '直接向该 worker 发送消息', onclick: (e) => { e.stopPropagation(); msgArm = msgArm === a.id ? null : a.id; msgState = { id: null, sending: false, error: '', sent: '' }; renderHelper(true); document.querySelector('#helper .msg-input')?.focus(); } }, '发消息'),
+          dismissButtons(a))),
+      msgArm === a.id ? messageBox(a) : null,
       // 点了「下线」要选怎么下线：单独一条确认栏，按钮不挤在名字那一行里折行
       // 确认时叫醒话先收起来，卡片里只留这一件事
       dismissArm === a.id ? el('div', { class: 'wcard-confirm' },
@@ -4024,6 +4058,12 @@ function installGuide() {
       `cd ${project}\nateam serve`),
     step('同时运行多个项目？', `在另一项目目录中同样运行 ateam serve 即可：${port} 被占用时自动使用下一个空闲端口（见启动信息），该项目的 leader 和 worker 会自动连接，无需额外配置。看板请访问新端口地址。`, null),
     el('p', { class: 'hint' }, '安装完成后，在「leader」页启动 leader，在「worker」页添加 worker。'),
+    el('div', { class: 'helper-sec' }, el('h4', null, '可选：实时送达消息')),
+    el('p', { class: 'hint' }, '默认情况下，消息在 worker 下一次调用 ateam 时送达。安装工具后 hook 后，worker 每完成一次工具调用即可收到。未安装或安装失败时，仍按默认方式送达。'),
+    info.hookInstalled ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, 'DeepSeek Harness')), done(true, '已写入配置。如尚未重启 DeepSeek Harness，重启后生效。'))
+      : step('① 安装 hook', 'worker 加入团队时会自动运行此命令，通常无需手动操作。也可在终端中手动运行；WorkBuddy 请将参数改为 --platform workbuddy。', 'ateam hook install --platform dsh'),
+    info.hookInstalled ? null : step('② 重启 DeepSeek Harness', '在所有 worker 空闲时，点击菜单中的「Restart App and Host」。重启会中断正在运行的会话，worker 不会自行重启。重启后，向 worker 发送「继续」即可恢复。', null),
+    step(info.hookInstalled ? '停用' : '③ 停用', '不再需要时运行以下命令，然后重启 DeepSeek Harness。', 'ateam hook uninstall --platform dsh'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试浏览器')),
     el('p', { class: 'hint' }, '仅在使用 test worker 进行测试或演播时需要，只需配置一次。test worker 将打开独立的 Chrome 窗口操作页面，与日常使用的 Chrome 相互隔离，不影响书签和登录状态，也不会反复弹出「允许远程调试」提示。'),

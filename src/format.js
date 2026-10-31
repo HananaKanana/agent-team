@@ -302,19 +302,26 @@ function waitingLines(waiting) {
 
 // round：这是第几次空等。下一条命令带上递增的 --round，让每次调用的命令和输出都不一样，
 // 避免 agent 平台把「同一条命令连续重复」判成死循环而强制停下。
-export function formatWait(result, agentId, waiting, round = 0) {
+// timeout：这次 wait 的 --timeout，写进下一条命令，后台长等待才能接着用同样的方式挂
+export function formatWait(result, agentId, waiting, round = 0, timeout) {
   if (!result) {
     const why = waitingLines(waiting);
     const next = round + 1;
     const d = new Date();
     return [
       `暂无任务（第 ${next} 轮等待，${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}）。`,
-      `请立即运行下一轮：ateam wait --as ${agentId} --round ${next}`,
+      `请立即运行下一轮：ateam wait --as ${agentId}${timeout ? ` --timeout ${timeout}` : ''} --round ${next}${timeout ? '（用和这次相同的方式运行）' : ''}`,
       '',
       ...(why.length ? [...why, ''] : []),
       '这是正常的等待，不是工作结束：leader 随时可能派任务、打回或答复。',
       '不要结束本轮，不要向用户总结或提问，原样运行上面那条带 --round 的命令（轮次号每次都不同，这是正常的）。只有用户明确叫你停下时才停。',
     ].join('\n');
+  }
+  if (result.kind === 'message') {
+    return `# 消息\n\n${result.text}\n\n标着「用户直接说」的是用户本人说的，以它为准。处理完运行 ateam wait --as ${agentId}。`;
+  }
+  if (result.kind === 'asking_note') {
+    return `# 补充说明（${result.task.id}）\n\n${result.text}\n\n标着「用户直接说」的是用户本人说的，以它为准。你的提问还在等答复，看完继续运行 ateam wait --as ${agentId}。`;
   }
   if (result.kind === 'critique_list') {
     return formatCritiqueList(result.tasks, agentId, result.jobs);
@@ -568,6 +575,7 @@ const EVENT_HINT = {
     : e.kind === 'review'
       ? `review ${e.taskId} 时按用户这句话核对：用户要改的，ateam reject ${e.taskId} 把要求写进修改意见；打回后 worker 也会看到用户原话`
       : `已送给 worker（它下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
+  user_message: (e) => (e.taskId ? `已作为 ${e.taskId} 的补充说明送给 worker，了解即可；需要配合调整就 ateam note ${e.taskId}` : '已送给 worker，了解即可；用户的话影响你的安排就相应调整'),
   leader_back: () => '这些卡的 worker 多半已经在做别的卡了。答复或打回后卡会自动交回原 worker（它不在线就换人接手），你照常 answer / approve / reject 就行',
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,

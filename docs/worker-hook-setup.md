@@ -11,43 +11,24 @@
 | DeepSeek Harness | 桥接包的代码和文档确认支持；未实际运行 |
 | WorkBuddy | 支持 PostToolUse；`additionalContext` 是否进入模型上下文未确认 |
 
-## 启用：DeepSeek Harness
+等待时的送达不靠这个 hook：`ateam wait` 挂着时，有消息会马上返回。后台长等待见 `skills/ateam-worker/SKILL.md` 的「运行命令的规则」。
 
-适用于 DeepSeek Harness 0.2.1-rc.5。hook 包必须和已安装的 DSH 版本完全一致，版本号在应用的「关于」里查看。
+## 启用
 
-1. 安装桥接包，在 `~/.dsh/profiles/desktop` 下运行：
+worker 加入团队时会自动运行下面的命令，通常不用手工操作：
 
-   ```bash
-   pnpm add @deepseek-ai/dsh-hooks-claude-code@0.2.1-rc.5 @deepseek-ai/dsh-hook-protocol@0.2.1-rc.5
-   ```
+```bash
+ateam hook install --platform dsh        # 或 --platform workbuddy
+```
 
-2. 新建 `~/.dsh/profiles/desktop/ateam-hooks.json`，`command` 写 `command -v ateam` 查到的绝对路径：
+命令可以重复运行。改动内容：
 
-   ```json
-   {
-     "hooks": {
-       "PostToolUse": [
-         { "hooks": [{ "type": "command", "command": "/绝对路径/ateam hook post-tool", "timeout": 5 }] }
-       ]
-     }
-   }
-   ```
+- **DeepSeek Harness：** 在 profile 目录安装和应用版本一致的桥接包，写入 `ateam-hooks.json`，并在 `cordis.patch.yml` 追加一段带标记的配置。之后在菜单中点击「Restart App and Host」才生效。重启会打断所有会话，由用户选择时机。DSH 升级后重新运行一次。
+- **WorkBuddy：** 在 `~/.workbuddy/settings.json`（没有则用 `~/.codebuddy/settings.json`）的 `PostToolUse` 追加一条，已有条目不变。之后重启会话，或在 `/hooks` 面板确认。
 
-3. 在 `~/.dsh/profiles/desktop/cordis.patch.yml` 末尾追加，`configPath` 写绝对路径：
+修改前会把原文件备份为 `<文件名>.bak.ateam`。
 
-   ```yaml
-   - name: '@deepseek-ai/dsh-hooks-claude-code'
-     config:
-       configPath: /绝对路径/.dsh/profiles/desktop/ateam-hooks.json
-   ```
-
-4. 重启 DeepSeek Harness。配置只在启动时读取一次。
-
-## 启用：WorkBuddy
-
-在 `<项目>/.codebuddy/settings.json`（只对这个项目生效）或 `~/.workbuddy/settings.json` 的 `hooks` 里，给 `PostToolUse` 加一条和上面相同的配置。已有的条目不要改。改完重启会话，或在 `/hooks` 面板里确认。
-
-启用后先留言试一次，确认 worker 确实看到「# ateam 补充说明」。如果看不到，说明 WorkBuddy 不接受 `additionalContext`，留言仍会在 worker 下一次调用 ateam 时送达，可以停用这条 hook。
+启用后先留言试一次，确认 worker 看到「# ateam 补充说明」。
 
 ## 其他平台
 
@@ -67,4 +48,8 @@
 
 ## 停用
 
-删除上面加的配置，重启对应的平台。
+```bash
+ateam hook uninstall --platform dsh        # 或 --platform workbuddy
+```
+
+然后重启对应的平台。

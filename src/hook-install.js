@@ -71,16 +71,18 @@ function installDsh(flags) {
   const installed = JSON.parse(read(join(dir, 'package.json')) || '{}').dependencies?.[BRIDGE];
   const patch = read(patchFile);
   const config = JSON.stringify({ hooks: { PostToolUse: [hookEntry()] } }, null, 2) + '\n';
-  if (installed === version && patch.includes(BEGIN) && read(configFile) === config) {
+  // 新插件必须放在 insert 里：只有 id 的条目是改已有的行，匹配不到会被 DSH 跳过
+  const block = `${BEGIN}\n- insert:\n    - id: ateam-hooks\n      name: '${BRIDGE}'\n      config:\n        configPath: ${JSON.stringify(configFile)}\n${END}\n`;
+  if (installed === version && patch.includes(block) && read(configFile) === config) {
     return `hook 已安装（DeepSeek Harness ${version}），不需要操作。`;
   }
   // 版本必须和 DSH 完全一致（桥接包的 peer 依赖锁定了版本）
-  pnpmAdd(dir, [`${BRIDGE}@${version}`, `${PROTOCOL}@${version}`]);
+  if (installed !== version) pnpmAdd(dir, [`${BRIDGE}@${version}`, `${PROTOCOL}@${version}`]);
   writeFileSync(configFile, config);
-  if (!patch.includes(BEGIN)) {
-    if (patch) copyFileSync(patchFile, `${patchFile}.bak.ateam`);
-    const block = `${BEGIN}\n- id: ateam-hooks\n  name: '${BRIDGE}'\n  config:\n    configPath: ${JSON.stringify(configFile)}\n${END}\n`;
-    writeFileSync(patchFile, `${patch.trimEnd()}\n${block}`);
+  if (!patch.includes(block)) {
+    // 备份只留第一次的，它才是 ateam 动手之前的样子
+    if (patch && !existsSync(`${patchFile}.bak.ateam`)) copyFileSync(patchFile, `${patchFile}.bak.ateam`);
+    writeFileSync(patchFile, `${stripPatchBlock(patch).trimEnd()}\n${block}`);
   }
   return `hook 已写入 DeepSeek Harness 配置（${dir}），重启后生效：在菜单中点击「Restart App and Host」。重启会打断所有正在运行的会话，由用户选择时机，不要自己重启。${MANUAL}`;
 }

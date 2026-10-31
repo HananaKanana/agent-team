@@ -1108,6 +1108,8 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline > li:last-child::after { display: none; }
 .timeline > li > div:first-child { line-height: 20px; } /* 第一行固定行高。中文字形在行框里偏下，圆点（top 6 + 高 10）比几何中心低 1px，看起来才对齐 */
 .timeline .when { color: var(--faint); font-size: 12px; }
+.read-flags { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 12px; color: var(--asking); }
+.read-flag.read { color: var(--faint); }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
 .timeline .text { white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; margin-top: 2px; color: var(--ink); }
 .timeline .text.md { white-space: normal; line-height: 1.65; }
@@ -3301,11 +3303,12 @@ function renderDrawer(fresh) {
     t.commits.length ? el('ul', { class: 'commits' }, t.commits.map((c) => el('li', null, el('code', null, c)))) : el('p', { class: 'meta' }, '暂无'),
     ],
     el('h4', null, '时间线'),
-    el('ol', { class: 'timeline' }, t.history.map((h) => {
+    el('ol', { class: 'timeline' }, t.history.filter((h) => h.type !== 'note_delivered').map((h) => {
       const [label, color] = HISTORY[h.type] || [h.type, 'pending'];
       return el('li', { class: `c-${color}` },
         el('div', null, el('span', { class: 'what' }, label), ' ', el('span', { class: 'when' }, `${fmtTime(h.ts)}  ${agentLabel(h.actor)}`)),
         h.text ? timelineText(h.text) : null,
+        readFlags(h),
         h.commit ? el('div', { class: 'when' }, '提交 ', el('code', null, h.commit)) : null);
     })),
     demo ? null : replyBox(t)));
@@ -3313,6 +3316,18 @@ function renderDrawer(fresh) {
   drawer.scrollTop = scroll;
   drawer.classList.toggle('wide', drawerWide);
   if (fresh) drawer.querySelector('.close').focus();
+}
+
+// 消息的已读状态：字段不存在是功能上线前的旧记录，不显示
+function readFlags(h) {
+  const flag = (who, at, tip) => el('span', { class: at ? 'read-flag read' : 'read-flag', title: tip }, at ? `✓ ${who}已读 ${fmtTime(at)}` : `${who}未读`);
+  const flags = [];
+  if (h.workerReadAt !== undefined) {
+    const via = h.workerReadVia === 'hook' ? '工具调用结束后送达。' : h.workerReadAt ? '调用 ateam 时送达。' : '';
+    flags.push(flag('worker ', h.workerReadAt, `${via}已读表示内容已送入 worker 的上下文，不代表已照做。`));
+  }
+  if (h.leaderReadAt !== undefined) flags.push(flag('leader ', h.leaderReadAt, '已读表示 leader 已收到通知或已查看这张卡。'));
+  return flags.length ? el('div', { class: 'read-flags' }, flags) : null;
 }
 
 // 时间线里的文字：worker 的交付说明、进度常按 Markdown 写（## 小标题、- 列表、代码块），像 Markdown 的就渲染，其余原样显示

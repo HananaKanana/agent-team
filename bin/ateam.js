@@ -645,7 +645,7 @@ const commands = {
 
   async show({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam show T3');
-    const { task, review, leadRules } = await request('GET', `/api/task?id=${encodeURIComponent(id)}`);
+    const { task, review, leadRules } = await request('GET', `/api/task?id=${encodeURIComponent(id)}&reader=leader`);
     const checks = leadRules ? `## review 时按项目规则（## leader 段）检查\n\n${leadRules}\n\n` : '';
     return `# ${task.id}：${task.title}（需求 ${task.jobId}）\n\n${formatReview(review)}${checks}${formatTask(task)}`;
   },

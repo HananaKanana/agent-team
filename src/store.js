@@ -8,6 +8,8 @@ export function emptyState() {
   return { seq: { job: 0, task: 0, event: 0 }, jobs: [], tasks: [], agents: [], events: [] };
 }
 
+const READ_BY_EVENT = new Set(['user_reply', 'user_message', 'question', 'submitted']);
+
 // leaseMs：多久没动静算「可能停了」。手上有进行中任务的 worker 只标记、提醒用户，任务不动，
 // 用户确认窗口没了（看板上点「换人接手」，或 leader 问过用户后 ateam reclaim）才转手；
 // 空闲（手上没有进行中任务）的 worker 到时直接判掉线，没有任务要转手。
@@ -45,6 +47,38 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const entry = { ts: now(), type, actor, text };
     if (commit) entry.commit = commit;
     task.history.push(entry);
+  }
+
+  // 消息的已读状态：null 表示未读；没有这个字段的是这个功能之前的旧记录。
+  // leader 发的 worker 读，worker 发的 leader 读，用户发的两边都读
+  function trackRead(task, by) {
+    const entry = task.history.at(-1);
+    entry.workerReadAt = null;
+    if (by === 'user') entry.leaderReadAt = null;
+  }
+
+  function trackLeaderRead(task) {
+    task.history.at(-1).leaderReadAt = null;
+  }
+
+  function markLeaderRead(task, includeProgress) {
+    let dirty = false;
+    for (const h of task.history) {
+      if (h.leaderReadAt === null && (includeProgress || h.type !== 'progress')) { h.leaderReadAt = now(); dirty = true; }
+    }
+    return dirty;
+  }
+
+  // ateam show：leader 看了整张卡，进度也算读过（进度不发事件）
+  function leaderOpenedTask(taskId) {
+    if (markLeaderRead(getTask(taskId), true)) changed();
+  }
+
+  // 已读指内容已经送进 worker 的上下文，不代表它已经照做
+  function markWorkerRead(task, via) {
+    for (const h of task.history) {
+      if (h.workerReadAt === null) { h.workerReadAt = now(); h.workerReadVia = via; }
+    }
   }
 
   function emit(type, fields = {}) {
@@ -576,6 +610,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         if (task.pendingDelivery) {
           const delivery = task.pendingDelivery;
           task.pendingDelivery = null;
+          markWorkerRead(task, 'ateam');
           // 待 review 时用户留的言，随打回意见一起给
           const note = takeNote(task);
           changed();
@@ -944,6 +979,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     } else {
       addHistory(task, 'progress', agent.id, text);
     }
+    trackLeaderRead(task);
     const note = takeNote(task);
     changed();
     return note ? { ...task, note } : task;
@@ -954,6 +990,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const { agent, task } = workingTaskOf(agentId);
     task.status = 'asking';
     addHistory(task, 'asked', agent.id, text);
+    trackLeaderRead(task);
     emit('question', { taskId: task.id, agentId: agent.id, text });
     changed();
     return task;
@@ -987,6 +1024,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     commit = list.length ? list.join('、') : null;
     task.status = 'submitted';
     addHistory(task, 'submitted', agent.id, summary, commit);
+    trackLeaderRead(task);
     emit('submitted', {
       taskId: task.id, agentId: agent.id,
       text: commit ? `${task.id} 已提交 ${commit}：${summary}` : `${task.id} 已提交（无代码改动）：${summary}`,
@@ -1170,6 +1208,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const line = by === 'user' ? `（用户直接说）${text}` : text;
     task.pendingNote = task.pendingNote ? `${task.pendingNote}\n\n${line}` : line;
     addHistory(task, 'note', by, text);
+    trackRead(task, by);
     changed();
     return task;
   }
@@ -1185,7 +1224,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const note = task.pendingNote;
     if (!note || task.noteSentByHook === note) return null;
     task.noteSentByHook = note;
-    addHistory(task, 'note_delivered', agent.id, '工具调用结束后送达');
+    markWorkerRead(task, 'hook');
     changed();
     return { taskId: task.id, note };
   }
@@ -1193,8 +1232,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function takeNote(task) {
     const note = task.pendingNote;
     if (!note) return null;
-    // hook 已经送过同样内容的，这里只是补送一遍，不再记
-    if (task.noteSentByHook !== note) addHistory(task, 'note_delivered', task.assignee ?? 'worker', '调用 ateam 时送达');
+    markWorkerRead(task, 'ateam');
     delete task.pendingNote;
     delete task.noteSentByHook;
     changed();
@@ -1270,6 +1308,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     task.pendingDelivery = by === 'user' ? { kind: 'answer', text, by } : { kind: 'answer', text };
     addHistory(task, 'answered', by, text);
+    trackRead(task, by);
     changed();
     return task;
   }
@@ -1941,7 +1980,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function takeEvents() {
     const fresh = state.events.filter((e) => !e.delivered);
     if (fresh.length === 0) return [];
-    for (const e of fresh) e.delivered = true;
+    for (const e of fresh) {
+      e.delivered = true;
+      // leader 的监听收到事件，事件对应的话就算 leader 已读
+      if (READ_BY_EVENT.has(e.type) && e.taskId) {
+        const task = state.tasks.find((t) => t.id === e.taskId);
+        if (task) markLeaderRead(task, false);
+      }
+    }
     const delivered = state.events.filter((e) => e.delivered);
     if (delivered.length > KEEP_DELIVERED_EVENTS) {
       const drop = new Set(delivered.slice(0, delivered.length - KEEP_DELIVERED_EVENTS));
@@ -1958,7 +2004,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHook, messageAgent, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHook, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

@@ -628,6 +628,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     // 带 review 摘要：这张卡所有提交改了哪些文件、各几行；新文件、超出任务路径的文件标出来
     'GET /api/task': async (_b, url) => {
       const task = store.getTask(url.searchParams.get('id') ?? '');
+      if (url.searchParams.get('reader') === 'leader') store.leaderOpenedTask(task.id);
       if (!task.commits?.length || task.kind === 'demo') return { task };
       const lead = leadRules(readRules()).trim();
       const files = await commitStats(root, task.commits);

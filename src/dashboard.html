@@ -3459,7 +3459,7 @@ function openCardMenu(id, x, y) {
   fill(m,
     el('div', { class: 'ctx-head' }, el('span', { class: 'id' }, t.id), el('span', { class: 't' }, t.title)),
     item('popout', '打开详情', () => { view.task = t.id; saveView(); renderDrawer(true); }),
-    t.kind !== 'demo' && ['asking', 'working', 'submitted'].includes(t.status) ? item('reply', t.status === 'asking' ? '回复提问…' : '留言…', () => focusReply(t.id)) : null,
+    t.kind !== 'demo' && ['asking', 'working', 'submitted'].includes(t.status) ? item('reply', t.status === 'asking' ? '回复提问…' : '补充说明…', () => focusReply(t.id)) : null,
     jumps.length ? [sep(), jumps] : null,
     actions.length ? [sep(), actions] : null,
     dangers.length ? [sep(), dangers] : null,
@@ -3735,7 +3735,7 @@ function replyBox(t) {
   const mine = replyState.id === t.id ? replyState : { error: '', sent: '', sending: false };
   const area = el('textarea', {
     class: 'reply-input', rows: '3', 'data-id': t.id,
-    placeholder: asking ? '回复上方提问，worker 收到后将继续工作…' : review ? '填写对 review 的要求，例如需要修改之处…' : `填写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的说明…`,
+    placeholder: asking ? '回复上方提问，worker 收到后将继续工作…' : review ? '填写对 review 的要求，例如需要修改之处…' : `填写给 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的补充说明…`,
   });
   area.value = replyDrafts.get(t.id) || '';
   const send = async () => {
@@ -3757,7 +3757,7 @@ function replyBox(t) {
     : mine.sent ? el('span', { class: 'hint' }, mine.sent)
     : el('span', { class: 'hint' }, asking ? '将同时发送给 worker 和 leader，leader 不会重复答复 · ' : review ? 'leader 将在 review 时查看；如被打回，worker 也会收到 · ' : 'worker 将在下次调用 ateam 时收到，并同步通知 leader · ', el('kbd', null, '⌘↩'), ' 发送');
   return el('div', { class: `reply-box${asking ? ' asking' : ''}` },
-    el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : review ? '给 leader 和 worker 留言' : '给 worker 留言'),
+    el('h4', null, asking ? `回复 ${t.assignee ? agentLabel(t.assignee) : 'worker'} 的提问` : '补充说明'),
     el('div', { class: 'composer', onclick: () => area.focus() }, area,
       el('div', { class: 'reply-foot' }, foot,
         el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送'))));

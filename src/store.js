@@ -1168,14 +1168,20 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const agent = findAgent(agentId);
     if (!agent?.currentTask || agent.dismissed) return null;
     const task = getTask(agent.currentTask);
-    const note = takeNote(task);
-    return note ? { taskId: task.id, note } : null;
+    // 只看不取：平台可能运行了 hook 却没把内容交给模型，所以留言仍保留到下一次 ateam 调用，
+    // 代价是 worker 可能看到两遍。同一内容只经 hook 发一次
+    const note = task.pendingNote;
+    if (!note || task.noteSentByHook === note) return null;
+    task.noteSentByHook = note;
+    changed();
+    return { taskId: task.id, note };
   }
 
   function takeNote(task) {
     const note = task.pendingNote;
     if (!note) return null;
     delete task.pendingNote;
+    delete task.noteSentByHook;
     changed();
     return note;
   }

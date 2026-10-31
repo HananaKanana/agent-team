@@ -2,7 +2,7 @@
 
 默认情况下，看板留言和 `ateam note`、`ateam task edit` 的通知，要等 worker 下一次调用 ateam 才送达。启用这个 hook 后，worker 每完成一次工具调用，就会收到待送达的内容。
 
-不启用也能正常工作，只是送达更晚。
+不启用也能正常工作，只是送达更晚。启用后，留言仍保留到 worker 下一次调用 ateam，所以 hook 没生效时也不会丢，代价是生效时 worker 会多看到一遍。
 
 `ateam hook post-tool` 不绑定具体平台：它从 stdin 读 `session_id`、`tool_name`、`tool_input`，向 stdout 输出 `hookSpecificOutput.additionalContext`。平台只要支持这种 Claude Code 格式的 PostToolUse command hook，就能使用。
 
@@ -47,7 +47,7 @@
 
 在 `<项目>/.codebuddy/settings.json`（只对这个项目生效）或 `~/.workbuddy/settings.json` 的 `hooks` 里，给 `PostToolUse` 加一条和上面相同的配置。已有的条目不要改。改完重启会话，或在 `/hooks` 面板里确认。
 
-启用后先留言试一次，确认 worker 确实看到「# ateam 补充说明」。如果看不到，说明 WorkBuddy 不接受 `additionalContext`，留言已被取走、不会再送达，应停用这条 hook。
+启用后先留言试一次，确认 worker 确实看到「# ateam 补充说明」。如果看不到，说明 WorkBuddy 不接受 `additionalContext`，留言仍会在 worker 下一次调用 ateam 时送达，可以停用这条 hook。
 
 ## 其他平台
 

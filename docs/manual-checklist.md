@@ -113,9 +113,9 @@
 1. [ ] 等待答复的卡：打开详情（或右键「回复提问…」，会滚到并聚焦输入框），回复框在详情最下面、时间线后面，样式是一个整体的输入框（提示和发送按钮在框内底部，输入时框会跟着长高）；写字时页面刷新不丢字、不丢焦点；⌘↩ 或「发送」后卡回到进行中，worker 收到以「# 答复 T?（用户直接答复…）」开头的输出，leader 收到 user_reply 事件且不再重复答复；时间线里出现「答复 · 你」
 2. [ ] 进行中、返工中的卡：回复框变成「给 worker 留言」，发送后 worker 下一次 progress / wait / submit 看到「补充说明（用户直接说）…」，leader 收到 user_reply 事件
 3. [ ] 待 review 的卡：详情最下面是「给 leader 和 worker 留言」，发送后 leader 收到 user_reply 事件（提示 review 时按它核对）；leader 打回后，worker 收到的打回意见后面附着「补充说明（用户直接说）…」
-4. [ ] 按 `docs/worker-hook-setup.md` 启用 hook 后：worker 正在连续干活（中途不调用 ateam）时在看板留言，它在下一个工具调用结束后就看到「# ateam 补充说明」并照做；这条留言不会在之后的 progress / submit 里重复出现
+4. [ ] 按 `docs/worker-hook-setup.md` 启用 hook 后：worker 正在连续干活（中途不调用 ateam）时在看板留言，它在下一个工具调用结束后就看到「# ateam 补充说明」并照做；同一条留言不会在之后的工具调用后重复出现，下一次 progress / wait / submit 还会再带一遍
 5. [ ] 启用 hook 后：两个 worker 在同一目录干活，给其中一张卡留言，只有拿着这张卡的 worker 收到；在没有 ateam 的项目里用 DSH 不受影响；停掉 ateam 服务时 worker 照常干活，不报错
-6. [ ] 未启用 hook：留言仍在 worker 下一次 progress / wait / submit 时送达，和原来一样
+6. [ ] 未启用 hook，或平台运行了 hook 但没把内容交给模型：留言仍在 worker 下一次 progress / wait / submit 时送达，和原来一样
 
 ## test worker 与浏览器
 

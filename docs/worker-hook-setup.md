@@ -15,7 +15,7 @@
 
 ## 启用
 
-worker 加入团队时会自动运行下面的命令，通常不用手工操作：
+这是安装步骤的一部分（看板「使用说明 → 安装」第 ③ 步），每台电脑在**终端**里运行一次。worker 加入时也会运行一遍做检查，但 agent 平台通常只允许 worker 写项目目录，所以不要依赖它：
 
 ```bash
 ateam hook install --platform dsh        # 或 --platform workbuddy

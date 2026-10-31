@@ -110,6 +110,17 @@ ln -s ~/code/agent-team/skills/ateam-worker ~/.agents/skills/ateam-worker
 
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 
+### 3. 为 worker 安装 hook
+
+在**终端**里运行，只装实际用的平台：
+
+```bash
+ateam hook install --platform dsh         # DeepSeek Harness
+ateam hook install --platform workbuddy   # WorkBuddy
+```
+
+装好后，worker 每完成一次操作就能收到补充说明，空闲等待时也不会持续消耗 token。不要交给 worker 去装：agent 平台通常只允许它写项目目录。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+
 ---
 
 ## 二、每次开工
@@ -320,7 +331,7 @@ worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没�
 
 ### 给干活中的 worker 发消息
 
-在卡片详情最下面的「补充说明」里写，或者用 `ateam note`。启用工具后 hook 时（DSH、WorkBuddy 等，worker 加入时自动安装），它在当前操作结束后就能看到；没启用时，要等它下一次调用 ateam。手上没有卡的 worker，用 worker 卡片上的「发消息」或 `ateam message`。
+在卡片详情最下面的「补充说明」里写，或者用 `ateam note`。启用工具后 hook 时（DSH、WorkBuddy 等，安装时在终端运行 `ateam hook install`，见看板「使用说明 → 安装」），它在当前操作结束后就能看到；没启用时，要等它下一次调用 ateam。手上没有卡的 worker，用 worker 卡片上的「发消息」或 `ateam message`。
 
 卡片时间线上的标签显示对方有没有收到：提问看 leader，leader 的答复和补充说明看 worker，你发的消息两边都看。进度和交付不显示标签。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
 

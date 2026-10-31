@@ -47,7 +47,7 @@ ateam join --role <角色>
 ateam join --role frontend --name 账号A
 ```
 
-加入后运行一次 `ateam hook install`（WorkBuddy 上用 `ateam hook install --platform workbuddy`），让你干活中途就能看到留言。重复运行是安全的。
+加入后运行一次 `ateam hook install`（WorkBuddy 上用 `ateam hook install --platform workbuddy`），检查 hook 是否已装好。它通常已由用户在安装步骤里装过，会直接输出「已安装」；重复运行是安全的。
 
 - 输出「已安装」：什么都不用说，继续。
 - 输出「已写入」：用一句话把输出的内容转告用户，然后**继续主循环，不要等，也不要自己重启**。

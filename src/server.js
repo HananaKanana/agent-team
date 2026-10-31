@@ -140,7 +140,11 @@ function installInfo() {
   const hookInstalled = profiles.some((p) => {
     try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('# ateam hook begin'); } catch { return false; }
   });
-  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, toolDir: TOOL_DIR };
+  // WorkBuddy：用户级 settings.json 里有 ateam 的 hook 命令
+  const workbuddyFile = [join(home, '.workbuddy', 'settings.json'), join(home, '.codebuddy', 'settings.json')].find((f) => existsSync(f));
+  let workbuddyHook = null;
+  if (workbuddyFile) { try { workbuddyHook = readFileSync(workbuddyFile, 'utf8').includes('hook post-tool'); } catch {} }
+  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, workbuddyHook, toolDir: TOOL_DIR };
 }
 
 export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {

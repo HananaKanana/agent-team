@@ -380,7 +380,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
-    'POST /api/join': (b) => ({ agent: store.join(b.role, b.name, b.id) }),
+    'POST /api/join': (b) => ({ agent: store.join(b.role, b.name, b.id), root }),
     'POST /api/hook/post-tool': (b) => {
       if (!b.session) return {};
       if (b.as) store.bindHookSession(b.session, b.as);

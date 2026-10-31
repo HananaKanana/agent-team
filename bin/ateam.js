@@ -2,7 +2,7 @@
 // ateam 命令行：leader 和 worker 与服务交互的唯一方式。输出是给大模型读的 markdown 文本。
 // 退出码：0 成功；1 业务错误；2 服务不可达。
 import { formatDoctor } from '../src/doctor.js';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -274,6 +274,16 @@ async function postToolHook() {
   }
 }
 
+function isInside(dir, root) {
+  try {
+    const from = realpathSync(root);
+    const to = realpathSync(dir);
+    return to === from || to.startsWith(`${from}/`);
+  } catch {
+    return true;
+  }
+}
+
 const commands = {
   async hook({ flags, positional }) {
     if (positional[0] === 'post-tool') return postToolHook();
@@ -310,7 +320,7 @@ const commands = {
 
   async join({ flags }) {
     const role = requireArg(flags.role, '角色', 'ateam join --role frontend');
-    const { agent } = await request('POST', '/api/join', { role, name: flags.name ?? '', id: flags.id ?? '' });
+    const { agent, root } = await request('POST', '/api/join', { role, name: flags.name ?? '', id: flags.id ?? '' });
     const named = agent.name ? `，名字 ${agent.name}` : '';
     const head = agent.rejoined
       ? `已重新加入团队，沿用原编号 **${agent.id}**（角色 ${agent.role}${named}）。之后每条命令都要带 --as ${agent.id}。`
@@ -318,6 +328,8 @@ const commands = {
     return [
       head,
       ...(agent.refused ? [`（${agent.refused}，所以分配了新编号 ${agent.id}，之后用新编号。）`] : []),
+      // 开场提示词不写项目目录了，工作目录选错时在这里拦一下：找不到 .ateam/port 会连到默认端口上别的项目
+      ...(root && !isInside(process.cwd(), root) ? ['', `⚠ 你的工作目录 ${process.cwd()} 不在这个服务的项目目录 ${root} 里，加入的可能是别的项目。立即告诉用户，等用户确认后再继续。`] : []),
       '',
       `下一步：ateam wait --as ${agent.id}`,
     ].join('\n');

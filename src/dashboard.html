@@ -2000,8 +2000,7 @@ let reconnectOpen = null; // 展开了重连提示词的掉线 worker 编号
 // 掉线的 worker 窗口还在时，发给它的那句话：旧编号已失效，重新加入后接着主循环
 function reconnectPrompt(a) {
   const name = a.name ? ` --name ${a.name}` : '';
-  const dir = data.root ? `项目目录是 ${data.root}。` : '';
-  return `继续。你是 ateam worker ${a.id}（角色 ${a.role}），已经掉线。${dir}请按 ateam-worker skill 运行 ateam join --role ${a.role} --id ${a.id}${name} 重新加入（沿用原编号），然后进入 ateam wait 主循环；如果领到「⚠ 接手任务」，先看历史和 git status，在已有改动上继续。中途不要停下来汇报。`;
+  return `继续。你是 ateam worker ${a.id}（角色 ${a.role}），已经掉线。请按 ateam-worker skill 运行 ateam join --role ${a.role} --id ${a.id}${name} 重新加入（沿用原编号），然后进入 ateam wait 主循环；如果领到「⚠ 接手任务」，先看历史和 git status，在已有改动上继续。中途不要停下来汇报。`;
 }
 
 function renderOfflinePanel(panel) {
@@ -2229,7 +2228,7 @@ function renderHelper(force = false) {
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
       el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' ? null : el('p', { class: 'tab-hint' }, data.root ? `项目目录：${data.root}。请将各段提示词发送至对应的 agent 窗口。` : '请将各段提示词发送至对应的 agent 窗口。'),
+    tab === 'rules' || tab === 'settings' || tab === 'tests' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
     tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
     el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
@@ -4118,8 +4117,7 @@ function installStep2(info, profile) {
 
 // leader 的加入提示词：不带需求，先就位；新开会话和会话重开都用这一句
 function leadPrompt() {
-  const dir = data.root ? `\n项目目录：${data.root}` : '';
-  return `使用 ateam-lead skill，作为 leader 加入这个项目的团队。${dir}
+  return `使用 ateam-lead skill，作为 leader 加入这个项目的团队。
 先运行 ateam status 了解现状，再用 Monitor 后台启动 ateam watch --follow 监听。
 如果「待你处理」里有事，先接着处理；没有的话，简单告诉我现状（有哪些 worker 在线、有没有没做完的需求），然后等我说需求。不要自己找活干。`;
 }
@@ -4134,8 +4132,7 @@ const STANDARD_ROLES = [
 ];
 
 function workerPrompt(role) {
-  const dir = data.root ? `\n项目目录：${data.root}` : '';
-  return `使用 ateam-worker skill，角色 ${role}${dir}`;
+  return `使用 ateam-worker skill，角色 ${role}`;
 }
 
 function promptBox(role) {

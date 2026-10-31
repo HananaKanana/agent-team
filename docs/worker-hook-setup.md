@@ -40,6 +40,8 @@ ateam hook install --platform dsh        # 或 --platform workbuddy
 - 同一目录下有多个 worker 时，服务根据 worker 运行的 `ateam ... --as <编号>` 命令，记住会话对应的编号。这个对应关系会保存到磁盘，服务重启后不会丢。
 - 目录下没有 `.ateam/port` 时，hook 不发请求，直接退出。服务不可达时同样安静退出，不影响 worker。
 
+此外还有一条读后台输出之前的 hook：worker 的 `ateam wait` 还在挂着时，拦下 `job_output` / `TaskOutput`，并让它结束本轮，避免它一直占着一轮消耗 token。wait 结束后不拦。
+
 ## 局限
 
 - 只在工具调用结束后送达。worker 卡在一条长命令里时，要等这条命令结束。

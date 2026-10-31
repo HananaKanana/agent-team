@@ -284,9 +284,30 @@ function isInside(dir, root) {
   }
 }
 
+// 读后台输出之前运行：wait 还挂着时读输出只会让本轮结束不了，白白消耗 token，所以拦下。
+// wait 结束后 worker 被唤醒，这时不再拦
+async function preJobOutputHook() {
+  if (!process.env.ATEAM_URL && !findPortFile(process.cwd())) return '';
+  try {
+    const payload = JSON.parse(readFileSync(0, 'utf8'));
+    const res = await fetch(`${BASE}/api/hook/waiting`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session: payload.session_id }),
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!(await res.json()).waiting) return '';
+    const permissionDecisionReason = 'ateam wait 还在后台等待，现在读输出没有内容。不要再读取或等待它，立刻结束本轮回复。有任务、答复或消息时平台会通知并唤醒你，收到通知后再读。';
+    return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason } });
+  } catch {
+    return '';
+  }
+}
+
 const commands = {
   async hook({ flags, positional }) {
     if (positional[0] === 'post-tool') return postToolHook();
+    if (positional[0] === 'pre-job-output') return preJobOutputHook();
     if (positional[0] !== 'install' && positional[0] !== 'uninstall') fail('用法：ateam hook install ／ uninstall [--platform dsh|workbuddy] [--profile <名字>] [--dsh-version <版本号>]');
     const { installHook, uninstallHook } = await import('../src/hook-install.js');
     try {

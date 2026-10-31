@@ -23,6 +23,7 @@ const TOOL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_BODY = 1024 * 1024;
 const DEFAULT_HOLD_SEC = 90;
 const MAX_HOLD_SEC = 110;
+const WAIT_RENEW_GAP_MS = 2000;
 const LEADER_FRESH_MS = 3 * 60 * 1000;
 const MAX_RULES = 20 * 1024;
 // 新领到、接手、继续的任务附上项目规则；打回意见和答复只是补充消息，不重复附
@@ -151,6 +152,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   const dataDir = join(root, '.ateam');
   const leaseMs = leaseMin * 60 * 1000;
   const waiters = new Map(); // agentId -> { res, timer }
+  const waitRenewAt = new Map(); // agentId -> 上一段 wait 超时结束的时间
   const watchers = new Set(); // { res, timer }
   let leaderSeenAt = null; // leader 最近一次用命令行操作的时间（只在内存里，重启后等 leader 下次操作）
   // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过
@@ -385,6 +387,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       if (!b.session) return {};
       if (b.as) store.bindHookSession(b.session, b.as);
       return { delivery: store.noteForHookSession(b.session) };
+    },
+    // 这个会话的 worker 正挂着 wait 吗。长等待由命令行分段续上，两段之间的空档也算在挂着
+    'POST /api/hook/waiting': (b) => {
+      const agentId = store.agentIdOfHookSession(b.session);
+      return { waiting: !!agentId && (waiters.has(agentId) || Date.now() - (waitRenewAt.get(agentId) ?? 0) < WAIT_RENEW_GAP_MS) };
     },
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text, b.expect) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),
@@ -646,6 +653,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     waiter.timer = setTimeout(() => {
       try {
         store.touch(agentId);
+        waitRenewAt.set(agentId, Date.now());
         finishWaiter(agentId, waiter, 200, { ok: true, result: null, waiting: store.waitingInfo(agentId) });
       } catch (err) {
         finishWaiter(agentId, waiter, 400, { ok: false, code: err.code ?? 'INTERNAL', message: err.message });

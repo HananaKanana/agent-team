@@ -126,6 +126,7 @@
 13. [ ] 使用说明的安装页有「可选：实时送达消息」一节；未安装时显示安装、重启、停用步骤，安装后显示「已写入配置」；`ateam hook uninstall` 后恢复未安装状态
 14. [ ] 消息已读标签：提问显示 leader 已读状态；leader 的答复和补充说明显示 worker 已读状态；用户发的消息和答复同时显示 worker 和 leader 已读状态；进度、交付不显示标签（包括之前已记录的）；悬停可见已读时间和送达方式
 15. [ ] 重启 ateam serve 后，不等 worker 调用 ateam，直接给干活中的 worker 留言：标签很快变为「worker 已读」
+16. [ ] worker 后台挂着 wait 时调用 job_output / TaskOutput：调用被拦下，提示结束本轮，worker 随后结束本轮；wait 结束收到通知后，读取不被拦
 
 ## test worker 与浏览器
 

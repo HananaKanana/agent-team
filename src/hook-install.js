@@ -9,26 +9,36 @@ const BRIDGE = '@deepseek-ai/dsh-hooks-claude-code';
 const PROTOCOL = '@deepseek-ai/dsh-hook-protocol';
 const BEGIN = '# ateam hook begin';
 const END = '# ateam hook end';
-const COMMAND_MARK = 'hook post-tool';
+const POST_TOOL = 'hook post-tool';
+const PRE_JOB_OUTPUT = 'hook pre-job-output';
+// 读后台输出的工具：DSH 是 job_output，WorkBuddy 是 TaskOutput
+const JOB_OUTPUT_TOOLS = '^(job_output|TaskOutput)$';
 const MANUAL = '文档：agent-team 仓库的 docs/worker-hook-setup.md。';
 
 const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
-function hookCommand() {
-  return `"${process.execPath}" "${process.argv[1]}" ${COMMAND_MARK}`;
+function hookCommand(sub) {
+  return `"${process.execPath}" "${process.argv[1]}" ${sub}`;
 }
 
-function hookEntry() {
-  return { hooks: [{ type: 'command', command: hookCommand(), timeout: 5 }] };
+function dshHooks() {
+  return {
+    PostToolUse: [{ hooks: [{ type: 'command', command: hookCommand(POST_TOOL), timeout: 5 }] }],
+    PreToolUse: [{ matcher: JOB_OUTPUT_TOOLS, hooks: [{ type: 'command', command: hookCommand(PRE_JOB_OUTPUT), timeout: 5 }] }],
+  };
 }
 
 // WorkBuddy 把非 0 退出当成拦截，node 路径随它升级失效时不能影响 worker，所以兜底成功退出
-function workbuddyEntry() {
-  return { hooks: [{ type: 'command', command: `${hookCommand()} 2>/dev/null || true`, timeout: 5 }] };
+function workbuddyHooks() {
+  const safe = (sub) => [{ type: 'command', command: `${hookCommand(sub)} 2>/dev/null || true`, timeout: 5 }];
+  return {
+    PostToolUse: { hooks: safe(POST_TOOL) },
+    PreToolUse: { matcher: JOB_OUTPUT_TOOLS, hooks: safe(PRE_JOB_OUTPUT) },
+  };
 }
 
 function isOurEntry(entry) {
-  return (entry?.hooks ?? []).some((h) => String(h?.command ?? '').includes(COMMAND_MARK));
+  return (entry?.hooks ?? []).some((h) => / hook (post-tool|pre-job-output)\b/.test(String(h?.command ?? '')));
 }
 
 function dshProfileDir(flags) {
@@ -67,10 +77,11 @@ function installDsh(flags) {
   const dir = dshProfileDir(flags);
   const version = dshVersion(flags);
   const patchFile = join(dir, 'cordis.patch.yml');
-  const configFile = join(dir, 'ateam-hooks.json');
+  // 配置内容变了就换文件名：DSH 只在 patch 变化时重新加载，文件名写在 patch 里
+  const configFile = join(dir, 'ateam-hooks-2.json');
   const installed = JSON.parse(read(join(dir, 'package.json')) || '{}').dependencies?.[BRIDGE];
   const patch = read(patchFile);
-  const config = JSON.stringify({ hooks: { PostToolUse: [hookEntry()] } }, null, 2) + '\n';
+  const config = JSON.stringify({ hooks: dshHooks() }, null, 2) + '\n';
   // 新插件必须放在 insert 里：只有 id 的条目是改已有的行，匹配不到会被 DSH 跳过
   const block = `${BEGIN}\n- insert:\n    - id: ateam-hooks\n      name: '${BRIDGE}'\n      config:\n        configPath: ${JSON.stringify(configFile)}\n${END}\n`;
   if (installed === version && patch.includes(block) && read(configFile) === config) {
@@ -105,12 +116,15 @@ function readSettings(file) {
 function installWorkbuddy() {
   const file = workbuddySettingsFile();
   const settings = readSettings(file);
-  const list = settings.hooks?.PostToolUse ?? [];
-  const entry = workbuddyEntry();
-  const ours = list.find(isOurEntry);
-  if (ours?.hooks?.[0]?.command === entry.hooks[0].command) return `hook 已安装（${file}），不需要操作。`;
+  const wanted = workbuddyHooks();
+  const hasEntry = (event) => (settings.hooks?.[event] ?? []).some((e) => isOurEntry(e) && e.hooks[0].command === wanted[event].hooks[0].command);
+  if (hasEntry('PostToolUse') && hasEntry('PreToolUse')) return `hook 已安装（${file}），不需要操作。`;
+  const ours = (settings.hooks?.PostToolUse ?? []).some(isOurEntry);
   copyFileSync(file, `${file}.bak.ateam`);
-  settings.hooks = { ...settings.hooks, PostToolUse: [...list.filter((e) => !isOurEntry(e)), entry] };
+  settings.hooks = { ...settings.hooks };
+  for (const event of Object.keys(wanted)) {
+    settings.hooks[event] = [...(settings.hooks[event] ?? []).filter((e) => !isOurEntry(e)), wanted[event]];
+  }
   writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
   if (ours) return `hook 已安装（${file}），配置已更新，不需要操作。`;
   return `hook 已写入 ${file}，重启会话或在 /hooks 面板确认后生效。${MANUAL}`;
@@ -128,9 +142,10 @@ function uninstallDsh(flags) {
 function uninstallWorkbuddy() {
   const file = workbuddySettingsFile();
   const settings = readSettings(file);
-  const list = settings.hooks?.PostToolUse ?? [];
-  if (!list.some(isOurEntry)) return 'WorkBuddy 上没有安装 ateam 的 hook。';
-  settings.hooks.PostToolUse = list.filter((e) => !isOurEntry(e));
+  if (!(settings.hooks?.PostToolUse ?? []).some(isOurEntry) && !(settings.hooks?.PreToolUse ?? []).some(isOurEntry)) return 'WorkBuddy 上没有安装 ateam 的 hook。';
+  for (const event of ['PostToolUse', 'PreToolUse']) {
+    if (settings.hooks[event]) settings.hooks[event] = settings.hooks[event].filter((e) => !isOurEntry(e));
+  }
   writeFileSync(file, JSON.stringify(settings, null, 2) + '\n');
   return `已从 ${file} 移除 hook，重启会话后生效。`;
 }

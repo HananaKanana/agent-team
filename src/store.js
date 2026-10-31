@@ -1220,9 +1220,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     changed();
   }
 
+  function agentIdOfHookSession(session) {
+    return state.agents.find((a) => a.hookSession === session)?.id ?? null;
+  }
+
   function noteForHookSession(session) {
-    const agent = state.agents.find((a) => a.hookSession === session);
-    return agent ? noteForHook(agent.id) : null;
+    const agentId = agentIdOfHookSession(session);
+    return agentId ? noteForHook(agentId) : null;
   }
 
   // agent 平台的工具后 hook 来取：worker 干活的两步之间就能看到留言，不用等它调用 ateam。
@@ -2016,7 +2020,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

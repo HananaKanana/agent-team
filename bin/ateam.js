@@ -313,6 +313,12 @@ const commands = {
     try {
       return positional[0] === 'install' ? installHook(flags) : uninstallHook(flags);
     } catch (err) {
+      // agent 平台的沙箱只允许写项目目录，改不了用户目录下的平台配置
+      const denied = /EPERM|EACCES|operation not permitted|permission denied/i.test(`${err.code ?? ''} ${err.message}`);
+      if (denied) {
+        const cmd = `ateam hook ${positional[0]}${flags.platform ? ` --platform ${flags.platform}` : ''}`;
+        fail(`没有权限修改 agent 平台的配置（${err.message.split('\n')[0]}）。这是平台的沙箱限制：worker 只能写项目目录。\n请用一句话转告用户：「hook 需要你在终端里运行一次：${cmd}」。不要自己改权限或配置，继续主循环即可；没装上时补充说明仍在下一次调用 ateam 时送达。`);
+      }
       fail(`${err.message}\n没有安装成功不影响工作：留言仍在下一次调用 ateam 时送达，继续主循环即可。`);
     }
   },

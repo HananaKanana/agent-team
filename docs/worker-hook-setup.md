@@ -21,7 +21,7 @@ worker 加入团队时会自动运行下面的命令，通常不用手工操作�
 ateam hook install --platform dsh        # 或 --platform workbuddy
 ```
 
-命令可以重复运行。改动内容：
+命令可以重复运行。如果 agent 平台的权限模式只允许写项目目录，worker 自己装不上，会请你在终端里运行这条命令。改动内容：
 
 - **DeepSeek Harness：** 在 profile 目录安装和应用版本一致的桥接包，写入 `ateam-hooks.json`，并在 `cordis.patch.yml` 追加一段带标记的配置。DSH 会自动重新加载这个文件，实测约 25 秒内对运行中的会话生效，不用重启。如果一直不生效（会话日志里没有 `hook/invoked`），再在菜单中点击「Restart App and Host」。重启会打断所有会话，由用户选择时机。DSH 升级后重新运行一次。
 - **WorkBuddy：** 在 `~/.workbuddy/settings.json`（没有则用 `~/.codebuddy/settings.json`）的 `PostToolUse` 追加一条，已有条目不变。之后重启会话，或在 `/hooks` 面板确认。

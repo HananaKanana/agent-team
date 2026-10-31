@@ -124,6 +124,7 @@
 12. [ ] 新 worker 加入：自动运行 `ateam hook install`，首次转告用户需要重启后继续工作，不自己重启；再次运行显示「已安装」；安装失败时继续工作，留言按默认方式送达
 13. [ ] 使用说明的安装页有「可选：实时送达消息」一节；未安装时显示安装、重启、停用步骤，安装后显示「已写入配置」；`ateam hook uninstall` 后恢复未安装状态
 14. [ ] 消息已读状态：leader 发的补充说明和答复显示「worker 未读」，标签在时间后面、和时间同一行，送达后变成「worker 已读」，悬停可见已读时间；用户发的同时显示 worker 和 leader 的已读状态；worker 的提问和交付显示 leader 已读状态，leader 监听开着时很快变为已读；worker 的进度在 leader 运行 ateam show 后变为已读；悬停可见送达方式；功能上线前的旧消息不显示已读状态
+15. [ ] 重启 ateam serve 后，不等 worker 调用 ateam，直接给干活中的 worker 留言：标签很快变为「worker 已读」
 
 ## test worker 与浏览器
 

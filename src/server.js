@@ -378,18 +378,13 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   let prompterProc = null;
   process.on('exit', () => prompterProc?.kill());
 
-  // agent 会话 → worker 编号。hook 只知道会话，不知道编号，从 worker 自己跑的 ateam --as 命令里学到；
-  // 只放内存：服务重启后，worker 下一次调用 ateam 时重新学到
-  const hookSessions = new Map();
-
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
     'POST /api/join': (b) => ({ agent: store.join(b.role, b.name, b.id) }),
     'POST /api/hook/post-tool': (b) => {
       if (!b.session) return {};
-      if (b.as) hookSessions.set(b.session, b.as);
-      const agentId = hookSessions.get(b.session);
-      return { delivery: agentId ? store.noteForHook(agentId) : null };
+      if (b.as) store.bindHookSession(b.session, b.as);
+      return { delivery: store.noteForHookSession(b.session) };
     },
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text, b.expect) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),

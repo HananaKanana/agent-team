@@ -1213,6 +1213,20 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
+  // hook 只知道会话，不知道 worker 编号，从 worker 自己跑的 ateam --as 命令里学到。
+  // 记在 agent 上，随 runtime.json 落盘，服务重启后不用等 worker 再调用一次 ateam
+  function bindHookSession(session, agentId) {
+    const agent = findAgent(agentId);
+    if (!agent || agent.hookSession === session) return;
+    agent.hookSession = session;
+    changed();
+  }
+
+  function noteForHookSession(session) {
+    const agent = state.agents.find((a) => a.hookSession === session);
+    return agent ? noteForHook(agent.id) : null;
+  }
+
   // agent 平台的工具后 hook 来取：worker 干活的两步之间就能看到留言，不用等它调用 ateam。
   // 这不是 worker 自己的调用，所以不走 touch，不算它的活动。
   function noteForHook(agentId) {
@@ -2004,7 +2018,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHook, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

@@ -37,7 +37,7 @@ ateam hook install --platform dsh        # 或 --platform workbuddy
 ## 工作方式
 
 - 平台在每次工具调用后运行 `ateam hook post-tool`，内容以「# ateam 补充说明」的形式附加到 worker 的上下文。
-- 同一目录下有多个 worker 时，服务根据 worker 运行的 `ateam ... --as <编号>` 命令，记住会话对应的编号。服务重启后，worker 下一次调用 ateam 时重新记住。
+- 同一目录下有多个 worker 时，服务根据 worker 运行的 `ateam ... --as <编号>` 命令，记住会话对应的编号。这个对应关系会保存到磁盘，服务重启后不会丢。
 - 目录下没有 `.ateam/port` 时，hook 不发请求，直接退出。服务不可达时同样安静退出，不影响 worker。
 
 ## 局限

@@ -4088,6 +4088,7 @@ function installGuide() {
 
 // 第 ③ 步：worker 的工具后 hook。每台电脑一次，按装了哪个平台分别显示
 function hookStep(info) {
+  const done = (ok, text) => (ok ? el('p', { class: 'hint install-done' }, `✓ ${text}`) : null);
   const title = el('div', { class: 'wcard-head' }, el('b', null, '③ 为 worker 安装 hook'));
   const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时也不会持续消耗 token。请在终端中运行，不要交给 worker：agent 平台通常只允许 worker 写入项目目录。只安装实际使用的平台即可。');
   const rows = [];
@@ -4500,27 +4501,34 @@ function renderAttention() {
 }
 
 async function poll() {
+  let json;
   try {
     // 带上次的 ETag：状态没变时服务只回 304，不用重新下载和解析整份状态
     const res = await fetch('/api/state?view=dashboard', { cache: 'no-store', headers: lastEtag ? { 'if-none-match': lastEtag } : {} });
     if (res.status !== 200 && res.status !== 304) throw new Error(`HTTP ${res.status}`);
-    document.getElementById('banner').hidden = true;
-    toastClosed.delete('banner'); // 连上了：下次再断开时重新提醒
-    const json = res.status === 304 ? lastJson : await res.text();
+    json = res.status === 304 ? lastJson : await res.text();
     lastEtag = res.headers.get('etag') || '';
-    if (json !== lastJson) {
-      lastJson = json;
-      data = JSON.parse(json);
-      render();
-    } else {
-      renderWorkers(); // 只刷新「心跳 N 分钟前」
-    }
-    if (!PROMPTER_ONLY) renderAttention();
   } catch {
     document.getElementById('banner').hidden = toastClosed.has('banner');
     lastJson = null; // 恢复连接后重新渲染，刷新提醒
     lastEtag = '';
     setBadge('!', '#d9534f');
+    return;
+  }
+  document.getElementById('banner').hidden = true;
+  toastClosed.delete('banner'); // 连上了：下次再断开时重新提醒
+  // 页面代码出错不算断线，不显示「无法连接」；错误在浏览器控制台里看
+  try {
+    if (json !== lastJson) {
+      data = JSON.parse(json);
+      lastJson = json;
+      render();
+    } else {
+      renderWorkers(); // 只刷新「心跳 N 分钟前」
+    }
+    if (!PROMPTER_ONLY) renderAttention();
+  } catch (err) {
+    console.error('[ateam] 看板渲染出错', err);
   }
 }
 

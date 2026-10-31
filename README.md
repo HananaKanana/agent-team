@@ -16,7 +16,7 @@
 
 | 名词 | 含义 |
 |---|---|
-| agent | 一个 AI 编程程序的窗口。目前 leader 用 Claude Code，worker 用 DeepSeek Harness；也可以换成别的，只要能运行 shell 命令、能加载 skill |
+| agent | 一个 AI 编程程序的窗口。目前 leader 用 Claude Code，worker 用 DeepSeek Harness 或 WorkBuddy；也可以换成别的，只要能运行 shell 命令、能加载 skill |
 | leader | 带团队的那个 agent（Claude Code，加载 `ateam-lead` skill）。你只和它对话：它拆任务、派任务、review、回答提问、写汇报 |
 | worker | 干活的 agent（加载 `ateam-worker` skill）。领任务、写代码、提交。一个 worker 就是一个 agent 窗口，同一时间只做一个任务 |
 | 角色 | worker 的工作分类。标准的有 product（产品）、frontend（前端）、backend（后端）、test（测试），另有可选的 critic（审卡）。任务只派给同角色的 worker。按「做什么活」起名，不要按窗口起名 |
@@ -96,6 +96,7 @@ echo "export PATH=\"$(npm prefix -g)/bin:\$PATH\"" >> ~/.zshrc
 |---|---|---|
 | [skills/ateam-lead/SKILL.md](skills/ateam-lead/SKILL.md) | Claude Code（leader） | `~/.claude/skills/ateam-lead/` |
 | [skills/ateam-worker/SKILL.md](skills/ateam-worker/SKILL.md) | DeepSeek Harness（worker） | `~/.agents/skills/ateam-worker/` |
+| 同上 | WorkBuddy（worker） | `~/.workbuddy/skills/ateam-worker/` |
 
 用软链安装，以后 agent-team 更新了，skill 自动就是新的（已经有同名目录的先删掉再链）：
 
@@ -194,7 +195,7 @@ leader 在线时，看板顶部最前面是绿点「leader 在线」。
 | `product`（产品） | 需求较大或细节没定时先出产品文档（场景、流程、字段、边界、验收标准），开发照着做。不写代码 |
 | `frontend`（前端） | 页面和交互 |
 | `backend`（后端） | 接口和数据 |
-| `test`（测试） | 开发都通过后，按验收标准逐条验证（构建、起服务、调接口、查库），写验证报告；发现问题由 leader 派修复任务，修完再复测。不改业务代码，遵守项目规则（比如不写测试代码） |
+| `test`（测试） | 开发都通过后，先写测试报告和用例交 leader 审核，审过后在浏览器里操作线上页面逐条验证，边测边写报告、报进度；发现问题由 leader 派修复任务，修完再复测。不改业务代码，遵守项目规则（比如不写测试代码） |
 
 还有一个**审卡**角色 `critic`（可选）：需求大、leader 一次拆出很多卡时，它专门挑卡的毛病（描述含糊或矛盾、验收标准没法核对、路径不对、依赖错了、卡和卡冲突）。它不领任务，只读不写（不改任何文件，代码问题写进意见由 leader 派人改），在线时能看到全部的卡，审过的标记掉，leader 改过的卡会再审一次；发现新卡和旧卡冲突，可以重新审旧卡，历史里留痕。为了防止审卡和 leader 一起理解偏了还互相印证：审卡提意见、leader 回复意见，都必须带依据（需求说明或文档的哪一段、代码哪一行、命令输出），没有依据的意见和回复提交不了。**审卡和 leader 有分歧时一律由你决定**：leader 只能回复同意（附打算怎么改）或不同意（附理由），然后看板弹框问你，框里有审卡意见和依据、leader 的回复和依据，你选「按 leader 的方案改」「按审卡意见改」「都不改 / 维持原样」，或者「我来写意见」；leader 按你的决定去改，改完写明改了什么。需求汇报后面会附上这个需求的所有审卡改动，方便你验收时看有没有跑偏。开法：`使用 ateam-worker skill，角色 critic`。审卡 worker 和 leader 一样常驻，只有你要求才下线：空闲时不会申请下线，leader 也不能自己让它下线；你在看板上点它的「下线」，可以选「审完再下线」（把待审的卡都审完、没有待审的卡了才走）或「立即下线」；也可以对 leader 说让它下线。还有一个全局开关：「使用说明 → 设置」里勾上「审完自动下线」，之后审卡 worker 审完所有待审的卡就自动下线（新开的也一样），有新卡要审时再开一个。看板顶部它紧挨着 leader，显示正在审哪张卡、这批还剩几张。
 
@@ -254,7 +255,7 @@ worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡�
 
 ### worker 等了一会儿就自己停了
 
-worker 应该一直循环等任务。如果它停下来问你「要继续等吗」，或者交完一个任务就停了：点看板顶部它的标签，把「唤醒提示词」复制到它自己的窗口里（直接说「继续」通常也行）。
+空闲的 worker 会在后台挂着 `ateam wait` 并结束本轮，有任务或消息时被唤醒，这时窗口安静是正常的（没有后台能力的平台会前台一轮轮等）。如果它**前台停下来**问你「要继续等吗」，或者交完一个任务就停了：点看板顶部它的标签，把「唤醒提示词」复制到它自己的窗口里（直接说「继续」通常也行）。
 
 ### worker 无响应、转交接手
 
@@ -317,9 +318,11 @@ worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没�
 
 在新会话里发看板「使用说明」→「leader」里的那句加入的话（或者说「使用 ateam-lead skill，继续」）。它会先运行 `ateam status`，从「待你处理」列表接着做。
 
-### 想让 worker 干活中途就看到留言
+### 给干活中的 worker 发消息
 
-默认情况下，留言要等 worker 下一次调用 ateam 才送达。启用 agent 平台的工具后 hook（DSH、WorkBuddy 等），worker 每完成一步操作就能看到，worker 加入时会自动安装，重启平台后生效，详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+在卡片详情最下面的「补充说明」里写，或者用 `ateam note`。启用工具后 hook 时（DSH、WorkBuddy 等，worker 加入时自动安装），它在当前操作结束后就能看到；没启用时，要等它下一次调用 ateam。手上没有卡的 worker，用 worker 卡片上的「发消息」或 `ateam message`。
+
+卡片时间线上的标签显示对方有没有收到：提问看 leader，leader 的答复和补充说明看 worker，你发的消息两边都看。进度和交付不显示标签。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
 
 ### 更新了 agent-team 的代码之后
 
@@ -355,7 +358,9 @@ ateam reclaim T3         # 原窗口没了：立即收回任务，交给同角�
 ateam job edit J1 --desc-file job.md   # 改需求的说明（或 --title 改标题）
 ateam job accept J1 J2   # 验收通过（看板上点「验收通过」也一样）
 ateam cards --job J5     # 看某个需求的全部卡和审卡情况
-ateam note T5 "说明"      # 给正在做 T5 的 worker 补充说明（它下一次调用命令时收到，提交前一定看到）
+ateam note T5 "说明"      # 给正在做 T5 的 worker 补充说明（当前操作结束或下一次调用 ateam 时收到，提交前一定看到）
+ateam message --to backend-1 "内容"   # 直接发给 worker，包括手上没有卡的
+ateam hook install --platform dsh   # 安装工具后 hook（或 --platform workbuddy；worker 加入时自动运行）
 ateam critique agree T5 "打算怎么改" --basis "依据"   # leader 回复审卡意见（不同意用 dispute），由你在看板上决定；照你的决定改完后 critique done
 ateam task top T5        # 设为优先：同角色的 worker 下一个先领它（--off 取消；看板上点开待领取的任务也能设）
 ateam rules              # 查看项目规则；ateam rules add "提交前先跑一遍编译" 加一条（看板「使用说明 → 项目规则」也能改）

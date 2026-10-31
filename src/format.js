@@ -556,7 +556,7 @@ function formatCritiqueList(tasks, agentId, jobs = []) {
   lines.push(`有问题：ateam critique --as ${agentId} issue T1 "<问题在哪、为什么是问题、建议怎么改>" --basis "<依据：用户原话的哪一句、设计文档哪一段、代码哪个文件第几行、命令的实际输出>"`);
   lines.push('没有依据、只是「我觉得」的意见不要提。');
   lines.push(`发现和已经审过的旧卡冲突：对旧卡也提 issue，加上 --because "和 T12 冲突"（会记进历史）`);
-  lines.push(`全部标完后运行 ateam wait --as ${agentId} 等新卡。不要结束本轮回复。`);
+  lines.push(`全部标完后运行 ateam wait --as ${agentId} 等新卡。除了后台等待，不要结束本轮回复。`);
   return lines.join('\n');
 }
 

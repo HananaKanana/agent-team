@@ -1194,7 +1194,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
-  // leader 给正在做的 worker 补充说明（比如审卡发现描述有误）。worker 下一次 progress、wait 或 submit 时收到
+  // leader 给正在做的 worker 补充说明（比如审卡发现描述有误）。worker 在下一个工具调用结束（启用 hook 时）或下一次 progress、wait、submit 时收到
   // by 为 'user'：用户在看板上直接留言，worker 收到时标明来自用户
   function noteTask(taskId, text, by = 'lead') {
     text = requireText(text, '补充说明');

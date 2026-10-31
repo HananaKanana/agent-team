@@ -84,7 +84,7 @@ function installDsh(flags) {
     if (patch && !existsSync(`${patchFile}.bak.ateam`)) copyFileSync(patchFile, `${patchFile}.bak.ateam`);
     writeFileSync(patchFile, `${stripPatchBlock(patch).trimEnd()}\n${block}`);
   }
-  return `hook 已写入 DeepSeek Harness 配置（${dir}），重启后生效：在菜单中点击「Restart App and Host」。重启会打断所有正在运行的会话，由用户选择时机，不要自己重启。${MANUAL}`;
+  return `hook 已写入 DeepSeek Harness 配置（${dir}），通常几十秒内自动生效，不用重启。如果一直不生效，由用户在菜单中点击「Restart App and Host」，这会打断所有会话，不要自己重启。${MANUAL}`;
 }
 
 function workbuddySettingsFile() {
@@ -122,7 +122,7 @@ function uninstallDsh(flags) {
   const patch = read(patchFile);
   if (!patch.includes(BEGIN)) return 'DeepSeek Harness 上没有安装 ateam 的 hook。';
   writeFileSync(patchFile, stripPatchBlock(patch));
-  return '已从 DeepSeek Harness 配置中移除 hook，重启后生效。留言回到下一次调用 ateam 时送达。';
+  return '已从 DeepSeek Harness 配置中移除 hook，通常几十秒内自动生效。补充说明回到下一次调用 ateam 时送达。';
 }
 
 function uninstallWorkbuddy() {

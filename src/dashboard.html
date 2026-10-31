@@ -4067,7 +4067,7 @@ function installGuide() {
       `cd ${tool}\nnpm link\nateam help`),
     step('提示找不到 ateam 命令？', 'npm 全局目录不在 PATH 中。运行以下命令将其加入 ~/.zshrc，然后在新终端中重试。',
       'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
-    step('② 安装 skill', '为 AI 安装 skill：leader 的 skill 安装到 Claude Code，worker 的 skill 安装到 DeepSeek Harness。采用符号链接方式，skill 更新后自动生效。如提示「已存在」，请先删除旧文件夹后重新运行。',
+    step('② 安装 skill', '为 AI 安装 skill：leader 的 skill 安装到 Claude Code，worker 的 skill 安装到 DeepSeek Harness（WorkBuddy 的 worker 另需链接到 ~/.workbuddy/skills）。采用符号链接方式，skill 更新后自动生效。如提示「已存在」，请先删除旧文件夹后重新运行。',
       `mkdir -p ~/.claude/skills ${skillsDir}\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ${skillsDir}/ateam-worker`),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
     step('③ 在项目根目录启动服务', '项目须为 git 仓库。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。',
@@ -4076,10 +4076,10 @@ function installGuide() {
     el('p', { class: 'hint' }, '安装完成后，在「leader」页启动 leader，在「worker」页添加 worker。'),
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：实时送达消息')),
     el('p', { class: 'hint' }, '默认情况下，消息在 worker 下一次调用 ateam 时送达。安装工具后 hook 后，worker 每完成一次工具调用即可收到。未安装或安装失败时，仍按默认方式送达。'),
-    info.hookInstalled ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, 'DeepSeek Harness')), done(true, '已写入配置。如尚未重启 DeepSeek Harness，重启后生效。'))
+    info.hookInstalled ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, 'DeepSeek Harness')), done(true, '已写入配置，通常几十秒内自动生效。'))
       : step('① 安装 hook', 'worker 加入团队时会自动运行此命令，通常无需手动操作。也可在终端中手动运行；WorkBuddy 请将参数改为 --platform workbuddy。', 'ateam hook install --platform dsh'),
-    info.hookInstalled ? null : step('② 重启 DeepSeek Harness', '在所有 worker 空闲时，点击菜单中的「Restart App and Host」。重启会中断正在运行的会话，worker 不会自行重启。重启后，向 worker 发送「继续」即可恢复。', null),
-    step(info.hookInstalled ? '停用' : '③ 停用', '不再需要时运行以下命令，然后重启 DeepSeek Harness。', 'ateam hook uninstall --platform dsh'),
+    info.hookInstalled ? null : step('② 确认生效', 'DeepSeek Harness 通常在几十秒内自动生效，无需重启。如未生效，请在所有 worker 空闲时点击菜单中的「Restart App and Host」。WorkBuddy 需重启会话，或在 /hooks 面板中确认。向干活中的 worker 发送补充说明后，时间线标签变为「worker 已读」即表示已生效。', null),
+    step(info.hookInstalled ? '停用' : '③ 停用', '不再需要时运行以下命令。', 'ateam hook uninstall --platform dsh'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试浏览器')),
     el('p', { class: 'hint' }, '仅在使用 test worker 进行测试或演播时需要，只需配置一次。test worker 将打开独立的 Chrome 窗口操作页面，与日常使用的 Chrome 相互隔离，不影响书签和登录状态，也不会反复弹出「允许远程调试」提示。'),

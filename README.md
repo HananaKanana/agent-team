@@ -317,6 +317,10 @@ worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没�
 
 在新会话里发看板「使用说明」→「leader」里的那句加入的话（或者说「使用 ateam-lead skill，继续」）。它会先运行 `ateam status`，从「待你处理」列表接着做。
 
+### 想让 worker 干活中途就看到留言
+
+默认情况下，留言要等 worker 下一次调用 ateam 才送达。启用 agent 平台的工具后 hook（DSH、WorkBuddy 等），worker 每完成一步操作就能看到，做法见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+
 ### 更新了 agent-team 的代码之后
 
 - 改了服务端代码（`src/` 下的 `.js` 文件）：重启 `ateam serve`。状态不会丢，worker 和 leader 会在约 60 秒内自动重连。忘了也没关系：服务发现代码比自己新时，看板顶部会出现黄色提示条「服务还在跑旧代码」，`ateam status` 也会提醒 leader。

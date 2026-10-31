@@ -238,7 +238,45 @@ async function pickPort(wanted, explicit) {
   fail(`${wanted} 到 ${wanted + 19} 的端口都被占用了。请用 --port 指定一个空闲端口。`);
 }
 
+// 从 worker 跑的 shell 命令里认出它的编号。只认命令开头的 ateam，避免把 grep 参数、文件内容里的文字当成编号
+const AS_IN_COMMAND = /(?:^|[;&|\n(]\s*)(?:\S*\/)?ateam\s[^\n;&|]*?--as[ =]["']?([\w.-]+)/;
+
+function workerIdFromTool(payload) {
+  if (!/bash|shell|exec|command|terminal/i.test(String(payload.tool_name ?? ''))) return undefined;
+  for (const value of Object.values(payload.tool_input ?? {})) {
+    const m = typeof value === 'string' && value.match(AS_IN_COMMAND);
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
+// agent 平台（DSH、WorkBuddy 等）每次工具调用后运行，输入输出是 Claude Code 的 hook 格式。任何失败都安静退出：不能因为 ateam 不在就影响 agent 干活。
+// 不带 x-ateam-cli 头：这不是 leader 的活动；不在 ateam 项目里（没有 .ateam/port）时不发请求，
+// 否则默认端口可能连到别的项目的服务。
+async function postToolHook() {
+  if (!process.env.ATEAM_URL && !findPortFile(process.cwd())) return '';
+  try {
+    const payload = JSON.parse(readFileSync(0, 'utf8'));
+    const res = await fetch(`${BASE}/api/hook/post-tool`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session: payload.session_id, as: workerIdFromTool(payload) }),
+      signal: AbortSignal.timeout(2000),
+    });
+    const delivery = (await res.json()).delivery;
+    if (!delivery) return '';
+    const additionalContext = `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。`;
+    return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } });
+  } catch {
+    return '';
+  }
+}
+
 const commands = {
+  async hook({ positional }) {
+    if (positional[0] !== 'post-tool') fail('用法：ateam hook post-tool（由 agent 平台的 PostToolUse hook 调用，不用手工运行）');
+    return postToolHook();
+  },
   async serve({ flags }) {
     const { startServer } = await import('../src/server.js');
     const wanted = Number(flags.port ?? 7700);

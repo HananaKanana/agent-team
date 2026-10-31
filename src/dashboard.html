@@ -3745,7 +3745,7 @@ function replyBox(t) {
     replyState = { id: t.id, sending: true, error: '', sent: '' };
     renderDrawer(false);
     const out = await post('/api/reply', { id: t.id, text });
-    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发送给 worker，并同步通知 leader。' : review ? '已发送给 leader，将在 review 时据此核对；如被打回，worker 也会收到。' : '已发送：worker 将在下次调用 ateam 命令时收到（提交前必定可见），并同步通知 leader。' }; }
+    if (out.ok) { replyDrafts.delete(t.id); replyState = { id: t.id, sending: false, error: '', sent: asking ? '已作为答复发送给 worker，并同步通知 leader。' : review ? '已发送给 leader，将在 review 时据此核对；如被打回，worker 也会收到。' : '已发送，并同步通知 leader。worker 通常在当前操作结束后收到（提交前必定可见），是否已读见时间线标签。' }; }
     else replyState = { id: t.id, sending: false, error: out.message || '发送失败。', sent: '' };
     await poll();
     render();

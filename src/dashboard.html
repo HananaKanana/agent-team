@@ -4135,9 +4135,7 @@ const STANDARD_ROLES = [
 
 function workerPrompt(role) {
   const dir = data.root ? `\n项目目录：${data.root}` : '';
-  // test worker 要操作浏览器：先按 browser-cdp-setup 连好、自检通过再开工
-  const browser = role.trim().toLowerCase() === 'test' ? '\n开工前先连好浏览器：WorkBuddy 使用自带的 Chrome 插件；DeepSeek Harness 按 browser-cdp-setup skill 连接并通过自检。' : '';
-  return `使用 ateam-worker skill，角色 ${role}${dir}${browser}`;
+  return `使用 ateam-worker skill，角色 ${role}${dir}`;
 }
 
 function promptBox(role) {

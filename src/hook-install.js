@@ -63,7 +63,13 @@ function dshVersion(flags) {
 function pnpmAdd(dir, packages) {
   const bundled = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-runtimes', 'dsh-primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.cjs');
   const [file, ...args] = existsSync(bundled) ? [process.execPath, bundled] : ['pnpm'];
-  execFileSync(file, [...args, 'add', '-w', ...packages], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    execFileSync(file, [...args, 'add', '-w', ...packages], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  } catch (err) {
+    // pnpm 把错误原因写在 stdout，只看 stderr 会什么都看不到
+    const output = `${err.stdout ?? ''}\n${err.stderr ?? ''}`.trim().split('\n').filter((l) => l.trim()).slice(-15).join('\n');
+    throw new Error(`在 ${dir} 安装 hook 桥接包失败（${packages.join(' ')}）。pnpm 输出：\n${output || '（无输出）'}`);
+  }
 }
 
 function stripPatchBlock(text) {

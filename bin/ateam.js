@@ -313,7 +313,7 @@ const commands = {
     try {
       return positional[0] === 'install' ? installHook(flags) : uninstallHook(flags);
     } catch (err) {
-      fail(`${err.message}${err.stderr ? `\n${String(err.stderr).trim().slice(-500)}` : ''}\n没有安装成功不影响工作：留言仍在下一次调用 ateam 时送达，继续主循环即可。`);
+      fail(`${err.message}\n没有安装成功不影响工作：留言仍在下一次调用 ateam 时送达，继续主循环即可。`);
     }
   },
   async serve({ flags }) {

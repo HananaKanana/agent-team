@@ -311,9 +311,9 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
     return [
       `暂无任务（第 ${next} 轮等待，${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}）。`,
       ...(timeout ? [
-        `请立即用和这次相同的方式运行下一轮：ateam wait --as ${agentId} --timeout ${timeout} --round ${next}`,
+        `请立即用和这次相同的方式运行下一轮：ateam wait --as ${agentId} --timeout ${timeout} --round ${next}。后台运行时启动后立刻结束本轮，收到完成通知时才读输出。`,
       ] : [
-        `如果你的 bash 工具有 run_in_background 参数（DeepSeek Harness、WorkBuddy 都有）：后台运行 ateam wait --as ${agentId} --timeout 1800 --round ${next}，然后结束本轮，有消息时会被唤醒，不要再前台循环。`,
+        `如果你的 bash 工具有 run_in_background 参数（DeepSeek Harness、WorkBuddy 都有）：后台运行 ateam wait --as ${agentId} --timeout 1800 --round ${next}，然后立刻结束本轮，不要读取或等待后台输出，收到完成通知时才读。不要再前台循环。`,
         `没有这个参数才前台运行：ateam wait --as ${agentId} --round ${next}`,
       ]),
       '',

@@ -331,7 +331,7 @@ const commands = {
       // 开场提示词不写项目目录了，工作目录选错时在这里拦一下：找不到 .ateam/port 会连到默认端口上别的项目
       ...(root && !isInside(process.cwd(), root) ? ['', `⚠ 你的工作目录 ${process.cwd()} 不在这个服务的项目目录 ${root} 里，加入的可能是别的项目。立即告诉用户，等用户确认后再继续。`] : []),
       '',
-      `下一步：ateam wait --as ${agent.id}`,
+      `下一步：有 run_in_background 就后台运行 ateam wait --as ${agent.id} --timeout 1800，然后立刻结束本轮，收到完成通知时才读输出；没有才前台运行 ateam wait --as ${agent.id}。`,
     ].join('\n');
   },
 

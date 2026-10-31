@@ -117,7 +117,7 @@
 4. [ ] 按 `docs/worker-hook-setup.md` 启用 hook 后：worker 正在连续干活（中途不调用 ateam）时在看板留言，它在下一个工具调用结束后就看到「# ateam 补充说明」并照做；同一条留言不会在之后的工具调用后重复出现，下一次 progress / wait / submit 还会再带一遍
 5. [ ] 启用 hook 后：两个 worker 在同一目录干活，给其中一张卡留言，只有拿着这张卡的 worker 收到；在没有 ateam 的项目里用 DSH 不受影响；停掉 ateam 服务时 worker 照常干活，不报错
 6. [ ] 未启用 hook，或平台运行了 hook 但没把内容交给模型：留言仍在 worker 下一次 progress / wait / submit 时送达，和原来一样
-7. [ ] DeepSeek Harness 的 worker 后台运行 `ateam wait --timeout 1800` 后结束本轮：看板显示在线，不被判无响应；派任务、打回、答复、留言时它被唤醒并立刻处理；30 分钟没有消息时它只重新挂一次
+7. [ ] DeepSeek Harness 的 worker 后台运行 `ateam wait --timeout 1800` 后立刻结束本轮，不调用 job_output 等待：窗口标题旁显示后台任务运行中、会话没有转圈；看板显示在线，不被判无响应；派任务、打回、答复、留言时它被唤醒并立刻处理；30 分钟没有消息时它只重新挂一次
 8. [ ] WorkBuddy 的 worker 同样后台运行 wait 并结束本轮；留言后 sp 的 WorkBuddy 日志出现「PostToolUse hook provided additional context」，worker 照做
 9. [ ] 没有后台能力的平台：worker 继续前台运行 `ateam wait`（90 秒一轮），行为和原来一样；同一 worker 又跑一条 wait 时，旧的那条输出「已被另一条 ateam wait 取代」并退出
 10. [ ] 卡在等答复时 `ateam note`：挂着的 wait 马上返回「# 补充说明」，卡仍是等答复，答复照常送达

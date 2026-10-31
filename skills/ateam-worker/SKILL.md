@@ -25,7 +25,7 @@ description: 作为 agent-team 的 worker 加入团队、领取并完成开发�
 
 ## 运行命令的规则
 
-- **等待必须优先用后台：** 只要你的 bash 工具有 `run_in_background` 参数（DeepSeek Harness、WorkBuddy 都有），就用它运行 `ateam wait --as <编号> --timeout 1800`，然后结束本轮，不要轮询，也不要向用户汇报。有任务、答复或消息时 wait 会马上结束，你会被唤醒；读后台输出（DeepSeek Harness 用 `job_output`，WorkBuddy 用 `TaskOutput`），按第一行处理。输出是「暂无任务」就照同样方式运行它给出的下一条命令；输出是「已被另一条 ateam wait 取代」就不用管。
+- **等待必须优先用后台：** 只要你的 bash 工具有 `run_in_background` 参数（DeepSeek Harness、WorkBuddy 都有），就用它运行 `ateam wait --as <编号> --timeout 1800`，然后**立刻结束本轮**，不要向用户汇报。**启动后不要调用 `job_output` / `TaskOutput`，尤其不要带 `wait` 等它**：那样本轮不会结束，也白白消耗 token。有任务、答复或消息时 wait 会马上结束，平台会通知并唤醒你；**收到完成通知后**才读后台输出（DeepSeek Harness 用 `job_output`，WorkBuddy 用 `TaskOutput`），按第一行处理。输出是「暂无任务」就照同样方式运行它给出的下一条命令；输出是「已被另一条 ateam wait 取代」就不用管。
 - **回退到前台：** 只有没有这个参数，或后台启动报错（比如 `background jobs unavailable`、`not available in this sandbox`）时，才前台运行不带 `--timeout` 的 `ateam wait`，它最多挂起 90 秒，然后按下面的规则一轮轮继续，不要结束本轮。
 - 除了等待，其他 `ateam` 命令都**直接前台运行**，不要加后台参数，也不要设置超时参数。
 - **一条命令只运行一次 `ateam wait`。** 不要写 `for`/`while` 循环，不要加 `sleep`，不要接管道（`| head`、`$(...)` 等）。你的命令有 120 秒超时，循环里连续等几次一定会超时，结果就丢了。等待本身已经在服务端完成，你只需要一次次重复调用。

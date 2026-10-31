@@ -106,7 +106,7 @@ ln -s ~/code/agent-team/skills/ateam-lead   ~/.claude/skills/ateam-lead
 ln -s ~/code/agent-team/skills/ateam-worker ~/.agents/skills/ateam-worker
 ```
 
-**可选：test worker 的浏览器**（只有要让 test worker 做测试或演播时才需要，一次性）：再装一份浏览器说明书 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md)（`ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`），然后按它第 2 节配好 DeepSeek Harness 插件。测试专用的 Chrome 由 test worker 自己打开；第一次它会请你在那个窗口里把要测的网站登录一次。看板「使用说明 → 安装」最下面有可以复制的命令。
+**可选：test worker 的浏览器**（只有要让 test worker 做测试或演播时才需要，一次性）：WorkBuddy 上的 test worker 用它自带的 Chrome 插件，不用装下面这些。DeepSeek Harness 上再装一份浏览器说明书 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md)（`ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`），然后按它第 2 节配好 DeepSeek Harness 插件。测试专用的 Chrome 由 test worker 自己打开；第一次它会请你在那个窗口里把要测的网站登录一次。看板「使用说明 → 安装」最下面有可以复制的命令。
 
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 

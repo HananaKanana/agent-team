@@ -1,6 +1,6 @@
 # agent-team
 
-本地任务协调服务 `ateam`：Claude Code 当 leader，带领若干 worker（agent 窗口，目前用 DeepSeek Harness 或 WorkBuddy；test worker 用 DeepSeek Harness 的 dsh-cdp 插件操作浏览器，见 `skills/browser-cdp-setup`），在同一台电脑、同一个项目目录里协作开发。leader 负责拆任务、派任务、review、汇报，worker 负责领任务、干活、提交。worker 可能因为 token 用完而中途掉线，用户换账号开新窗口后，新 worker 接手继续。
+本地任务协调服务 `ateam`：Claude Code 当 leader，带领若干 worker（agent 窗口，目前用 DeepSeek Harness 或 WorkBuddy；test worker 操作浏览器时，DeepSeek Harness 用 dsh-cdp 插件，见 `skills/browser-cdp-setup`，WorkBuddy 用它自带的 Chrome 插件），在同一台电脑、同一个项目目录里协作开发。leader 负责拆任务、派任务、review、汇报，worker 负责领任务、干活、提交。worker 可能因为 token 用完而中途掉线，用户换账号开新窗口后，新 worker 接手继续。
 
 ## 文档
 

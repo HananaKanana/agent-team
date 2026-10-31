@@ -4082,7 +4082,7 @@ function installGuide() {
     step(info.hookInstalled ? '停用' : '③ 停用', '不再需要时运行以下命令。', 'ateam hook uninstall --platform dsh'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试浏览器')),
-    el('p', { class: 'hint' }, '仅在使用 test worker 进行测试或演播时需要，只需配置一次。test worker 将打开独立的 Chrome 窗口操作页面，与日常使用的 Chrome 相互隔离，不影响书签和登录状态，也不会反复弹出「允许远程调试」提示。'),
+    el('p', { class: 'hint' }, '仅在 DeepSeek Harness 上使用 test worker 进行测试或演播时需要，只需配置一次；WorkBuddy 上的 test worker 使用其自带的 Chrome 插件，无需以下步骤。DeepSeek Harness 的 test worker 将打开独立的 Chrome 窗口操作页面，与日常使用的 Chrome 相互隔离，不影响书签和登录状态，也不会反复弹出「允许远程调试」提示。'),
     info.browserSkill === 'linked'
       ? el('div', { class: 'wcard' }, el('div', { class: 'wcard-head' }, el('b', null, '① 为 DeepSeek Harness 安装浏览器 skill')), done(true, `已安装（${skillsDir}/browser-cdp-setup）`))
       : step('① 为 DeepSeek Harness 安装浏览器 skill', `test worker 依据该 skill 连接浏览器并规避常见问题。${info.browserSkill === 'copied' ? '目标位置已存在复制的旧文件夹，以下命令将先删除再创建链接。' : ''}`,
@@ -4136,7 +4136,7 @@ const STANDARD_ROLES = [
 function workerPrompt(role) {
   const dir = data.root ? `\n项目目录：${data.root}` : '';
   // test worker 要操作浏览器：先按 browser-cdp-setup 连好、自检通过再开工
-  const browser = role.trim().toLowerCase() === 'test' ? '\n开工前先按 browser-cdp-setup skill 连好浏览器并通过自检。' : '';
+  const browser = role.trim().toLowerCase() === 'test' ? '\n开工前先连好浏览器：WorkBuddy 使用自带的 Chrome 插件；DeepSeek Harness 按 browser-cdp-setup skill 连接并通过自检。' : '';
   return `使用 ateam-worker skill，角色 ${role}${dir}${browser}`;
 }
 

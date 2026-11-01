@@ -1109,8 +1109,18 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline > li:last-child::after { display: none; }
 .timeline > li > div:first-child { line-height: 20px; } /* 第一行固定行高。中文字形在行框里偏下，圆点（top 6 + 高 10）比几何中心低 1px，看起来才对齐 */
 .timeline .when { color: var(--faint); font-size: 12px; }
-.spawn-row .err { color: var(--rework); }
-.spawn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; }
+.hook-platform { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.hook-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.hook-head .btn { margin-left: auto; }
+.hook-state { padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 18px; color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.hook-state.ok { color: var(--approved); background: color-mix(in srgb, var(--approved) 14%, transparent); }
+.hook-note { margin: -2px 0 8px; font-size: 12.5px; color: var(--muted); }
+.hook-note.err { color: var(--rework); }
+.hook-foot { margin-top: 12px; }
+.wcard-head .spawn-btn { flex: none; margin-left: 4px; }
+.spawn-btn .ico { width: 12px; height: 12px; }
+.spawn-msg { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+.spawn-msg.err { color: var(--rework); }
 .read-flag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; vertical-align: 1px; color: var(--asking); background: color-mix(in srgb, var(--asking) 12%, transparent); }
 .read-flag.read { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
@@ -2251,9 +2261,10 @@ function renderHelper(force = false) {
           el('span', { class: 'tag role', style: roleStyle(role) }, role),
           std ? el('b', null, std.label) : null,
           el('span', { class: 'hint grow' }, std ? std.what : ''),
-          el('span', { class: 'hint' }, `在线 ${working}，待领取 ${waiting}`)),
+          el('span', { class: 'hint' }, `在线 ${working}，待领取 ${waiting}`),
+          spawnButton(role)),
         promptBlock(workerPrompt(role), renderHelper),
-        spawnRow(role));
+        spawnMessage(role));
     }),
     el('div', { class: 'helper-sec' }, el('h4', null, `② 在线 worker（${online.length}）`), dismissAll),
     el('p', { class: 'hint' }, dismissAllArm
@@ -4098,7 +4109,8 @@ function installGuide() {
 
 // 第 ③ 步：worker 的工具后 hook。每台电脑一次，按装了哪个平台分别显示
 let hookInstallState = { platform: null, busy: false, msg: '', error: false };
-function hookInstallButton(platform, installed) {
+// 一个平台一块：标题行放名称、状态和按钮，下面是命令；只有点了按钮出错或有新情况时才多一行提示
+function hookPlatform(platform, label, installed, note) {
   const mine = hookInstallState.platform === platform ? hookInstallState : { busy: false, msg: '', error: false };
   const run = async (e) => {
     e.stopPropagation();
@@ -4106,35 +4118,29 @@ function hookInstallButton(platform, installed) {
     hookInstallState = { platform, busy: true, msg: '', error: false };
     renderHelper(true);
     const out = await post('/api/hook-install', { platform });
-    hookInstallState = { platform, busy: false, msg: out.ok ? out.message : (out.message || '安装失败。'), error: !out.ok };
+    // 装好了由状态标签说明，只在出错时留下提示
+    hookInstallState = { platform, busy: false, msg: out.ok ? '' : (out.message || '安装失败。'), error: !out.ok };
     await loadInstallInfo();
   };
-  return el('div', { class: 'spawn-row' },
-    el('button', { class: installed ? 'btn sm' : 'btn primary sm', disabled: mine.busy, onclick: run }, mine.busy ? '安装中…' : installed ? '重新安装' : '安装'),
-    mine.msg ? el('span', { class: mine.error ? 'hint err' : 'hint' }, mine.msg) : null);
+  return el('div', { class: 'hook-platform' },
+    el('div', { class: 'hook-head' },
+      el('b', null, label),
+      el('span', { class: installed ? 'hook-state ok' : 'hook-state' }, installed ? '已安装' : '未安装'),
+      el('button', { class: installed ? 'btn sm' : 'btn primary sm', disabled: mine.busy, onclick: run }, mine.busy ? '安装中…' : installed ? '重新安装' : '安装')),
+    installed && note ? el('p', { class: 'hook-note' }, note) : null,
+    mine.msg ? el('p', { class: 'hook-note err' }, mine.msg) : null,
+    promptBlock(`ateam hook install --platform ${platform}`, renderHelper));
 }
 
 function hookStep(info) {
-  const done = (ok, text) => (ok ? el('p', { class: 'hint install-done' }, `✓ ${text}`) : null);
   const title = el('div', { class: 'wcard-head' }, el('b', null, '③ 为 worker 安装 hook'));
-  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时也不会持续消耗 token；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。点击「安装」即可，也可在终端中运行下方命令。只安装实际使用的平台即可。');
+  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时不会持续消耗 token；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。只需安装实际使用的平台，也可在终端中运行对应命令。');
   const rows = [];
-  // 命令始终显示，装好了也能复制（换电脑、平台升级后要重装）；状态写在命令下面
-  if (info.profiles?.length) {
-    rows.push(el('p', { class: 'hint' }, el('b', null, 'DeepSeek Harness')),
-      hookInstallButton('dsh', info.hookInstalled),
-      promptBlock('ateam hook install --platform dsh', renderHelper),
-      info.hookInstalled ? done(true, '已安装，通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。') : el('p', { class: 'hint' }, '尚未安装。'));
-  }
-  if (info.workbuddyHook !== null && info.workbuddyHook !== undefined) {
-    rows.push(el('p', { class: 'hint' }, el('b', null, 'WorkBuddy')),
-      hookInstallButton('workbuddy', info.workbuddyHook),
-      promptBlock('ateam hook install --platform workbuddy', renderHelper),
-      info.workbuddyHook ? done(true, '已安装，重启会话后生效。') : el('p', { class: 'hint' }, '尚未安装。'));
-  }
+  if (info.profiles?.length) rows.push(hookPlatform('dsh', 'DeepSeek Harness', info.hookInstalled, '通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。'));
+  if (info.workbuddyHook !== null && info.workbuddyHook !== undefined) rows.push(hookPlatform('workbuddy', 'WorkBuddy', info.workbuddyHook, '重启会话后生效。'));
   if (!rows.length) rows.push(el('p', { class: 'hint' }, '未检测到 DeepSeek Harness 或 WorkBuddy。安装并启动一次后，刷新本页。'));
   return el('div', { class: 'wcard' }, title, hint, ...rows,
-    el('p', { class: 'hint' }, 'DeepSeek Harness 或 WorkBuddy 升级后需重新运行。停用：ateam hook uninstall --platform dsh（或 workbuddy）。'));
+    el('p', { class: 'hint hook-foot' }, '平台升级后需重新安装。停用：ateam hook uninstall --platform dsh（或 workbuddy）。'));
 }
 
 // 可选的浏览器第 ② 步：profile 从本机读出来；有多个就让用户选；已经配好就只显示「已配好」
@@ -4180,8 +4186,8 @@ const STANDARD_ROLES = [
 // 「在 DeepSeek Harness 中启动」：由 ateam 通过 DSH 插件新开会话并发出上面的提示词
 let spawnState = { role: null, busy: false, msg: '', error: false };
 const platformLabel = () => ((data.config?.spawnPlatform ?? 'dsh') === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness');
-function spawnRow(role) {
-  const mine = spawnState.role === role ? spawnState : { busy: false, msg: '', error: false };
+function spawnButton(role) {
+  const mine = spawnState.role === role ? spawnState : { busy: false };
   const start = async (e) => {
     e.stopPropagation();
     if (spawnState.busy) return;
@@ -4189,13 +4195,17 @@ function spawnRow(role) {
     renderHelper(true);
     const out = await post('/api/spawn', { role, by: 'user' });
     spawnState = out.ok
-      ? { role, busy: false, msg: `已在 ${platformLabel()} 中新开会话，worker 加入后将显示在下方。`, error: false }
+      ? { role, busy: false, msg: `已在 ${platformLabel()} 中新建会话，worker 加入后将显示在下方「在线 worker」中。`, error: false }
       : { role, busy: false, msg: out.message || '启动失败。', error: true };
     renderHelper(true);
   };
-  return el('div', { class: 'spawn-row' },
-    el('button', { class: 'btn sm', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送上方提示词。平台可在「设置」中切换`, onclick: start }, mine.busy ? '启动中…' : `在 ${platformLabel()} 中启动`),
-    mine.msg ? el('span', { class: mine.error ? 'hint err' : 'hint' }, mine.msg) : null);
+  return el('button', { class: 'btn sm spawn-btn', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送下方提示词（平台可在「设置」中切换）`, onclick: start },
+    icon('play'), mine.busy ? '启动中…' : '启动');
+}
+
+function spawnMessage(role) {
+  if (spawnState.role !== role || !spawnState.msg) return null;
+  return el('p', { class: `spawn-msg${spawnState.error ? ' err' : ''}` }, spawnState.msg);
 }
 
 function workerPrompt(role) {

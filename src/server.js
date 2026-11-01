@@ -541,6 +541,16 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because, b.basis) }),
     'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text, b.basis) }),
     'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side, b.text) }),
+    // 看板上的「安装」按钮：服务跑在用户的终端里，不受 agent 沙箱限制，可以直接改平台配置
+    'POST /api/hook-install': async (b) => {
+      const platform = b.platform === 'workbuddy' ? 'workbuddy' : 'dsh';
+      const { installHook } = await import('./hook-install.js');
+      try {
+        return { message: installHook({ platform }) };
+      } catch (err) {
+        throw new AteamError('BAD_STATE', err.message);
+      }
+    },
     'GET /api/staffing': () => store.staffingNeeds(),
     'POST /api/spawn': (b) => {
       const cfg = store.config();

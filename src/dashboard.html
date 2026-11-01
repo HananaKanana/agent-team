@@ -4097,19 +4097,38 @@ function installGuide() {
 }
 
 // 第 ③ 步：worker 的工具后 hook。每台电脑一次，按装了哪个平台分别显示
+let hookInstallState = { platform: null, busy: false, msg: '', error: false };
+function hookInstallButton(platform, installed) {
+  const mine = hookInstallState.platform === platform ? hookInstallState : { busy: false, msg: '', error: false };
+  const run = async (e) => {
+    e.stopPropagation();
+    if (hookInstallState.busy) return;
+    hookInstallState = { platform, busy: true, msg: '', error: false };
+    renderHelper(true);
+    const out = await post('/api/hook-install', { platform });
+    hookInstallState = { platform, busy: false, msg: out.ok ? out.message : (out.message || '安装失败。'), error: !out.ok };
+    await loadInstallInfo();
+  };
+  return el('div', { class: 'spawn-row' },
+    el('button', { class: installed ? 'btn sm' : 'btn primary sm', disabled: mine.busy, onclick: run }, mine.busy ? '安装中…' : installed ? '重新安装' : '安装'),
+    mine.msg ? el('span', { class: mine.error ? 'hint err' : 'hint' }, mine.msg) : null);
+}
+
 function hookStep(info) {
   const done = (ok, text) => (ok ? el('p', { class: 'hint install-done' }, `✓ ${text}`) : null);
   const title = el('div', { class: 'wcard-head' }, el('b', null, '③ 为 worker 安装 hook'));
-  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时也不会持续消耗 token。请在终端中运行，不要交给 worker：agent 平台通常只允许 worker 写入项目目录。只安装实际使用的平台即可。');
+  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时也不会持续消耗 token；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。点击「安装」即可，也可在终端中运行下方命令。只安装实际使用的平台即可。');
   const rows = [];
   // 命令始终显示，装好了也能复制（换电脑、平台升级后要重装）；状态写在命令下面
   if (info.profiles?.length) {
     rows.push(el('p', { class: 'hint' }, el('b', null, 'DeepSeek Harness')),
+      hookInstallButton('dsh', info.hookInstalled),
       promptBlock('ateam hook install --platform dsh', renderHelper),
       info.hookInstalled ? done(true, '已安装，通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。') : el('p', { class: 'hint' }, '尚未安装。'));
   }
   if (info.workbuddyHook !== null && info.workbuddyHook !== undefined) {
     rows.push(el('p', { class: 'hint' }, el('b', null, 'WorkBuddy')),
+      hookInstallButton('workbuddy', info.workbuddyHook),
       promptBlock('ateam hook install --platform workbuddy', renderHelper),
       info.workbuddyHook ? done(true, '已安装，重启会话后生效。') : el('p', { class: 'hint' }, '尚未安装。'));
   }

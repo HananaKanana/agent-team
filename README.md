@@ -112,14 +112,14 @@ ln -s ~/code/agent-team/skills/ateam-worker ~/.agents/skills/ateam-worker
 
 ### 3. 为 worker 安装 hook
 
-在**终端**里运行，只装实际用的平台：
+在看板「使用说明 → 安装」第 ③ 步点「安装」，或在终端里运行，只装实际用的平台：
 
 ```bash
 ateam hook install --platform dsh         # DeepSeek Harness
 ateam hook install --platform workbuddy   # WorkBuddy
 ```
 
-装好后，worker 每完成一次操作就能收到补充说明，空闲等待时也不会持续消耗 token。DeepSeek Harness 上还会一并装好启动插件：看板「worker」页每个角色旁的「在 DeepSeek Harness 中启动」按钮和 `ateam spawn` 靠它新开 worker 会话。插件只接受本机、带密钥（`~/.dsh/ateam-launch.key`，仅本人可读）的请求，只能发 ateam 的开场提示词，工作目录必须是 ateam 项目。不要交给 worker 去装：agent 平台通常只允许它写项目目录。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+装好后，worker 每完成一次操作就能收到补充说明，空闲等待时也不会持续消耗 token。DeepSeek Harness 上还会一并装好启动插件：看板「worker」页每个角色旁的「在 DeepSeek Harness 中启动」按钮和 `ateam spawn` 靠它新开 worker 会话。插件只接受本机、带密钥（`~/.dsh/ateam-launch.key`，仅本人可读）的请求，只能发 ateam 的开场提示词，工作目录必须是 ateam 项目。不要交给 worker 去装：agent 平台通常只允许它写项目目录；看板的按钮由 ateam 服务执行，不受这个限制。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
 
 ---
 

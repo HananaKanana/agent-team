@@ -177,6 +177,40 @@ function platformOf(flags) {
     : `认不出当前平台，用 --platform dsh 或 --platform workbuddy 指定。其他平台可以手工配置。${MANUAL}`);
 }
 
+// 测试浏览器：在 DSH 配置里给 dsh-cdp 写上 dataDir（测试专用 Chrome 的目录，必须是绝对路径）。
+// 已有 dsh-cdp 条目就只改它的 dataDir，其余设置不动；没有就在末尾追加一条
+export function configureCdp(flags = {}) {
+  const dir = dshProfileDir(flags);
+  const patchFile = join(dir, 'cordis.patch.yml');
+  const dataDir = join(homedir(), '.chrome-agent');
+  const patch = read(patchFile);
+  const lines = patch.split('\n');
+  const start = lines.findIndex((l) => /^- id:\s*['"]?dsh-cdp['"]?\s*$/.test(l));
+  let next;
+  if (start < 0) {
+    next = `${patch.trimEnd()}${patch.trim() ? '\n' : ''}- id: dsh-cdp\n  name: '@dougen/dsh-cdp'\n  config:\n    dataDir: ${dataDir}\n`;
+  } else {
+    let end = start + 1;
+    while (end < lines.length && !/^\S/.test(lines[end])) end++;
+    const entry = lines.slice(start, end);
+    const at = entry.findIndex((l) => /^\s+dataDir:/.test(l));
+    const config = entry.findIndex((l) => /^  config:\s*$/.test(l));
+    if (at >= 0) entry[at] = `${entry[at].match(/^\s+/)[0]}dataDir: ${dataDir}`;
+    else if (config >= 0) entry.splice(config + 1, 0, `    dataDir: ${dataDir}`);
+    else {
+      // 条目末尾可能有空行，config 插在最后一行内容后面
+      let last = entry.length;
+      while (last > 1 && !entry[last - 1].trim()) last--;
+      entry.splice(last, 0, '  config:', `    dataDir: ${dataDir}`);
+    }
+    next = [...lines.slice(0, start), ...entry, ...lines.slice(end)].join('\n');
+  }
+  if (next === patch) return `「${flags.profile || 'desktop'}」已配置，不需要操作。`;
+  if (patch && !existsSync(`${patchFile}.bak.ateam`)) copyFileSync(patchFile, `${patchFile}.bak.ateam`);
+  writeFileSync(patchFile, next);
+  return `已在 ${patchFile} 中为 dsh-cdp 写入 dataDir: ${dataDir}。需在 DeepSeek Harness 菜单中点击「Restart App and Host」重启后生效，这会打断所有会话，请在 worker 空闲时操作。`;
+}
+
 export function installHook(flags) {
   return platformOf(flags) === 'dsh' ? installDsh(flags) : installWorkbuddy();
 }

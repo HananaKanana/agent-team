@@ -136,7 +136,8 @@ function installInfo() {
   const cdpConfigured = Object.fromEntries(profiles.map((p) => {
     let text = '';
     try { text = readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8'); } catch {}
-    return [p, /id:\s*dsh-cdp[\s\S]*?dataDir:/.test(text)];
+    // 只在 dsh-cdp 这一条的范围内找 dataDir，不跨到后面别的条目
+    return [p, /^- id:\s*['"]?dsh-cdp['"]?[ \t]*\n(?:(?:[ \t].*)?\n)*?[ \t]+dataDir:/m.test(text)];
   }));
   const hookInstalled = profiles.some((p) => {
     try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('# ateam hook begin'); } catch { return false; }
@@ -299,7 +300,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (t - Math.max(serverStart, leaderSeenAt ?? 0, lastWatchEnd) > store.config().leaderAwayMin * 60000) store.setLeaderAway(true);
   }
 
-  let doctor = null; // 自检结果，启动后在后台跑一次
+  let doctor = null; // 自检结果：启动后在后台跑一次，看板打开「待处理」、点「修复」时重跑
+  async function recheck() {
+    doctor = await runDoctor({ root, install: installInfo(), multi: layout.mode === 'multi' });
+    pushSoon();
+  }
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
   // 启动时按当前版本的文件布局写一遍（新加的拆分方式马上生效，不用等第一次状态变化；内容没变的文件不会重写）
   saveState(dataDir, store.state);
@@ -616,8 +621,27 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'GET /api/install-info': () => installInfo(),
     // 自检：启动时跑过一次，fresh=1 重跑
     'GET /api/doctor': async (_b, url) => {
-      if (url.searchParams.get('fresh') === '1' || !doctor) doctor = await runDoctor({ root, install: installInfo() });
+      if (url.searchParams.get('fresh') === '1' || !doctor) await recheck();
       return { checks: doctor };
+    },
+    // 看板「待处理」里自检项的「修复」：ignore 补 .ateam/.gitignore，cdp 给 DSH 写测试浏览器配置。修完重跑自检
+    'POST /api/doctor/fix': async (b) => {
+      let message;
+      if (b.key === 'ignore') {
+        ensureGitignore(root);
+        message = '已补全 .ateam/.gitignore。';
+      } else if (b.key === 'cdp') {
+        const { configureCdp } = await import('./hook-install.js');
+        try {
+          message = configureCdp({ profile: b.profile || installInfo().profiles[0] });
+        } catch (err) {
+          throw new AteamError('BAD_STATE', err.message);
+        }
+      } else {
+        throw new AteamError('INVALID', `自检项 ${b.key} 没有自动修复。`);
+      }
+      await recheck();
+      return { message, checks: doctor };
     },
     'GET /api/rules': (_b, url) => {
       const rules = readRules();
@@ -838,6 +862,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(join(dataDir, 'port'), `${port}\n`);
   server.ateamLayout = layout;
-  runDoctor({ root, install: installInfo() }).then((r) => { doctor = r; pushSoon(); }).catch(() => {});
+  recheck().catch(() => {});
   return server;
 }

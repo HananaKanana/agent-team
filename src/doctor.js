@@ -1,6 +1,6 @@
 // 自检：服务启动时跑一遍，ateam doctor 也能手动跑。查的是「出了问题不会报错、只会悄悄做错」的地方，
 // 比如这台机器的 git 在某种路径写法下漏暂存新文件（以前 worker 的新文件漏交就是这个）。
-// 返回 [{ key, ok, title, detail }]，ok 为 false 的看板上会提示
+// 返回 [{ key, ok, title, detail, fix? }]，ok 为 false 的看板上会提示；有 fix 的看板上能一键修复
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,26 +45,31 @@ async function checkCommit() {
   }
 }
 
-export async function runDoctor({ root, install }) {
+export async function runDoctor({ root, install, multi = false }) {
   const out = [];
   let gitVersion = '';
   try { gitVersion = (await sh(root, ['--version'])).trim(); } catch {}
   out.push({ key: 'git', ok: !!gitVersion, title: 'git', detail: gitVersion || '找不到 git 命令' });
   if (gitVersion) out.push({ key: 'commit', title: 'worker 提交', ...(await checkCommit()) });
 
-  const ignore = join(root, '.ateam', '.gitignore');
-  const ignored = existsSync(ignore) ? readFileSync(ignore, 'utf8').split(/\r?\n/).map((l) => l.trim()) : [];
-  out.push({
-    key: 'ignore', title: '.ateam 的提交范围', ok: ignored.includes('runtime.json'),
-    detail: ignored.includes('runtime.json') ? 'board.json、demos/、archive/ 提交；runtime.json、端口文件不提交' : '.ateam/.gitignore 里缺 runtime.json，worker 状态会被提交进仓库。重启 ateam serve 会自动补上',
-  });
+  // 多仓库项目：项目目录本身不是仓库，.ateam 不会被提交，不用查
+  if (multi) {
+    out.push({ key: 'ignore', title: '.ateam 的提交范围', ok: true, detail: '多仓库项目：项目目录不属于任何仓库，.ateam 不会被提交' });
+  } else {
+    const ignore = join(root, '.ateam', '.gitignore');
+    const ignored = existsSync(ignore) ? readFileSync(ignore, 'utf8').split(/\r?\n/).map((l) => l.trim()) : [];
+    out.push({
+      key: 'ignore', title: '.ateam 的提交范围', ok: ignored.includes('runtime.json'), fix: true,
+      detail: ignored.includes('runtime.json') ? 'board.json、demos/、archive/ 提交；runtime.json、端口文件不提交' : '.ateam/.gitignore 中缺少 runtime.json，worker 运行状态会被提交进仓库。可在看板「待处理」中点击「修复」补全',
+    });
+  }
 
   // 测试用的浏览器（可选）：装了 browser-cdp-setup 才检查
   if (install && install.browserSkill !== 'missing') {
     const configured = Object.entries(install.cdpConfigured).filter(([, v]) => v).map(([p]) => p);
     out.push({
-      key: 'cdp', title: '测试浏览器配置', ok: configured.length > 0,
-      detail: configured.length ? `DeepSeek Harness 的 ${configured.join('、')} 配好了 dsh-cdp 的 dataDir` : '装了 browser-cdp-setup，但没有哪个 DeepSeek Harness 配置写了 dsh-cdp 的 dataDir。按「使用说明 → 安装」里的可选步骤配一下',
+      key: 'cdp', title: '测试浏览器配置', ok: configured.length > 0, fix: true,
+      detail: configured.length ? `DeepSeek Harness 的 ${configured.join('、')} 配好了 dsh-cdp 的 dataDir` : '已安装 browser-cdp-setup，但 DeepSeek Harness 配置中未设置 dsh-cdp 的 dataDir。可在看板「待处理」中点击「修复」写入配置（之后需重启 DeepSeek Harness）；如仅使用 WorkBuddy 的 test worker，可删除该 skill',
     });
     const port = join(install.home, '.chrome-agent', 'DevToolsActivePort');
     out.push({

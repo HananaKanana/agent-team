@@ -157,3 +157,6 @@
 1. [ ] 重启 ateam serve 后 `.ateam/` 下出现 board.json、runtime.json、archive/（已验收和作废的需求一个一个文件），state.json 变成 state.json.bak；`.ateam/.gitignore` 里有 runtime.json；worker 心跳时 board.json 不变，卡状态变了才变；看板数据和重启前一样
 2. [ ] `ateam doctor` 列出自检结果全部 ✓；某项没过时看板「待处理」里出现「自检：…有问题」
 3. [ ] 重启 ateam serve 后 `.ateam/demos/` 下出现每个演播需求一个文件（如 J33.json），`board.json` 里不再有演播需求；跑一次预演或演播，只有对应的 demos 文件变化，`board.json` 不变；作废一个演播需求后，它的文件从 demos/ 移到 archive/
+4. [ ] 「待处理」里的自检项标为「自检」，可修复的项右侧是「修复」按钮：删掉 `.ateam/.gitignore` 里的 runtime.json 后打开「待处理」，出现该项（不用重启服务）；点「修复」后该行消失、文件补回；最后一项修好时弹框不立即关闭，底部显示修复结果
+5. [ ] 多仓库项目（项目目录本身不是 git 仓库）：不出现「.ateam 的提交范围」问题，`ateam doctor` 该项显示「多仓库项目…不会被提交」
+6. [ ] 装了 browser-cdp-setup 但 DeepSeek Harness 未配 dsh-cdp 的 dataDir：「待处理」里点「修复」后，`cordis.patch.yml` 里 dsh-cdp 条目带上 `dataDir: <主目录>/.chrome-agent`（已有的 dsh-cdp 条目只补 dataDir，其他设置不变；首次改动留 `.bak.ateam` 备份），底部提示需重启 DeepSeek Harness；「使用说明 → 安装 → 可选：测试浏览器」第 ② 步的「写入配置」按钮效果相同，写入后显示「已配置完成」

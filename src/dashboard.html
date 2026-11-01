@@ -1116,6 +1116,9 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .hook-state.ok { color: var(--approved); background: color-mix(in srgb, var(--approved) 14%, transparent); }
 .hook-note { margin: -2px 0 8px; font-size: 12.5px; color: var(--muted); }
 .hook-note.err { color: var(--rework); }
+.cdp-write { margin: 8px 0; }
+.att-fix { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.att-fix.err { color: var(--rework); }
 .hook-foot { margin-top: 12px; }
 .wcard-head .spawn-btn { flex: none; margin-left: 2px; color: var(--brand); font-weight: 600; }
 .wcard-head .spawn-btn:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); }
@@ -4146,6 +4149,7 @@ function hookStep(info) {
     el('p', { class: 'hint hook-foot' }, '平台升级后需重新安装。停用：ateam hook uninstall --platform dsh（或 workbuddy）。'));
 }
 
+let cdpWrite = { busy: false, msg: '', error: false };
 // 可选的浏览器第 ② 步：profile 从本机读出来；有多个就让用户选；已经配好就只显示「已配好」
 function installStep2(info, profile) {
   const title = el('div', { class: 'wcard-head' }, el('b', null, '② 在 DeepSeek Harness 中配置浏览器'));
@@ -4165,8 +4169,19 @@ function installStep2(info, profile) {
     return el('div', { class: 'wcard' }, title, pick, el('p', { class: 'hint install-done' }, `✓ 「${profile}」已配置完成。修改配置后，需在 DeepSeek Harness 菜单中点击「Restart App and Host」重启方可生效。`));
   }
   const file = `${info.profilesDir}/${profile}/cordis.patch.yml`.replace(/^\/Users\/[^/]+/, '~');
+  const write = async (e) => {
+    e.stopPropagation();
+    if (cdpWrite.busy) return;
+    cdpWrite = { busy: true, msg: '', error: false };
+    renderHelper(true);
+    const out = await post('/api/doctor/fix', { key: 'cdp', profile });
+    cdpWrite = { busy: false, msg: out.ok ? '' : (out.message || '写入失败。'), error: !out.ok };
+    await loadInstallInfo();
+  };
   return el('div', { class: 'wcard' }, title, pick,
-    el('p', { class: 'hint' }, '在终端运行以下命令（将设置追加到 DeepSeek Harness 配置文件末尾），然后在 DeepSeek Harness 菜单中点击「Restart App and Host」重启。'),
+    el('p', { class: 'hint' }, '点击「写入配置」，或在终端运行以下命令（将设置追加到 DeepSeek Harness 配置文件末尾），然后在 DeepSeek Harness 菜单中点击「Restart App and Host」重启。'),
+    el('div', { class: 'cdp-write' }, el('button', { class: 'btn primary sm', disabled: cdpWrite.busy, onclick: write }, cdpWrite.busy ? '写入中…' : '写入配置')),
+    cdpWrite.msg ? el('p', { class: 'hook-note err' }, cdpWrite.msg) : null,
     promptBlock(`cat >> ${file} <<'EOF'\n- id: dsh-cdp\n  name: '@dougen/dsh-cdp'\n  config:\n    dataDir: ${info.home}/.chrome-agent\nEOF`, renderHelper));
 }
 
@@ -4477,7 +4492,7 @@ function attentionItems() {
       items.push({ key: `quiet:${a.id}`, text: `${a.id} 无响应`, body: `${a.id} 长时间无活动（当前任务 ${a.currentTask}），请确认窗口状态` });
     }
   }
-  for (const c of data.doctor ?? []) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, body: c.detail });
+  for (const c of data.doctor ?? []) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, body: c.detail, fix: c.fix });
   // 演播需求一直是进行中，但不需要 leader 在线
   const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
   if (busy && data.leader && (data.leader.away || !data.leader.online)) {
@@ -4660,8 +4675,25 @@ function goAttention(key) {
 const needsExpanded = new Set(); // 「需要你处理」里展开了提示词的缺人角色
 const ATT_KIND = {
   needs: ['缺人', 'asking'], stale: ['重启', 'rework'], dispute: ['分歧', 'submitted'], assign: ['指派', 'working'],
-  cancel: ['作废', 'rework'], quiet: ['无响应', 'asking'], leader: ['leader', 'rework'],
+  cancel: ['作废', 'rework'], quiet: ['无响应', 'asking'], leader: ['leader', 'rework'], doctor: ['自检', 'pending'],
 };
+// 自检项的「修复」：由服务改配置并重跑自检，修好的项随下次刷新消失；结果提示留在原处
+let doctorFix = { busy: null, key: null, msg: '', error: false };
+async function fixDoctor(key) {
+  doctorFix = { busy: key, key, msg: '', error: false };
+  renderAttentionList();
+  const out = await post('/api/doctor/fix', { key, profile: installProfile });
+  doctorFix = { busy: null, key, msg: out.message || '', error: !out.ok };
+  await poll();
+  renderAttentionList();
+}
+// 打开「待处理」时重跑一次自检：手动改好的配置不用重启服务就能消失
+async function recheckDoctor() {
+  try { await fetch('/api/doctor?fresh=1', { cache: 'no-store' }); } catch {}
+  await poll();
+  if (attentionOpen) renderAttentionList();
+}
+
 // 弹框：待验收的需求可以勾选后一次验收通过；其它事每件一行，点「去处理」跳过去
 let acceptPick = null;    // 勾选的需求编号；null 表示还没动过，默认全选
 let acceptConfirm = false; // 「验收通过」两步确认
@@ -4670,7 +4702,8 @@ let acceptMsg = '';
 function renderAttentionList() {
   const box = document.getElementById('attention-list');
   const items = attentionOpen ? attentionItems() : [];
-  if (!items.length) { attentionOpen = false; box.hidden = true; box.replaceChildren(); return; }
+  // 最后一项刚被「修复」掉时先不关，留着修复结果的提示
+  if (!items.length && !(attentionOpen && doctorFix.msg)) { attentionOpen = false; box.hidden = true; box.replaceChildren(); return; }
   const jobs = data.state.jobs.filter((j) => j.status === 'awaiting_acceptance').reverse();
   if (acceptPick === null) acceptPick = new Set(jobs.map((j) => j.id));
   for (const id of [...acceptPick]) if (!jobs.some((j) => j.id === id)) acceptPick.delete(id);
@@ -4723,6 +4756,7 @@ function renderAttentionList() {
       return [el('div', { class: 'att-row' },
         el('span', { class: 'what' }, el('span', { class: `lozenge kind c-${ATT_KIND[i.key.split(':')[0]]?.[1] || 'pending'}` }, ATT_KIND[i.key.split(':')[0]]?.[0] || '其他'), el('span', null, i.body)),
         i.key === 'stale' ? el('span', { class: 'hint' }, '见右上角提示')
+          : i.key.startsWith('doctor:') ? (i.fix ? el('button', { class: 'btn sm', disabled: doctorFix.busy, onclick: stop(() => fixDoctor(i.key.slice(7))) }, doctorFix.busy === i.key.slice(7) ? '修复中…' : '修复') : null)
           : role ? el('button', { class: 'btn sm', onclick: stop(() => { open ? needsExpanded.delete(role) : needsExpanded.add(role); renderAttentionList(); }) }, open ? '收起' : '添加 worker')
           : el('button', { class: 'btn sm', onclick: stop(() => goAttention(i.key)) }, '去处理')),
         open ? el('div', { class: 'att-prompt' },
@@ -4730,6 +4764,8 @@ function renderAttentionList() {
           promptBlock(workerPrompt(role), renderAttentionList)) : null];
     }),
   ] : null;
+  // 修好的自检项会从列表里消失，结果提示（比如需要重启 DeepSeek Harness）单独放在最后
+  const fixMsg = doctorFix.msg ? el('p', { class: `att-fix${doctorFix.error ? ' err' : ''}` }, doctorFix.msg) : null;
 
   box.classList.toggle('again', !box.hidden); // 已经开着时重绘不再播弹出动画
   // 气泡的小箭头对准页头的「需要你处理」按钮
@@ -4737,7 +4773,7 @@ function renderAttentionList() {
   box.style.setProperty('--arrow-x', `${Math.max(16, window.innerWidth - 20 - (r.left + r.width / 2) - 5)}px`);
   fill(box, el('div', { class: 'modal att-modal', onclick: (e) => e.stopPropagation() },
     modalHead(`待处理事项（${items.length}）`, () => { attentionOpen = false; renderAttentionList(); }),
-    el('div', { class: 'modal-body' }, acceptSec, otherSec)));
+    el('div', { class: 'modal-body' }, acceptSec, otherSec, fixMsg)));
   box.hidden = false;
 }
 
@@ -4748,7 +4784,9 @@ document.getElementById('attention').addEventListener('click', (e) => {
   acceptPick = null;
   acceptConfirm = false;
   acceptMsg = '';
+  doctorFix = { busy: null, key: null, msg: '', error: false };
   renderAttentionList();
+  if (attentionOpen) recheckDoctor();
 });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();

@@ -106,7 +106,7 @@ ln -s ~/code/agent-team/skills/ateam-lead   ~/.claude/skills/ateam-lead
 ln -s ~/code/agent-team/skills/ateam-worker ~/.agents/skills/ateam-worker
 ```
 
-**可选：test worker 的浏览器**（只有要让 test worker 做测试或演播时才需要，一次性）：WorkBuddy 上的 test worker 用它自带的 Chrome 插件，不用装下面这些。DeepSeek Harness 上再装一份浏览器说明书 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md)（`ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`），然后按它第 2 节配好 DeepSeek Harness 插件。测试专用的 Chrome 由 test worker 自己打开；第一次它会请你在那个窗口里把要测的网站登录一次。看板「使用说明 → 安装」最下面有可以复制的命令。
+**可选：test worker 的浏览器**（只有要让 test worker 做测试或演播时才需要，一次性）：WorkBuddy 上的 test worker 用它自带的 Chrome 插件，不用装下面这些。DeepSeek Harness 上再装一份浏览器说明书 [browser-cdp-setup](skills/browser-cdp-setup/SKILL.md)（`ln -s ~/code/agent-team/skills/browser-cdp-setup ~/.agents/skills/browser-cdp-setup`），然后按它第 2 节配好 DeepSeek Harness 插件。测试专用的 Chrome 由 test worker 自己打开；第一次它会请你在那个窗口里把要测的网站登录一次。看板「使用说明 → 安装」最下面有「写入配置」按钮（ateam 替你改 DeepSeek Harness 配置，改完重启 DeepSeek Harness），也有可以复制的命令。
 
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 
@@ -235,7 +235,7 @@ worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡�
   - 点 leader 标签：打开 leader 的加入提示词。
   - 点 worker 标签：打开它的唤醒提示词和「安排下线」。
   - 点「N 个已掉线」：可以重连或移除。
-- **顶部右边**：有事需要你处理时，先出现一个红框按钮「待处理 N」（需求待验收、某个角色缺 worker、有活干时 leader 没连上、worker 无响应、worker 还在做已作废的任务、指派的 worker 不在线、审卡意见等你裁决、服务需要重启），点它弹出一个框：待验收的需求可以勾选（默认全选）后一次「验收通过」，每个都能先点「看汇报」；其它事每件一行，点「去处理」跳过去（显示开 worker 的提示词、打开 leader 的加入提示词等）。同时浏览器标签页标题前面显示「(N)」，图标右上角出现红点，看板不在前台也能注意到；服务连不上时显示「(!)」。再往右是「使用说明」，分 worker / leader / 安装 / 项目规则 / 设置五页，开 worker、开 leader、安装要发的话和命令都在里面，点「复制」就行。
+- **顶部右边**：有事需要你处理时，先出现一个红框按钮「待处理 N」（需求待验收、某个角色缺 worker、有活干时 leader 没连上、worker 无响应、worker 还在做已作废的任务、指派的 worker 不在线、审卡意见等你裁决、服务需要重启、自检没过），点它弹出一个框（打开时会重新自检，手动改好的配置不用重启服务就会消失）：待验收的需求可以勾选（默认全选）后一次「验收通过」，每个都能先点「看汇报」；其它事每件一行，点「去处理」跳过去（显示开 worker 的提示词、打开 leader 的加入提示词等）；自检项能自动修的是「修复」按钮（补 `.ateam/.gitignore`、给 DeepSeek Harness 写测试浏览器配置）。多仓库项目的项目目录本身不在仓库里，不检查 `.ateam/.gitignore`。同时浏览器标签页标题前面显示「(N)」，图标右上角出现红点，看板不在前台也能注意到；服务连不上时显示「(!)」。再往右是「使用说明」，分 worker / leader / 安装 / 项目规则 / 设置五页，开 worker、开 leader、安装要发的话和命令都在里面，点「复制」就行。
 - **浏览器通知**：顶部点一次「开启通知」，浏览器问是否允许时选允许。之后同样这些事持续 1 分钟以上就弹一条通知（同一件事只弹一次，没有声音），点通知回到看板。看板标签页要开着，放在后台也行。按钮不见了说明已经允许或已经拒绝；拒绝过的要到浏览器的网站设置里改回允许。
 - **项目规则**：「使用说明」里的「项目规则」页，写每个任务都要遵守的约定（比如不写测试、提交前跑哪条编译命令）。worker 领到任务时自动附在任务后面，leader 不用每个任务重复写；改完保存，之后派发的任务马上生效。
 - **设置**：「使用说明」里的「设置」页，对整个项目生效，改完马上生效、重启不丢：空闲多久申请下线、每个角色至少留一个 worker、多久没动静算「无响应」、审卡审完自动下线、打回几次后挂起。

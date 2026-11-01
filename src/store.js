@@ -930,7 +930,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         dirty = true;
       } else if (!agent.leaveAsked && now() - agent.idleSince >= config().idleMin * 60000) {
         agent.leaveAsked = true;
-        const last = onlineOfRole(agent.role).length === 1;
+        // 「最后一个」只在设置要求保留时才算数，关了就和普通申请一样，leader 自己决定
+        const last = config().keepOnePerRole && onlineOfRole(agent.role).length === 1;
         const who = agent.name ? `${agent.name}（${agent.id}）` : agent.id;
         const min = Math.round((now() - agent.idleSince) / 60000);
         emit('leave_request', {

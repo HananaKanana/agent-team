@@ -1736,7 +1736,8 @@ function messageBox(a) {
 
 function dismissButtons(a) {
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
-  const last = isLastOfRole(a);
+  // 设置里关了「每个角色至少保留一个 worker」时，最后一个也和别的一样直接下线，不再确认
+  const last = (data.config?.keepOnePerRole ?? true) && isLastOfRole(a);
   const lastTip = last ? `该 worker 是 ${a.role} 角色唯一在线的 worker，下线后该角色的新任务将无人领取` : '';
   // 已安排做完再下线：可以撤销，或改成立即下线
   if (a.dismiss) {

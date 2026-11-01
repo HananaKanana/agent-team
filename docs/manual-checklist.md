@@ -83,6 +83,8 @@
 4. [ ] `ateam task add ... --paths a --paths b --after T1 --after T2`：路径是 a、b，依赖是 T1、T2；`--title x --title y` 报错「写了两遍」
 5. [ ] 新卡和一个暂停领取的需求里的卡路径重叠：「⚠ 路径重叠」里那张卡标「暂停领取中」，建议给暂停的卡加 --after 新卡，而不是反过来
 6. [ ] 某角色只剩暂停领取的卡时，该角色的 worker 计为空闲；超过「空闲申请下线时长」后：leader 在线时向 leader 申请下线，leader 未连接时直接下线（开启「每个角色至少保留一个 worker」时最后一个不下线），leader 回来后收到 worker_auto_leave 事件
+7. [ ] 设置里关掉「每个角色至少保留一个 worker」：某角色唯一的 worker 空闲申请下线时，leader 收到的 leave_request 不提「最后一个」，直接 dismiss，不问用户；看板上点它的「下线」直接下线，没有「确认下线」；打开该设置时行为照旧
+
 
 ## 无 leader 模式
 

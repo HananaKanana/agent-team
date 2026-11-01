@@ -809,7 +809,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       checkLeader();
       store.sweep((id) => waiters.has(id));
       store.expireDemoRequests();
-      store.checkIdle();
+      store.checkIdle({ leaderAway: !leaderOnline() || !!store.state.noLeader });
     } finally {
       sweeping = false;
     }

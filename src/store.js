@@ -898,8 +898,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 空闲：在线、手上没有任务、本角色也没有待领取的任务（包括还在等依赖的）。
   // 空闲超过 idleMs 的 worker 向 leader 申请下线，省得空等浪费 token；每段空闲只申请一次。
   // last：它是本角色最后一个在线 worker，下线需要 leader 和用户都同意。
-  function checkIdle() {
+  // leaderAway：leader 没连着（不在监听、近几分钟也没操作）。这时申请下线没人批，空闲的 worker 直接下线
+  function checkIdle({ leaderAway = false } = {}) {
     let dirty = false;
+    // 暂停领取的卡（单张或整个需求）不会派发，不算这个角色还有活
+    const heldJobs = new Set(state.jobs.filter((j) => j.onHold).map((j) => j.id));
     for (const agent of state.agents) {
       if (agent.status !== 'online') continue;
       // 审卡 worker 只有用户要求才下线，空闲也不申请
@@ -913,7 +916,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       }
       const busy = isCritic(agent)
         ? critiqueQueue().length > 0
-        : agent.currentTask || state.tasks.some((t) => t.status === 'pending' && sameRole(t.role, agent.role));
+        : agent.currentTask || state.tasks.some((t) => t.status === 'pending' && !t.onHold && !heldJobs.has(t.jobId) && sameRole(t.role, agent.role));
       if (busy) {
         if (agent.idleSince || agent.leaveAsked) {
           delete agent.idleSince;
@@ -934,6 +937,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
           agentId: agent.id, role: agent.role, last,
           text: `${who} 已空闲 ${min} 分钟，${agent.role} 角色没有待领取的任务，申请下线${last ? `（它是 ${agent.role} 角色最后一个在线 worker）` : ''}`,
         });
+        dirty = true;
+      }
+      // 没人批：leader 不在时直接安排下线（要求保留每个角色最后一个时，最后一个不动）。
+      // 只打标记，worker 挂着的 wait 马上收到「已下线」，见 nextFor
+      if (agent.leaveAsked && leaderAway && !agent.dismiss && !(config().keepOnePerRole && onlineOfRole(agent.role).length === 1)) {
+        agent.dismiss = true;
+        emit('worker_auto_leave', { agentId: agent.id, text: `${agent.id} 空闲超过 ${config().idleMin} 分钟，leader 不在，已自动下线` });
         dirty = true;
       }
     }

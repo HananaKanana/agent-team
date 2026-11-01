@@ -1815,7 +1815,7 @@ async function dismissAgents(body) {
 // 改一项存一项。数字框在失去焦点或回车时保存；正在输入时轮询不重画面板（见 renderHelper）。
 const SETTING_ITEMS = [
   { group: 'worker' },
-  { key: 'idleMin', type: 'num', label: '空闲申请下线时长（分钟）', hint: 'worker 空闲超过该时长后向 leader 申请下线，避免空等消耗 token。' },
+  { key: 'idleMin', type: 'num', label: '空闲申请下线时长（分钟）', hint: 'worker 空闲超过该时长后向 leader 申请下线，避免空等消耗 token；leader 未连接时直接下线（开启「每个角色至少保留一个 worker」时，该角色的最后一个除外）。只剩暂停领取的任务时也算空闲。' },
   { key: 'leaseMin', type: 'num', label: '无响应判定时长（分钟）', hint: '持有任务的 worker 超过该时长无活动时，弹窗请求确认其状态；空闲 worker 直接判定为离线。活动从最后一次调用 ateam 或工具调用（已安装 hook 时）算起；执行耗时命令前已报备的 worker 不受影响。' },
   { key: 'leaderSpawn', type: 'bool', label: '允许 leader 自动启动 worker', hint: '开启后，某一角色有待领取的任务但没有在线 worker 时，leader 可自行在下方选择的平台中启动 worker。关闭时 leader 只会提醒你；「worker」页的「启动」按钮不受此项限制。' },
   { key: 'spawnPlatform', type: 'choice', options: [['dsh', 'DeepSeek Harness'], ['workbuddy', 'WorkBuddy']], label: '启动 worker 的平台', hint: '「worker」页的「启动」按钮和 leader 的自动启动都在该平台中新建会话。DeepSeek Harness 需先在「安装」页安装 hook（含启动插件）。WorkBuddy 会被切到前台并自动填入提示词，自动发送需要在「系统设置 → 隐私与安全性 → 辅助功能」中允许运行 ateam serve 的终端，否则需手动按回车。' },

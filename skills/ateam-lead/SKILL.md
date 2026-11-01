@@ -113,6 +113,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `worker_back` | 它又有动静了，或用户确认窗口还在，了解即可 |
 | （用户确认某个 worker 窗口没了） | `ateam reclaim T3`：收回任务交给同角色的其他 worker 接手；原 worker 会被标记掉线。**只在用户确认后做** |
 | `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。**每个角色至少留一个 worker**：事件里写着「最后一个」的，要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved` |
+| `worker_auto_leave` | 你不在（未监听、近几分钟没操作）时，某个 worker 空闲超过设定时长，已自动下线。了解即可；这个角色再缺人时看 `ateam status` 的「缺人」 |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `leader_spawn` | 用户打开或关闭了「允许 leader 自动启动 worker」。打开后，缺人时你可以 `ateam spawn --role <角色>` 自己开（见第 1 节）；关闭后照旧请用户开窗口 |

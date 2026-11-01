@@ -82,6 +82,7 @@
 3. [ ] leader 对进行中的卡 `ateam task edit T? --desc-file ... --accept ...`：成功，输出写明已通知 worker；worker 下一次 progress / wait / submit 收到「leader 修改了这张卡的描述、验收标准，以卡片最新内容为准」及新内容；看板卡片显示新描述，时间线「修改 · 已通知」；改进行中卡的 --role 或 --after 被拒
 4. [ ] `ateam task add ... --paths a --paths b --after T1 --after T2`：路径是 a、b，依赖是 T1、T2；`--title x --title y` 报错「写了两遍」
 5. [ ] 新卡和一个暂停领取的需求里的卡路径重叠：「⚠ 路径重叠」里那张卡标「暂停领取中」，建议给暂停的卡加 --after 新卡，而不是反过来
+6. [ ] 某角色只剩暂停领取的卡时，该角色的 worker 计为空闲；超过「空闲申请下线时长」后：leader 在线时向 leader 申请下线，leader 未连接时直接下线（开启「每个角色至少保留一个 worker」时最后一个不下线），leader 回来后收到 worker_auto_leave 事件
 
 ## 无 leader 模式
 

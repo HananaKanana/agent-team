@@ -155,6 +155,9 @@ class ServerError extends Error {
 
 // 连不上服务（或连接被重置）时每 2 秒重试，从第一次失败起累计约 60 秒。
 // holdSec：wait/watch 的挂起时长；断线重连后只挂起剩余时长，总时长不超过它。
+// 这条命令带了 --as：是 worker 发的，服务不把它算成 leader 的活动（有的命令请求体里不带 as）
+let CURRENT_AS = '';
+
 async function request(method, path, body, holdSec) {
   const started = Date.now();
   let firstFailure = null;
@@ -167,7 +170,7 @@ async function request(method, path, body, holdSec) {
       const res = await fetch(BASE + path, {
         method,
         // x-ateam-cli：让服务区分命令行和看板（leader 是否在线只看命令行的活动）
-        headers: body ? { 'content-type': 'application/json', 'x-ateam-cli': '1' } : { 'x-ateam-cli': '1' },
+        headers: { ...(body ? { 'content-type': 'application/json' } : {}), 'x-ateam-cli': '1', ...(CURRENT_AS ? { 'x-ateam-as': CURRENT_AS } : {}) },
         body: body ? JSON.stringify(body) : undefined,
       });
       const data = await res.json();
@@ -772,6 +775,7 @@ const commands = {
 
 async function main() {
   const { flags, positional } = parseArgs(process.argv.slice(2));
+  if (typeof flags.as === 'string') CURRENT_AS = flags.as;
   let name = positional.shift();
   if (!name || name === 'help' || flags.help) {
     console.log(USAGE);

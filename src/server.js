@@ -764,7 +764,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       const body = req.method === 'POST' ? await readBody(req) : {};
       // 命令行发来、且不带 --as 的请求都是 leader 的（worker 的命令都带 --as）
-      if (req.headers['x-ateam-cli'] && !body.as && key !== 'POST /api/join') {
+      if (req.headers['x-ateam-cli'] && !body.as && !req.headers['x-ateam-as'] && key !== 'POST /api/join') {
         leaderSeenAt = Date.now();
         if (key !== 'POST /api/watch') leaderActedAt = leaderSeenAt;
         checkLeader();

@@ -323,7 +323,7 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
     ].join('\n');
   }
   if (result.kind === 'message') {
-    return `# 消息\n\n${result.text}\n\n标着「用户直接说」的是用户本人说的，以它为准。处理完运行 ateam wait --as ${agentId}。`;
+    return `# 消息\n\n${result.text}\n\n标着「用户直接说」的是用户本人说的，以它为准。照做即可；要你回话的，直接在你自己的窗口里简短回复（用户看得到），不要用 ateam message 或 ateam status。处理完回到 ateam wait --as ${agentId}（后台运行）。`;
   }
   if (result.kind === 'asking_note') {
     return `# 补充说明（${result.task.id}）\n\n${result.text}\n\n标着「用户直接说」的是用户本人说的，以它为准。你的提问还在等答复，看完继续运行 ateam wait --as ${agentId}。`;

@@ -1117,8 +1117,11 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .hook-note { margin: -2px 0 8px; font-size: 12.5px; color: var(--muted); }
 .hook-note.err { color: var(--rework); }
 .hook-foot { margin-top: 12px; }
-.wcard-head .spawn-btn { flex: none; margin-left: 4px; }
-.spawn-btn .ico { width: 12px; height: 12px; }
+.wcard-head .spawn-btn { flex: none; margin-left: 2px; color: var(--brand); font-weight: 600; }
+.wcard-head .spawn-btn:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.spawn-btn .ico { width: 11px; height: 11px; }
+.role-count { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.role-count.short { color: var(--asking); font-weight: 600; }
 .spawn-msg { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
 .spawn-msg.err { color: var(--rework); }
 .read-flag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; vertical-align: 1px; color: var(--asking); background: color-mix(in srgb, var(--asking) 12%, transparent); }
@@ -2261,7 +2264,7 @@ function renderHelper(force = false) {
           el('span', { class: 'tag role', style: roleStyle(role) }, role),
           std ? el('b', null, std.label) : null,
           el('span', { class: 'hint grow' }, std ? std.what : ''),
-          el('span', { class: 'hint' }, `在线 ${working}，待领取 ${waiting}`),
+          el('span', { class: `role-count${waiting && !working ? ' short' : ''}`, title: waiting && !working ? '有待领取的任务，但没有在线 worker' : '' }, `在线 ${working} · 待领取 ${waiting}`),
           spawnButton(role)),
         promptBlock(workerPrompt(role), renderHelper),
         spawnMessage(role));
@@ -4199,7 +4202,7 @@ function spawnButton(role) {
       : { role, busy: false, msg: out.message || '启动失败。', error: true };
     renderHelper(true);
   };
-  return el('button', { class: 'btn sm spawn-btn', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送下方提示词（平台可在「设置」中切换）`, onclick: start },
+  return el('button', { class: 'btn ghost sm spawn-btn', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送下方提示词（平台可在「设置」中切换）`, onclick: start },
     icon('play'), mine.busy ? '启动中…' : '启动');
 }
 

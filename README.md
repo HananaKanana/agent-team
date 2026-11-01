@@ -119,7 +119,7 @@ ateam hook install --platform dsh         # DeepSeek Harness
 ateam hook install --platform workbuddy   # WorkBuddy
 ```
 
-装好后，worker 每完成一次操作就能收到补充说明，空闲等待时也不会持续消耗 token。DeepSeek Harness 上还会一并装好启动插件：看板「worker」页每个角色旁的「在 DeepSeek Harness 中启动」按钮和 `ateam spawn` 靠它新开 worker 会话。插件只接受本机、带密钥（`~/.dsh/ateam-launch.key`，仅本人可读）的请求，只能发 ateam 的开场提示词，工作目录必须是 ateam 项目。不要交给 worker 去装：agent 平台通常只允许它写项目目录；看板的按钮由 ateam 服务执行，不受这个限制。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+装好后，worker 每完成一次操作就能收到补充说明，空闲等待时也不会持续消耗 token。DeepSeek Harness 上还会一并装好启动插件：看板「worker」页每个角色旁的「在 DeepSeek Harness 中启动」按钮和 `ateam spawn` 靠它新开 worker 会话。插件只接受本机、带密钥（`~/.dsh/ateam-launch.key`，仅本人可读）的请求，只能发 ateam 的开场提示词，工作目录必须是 ateam 项目。WorkBuddy 不需要插件：ateam 用它的任务链接填入提示词和工作目录，再模拟按回车发送；自动发送需要在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 `ateam serve` 的终端，否则请手动按回车。不要交给 worker 去装：agent 平台通常只允许它写项目目录；看板的按钮由 ateam 服务执行，不受这个限制。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
 
 ---
 
@@ -371,7 +371,7 @@ ateam job accept J1 J2   # 验收通过（看板上点「验收通过」也一�
 ateam cards --job J5     # 看某个需求的全部卡和审卡情况
 ateam note T5 "说明"      # 给正在做 T5 的 worker 补充说明（当前操作结束或下一次调用 ateam 时收到，提交前一定看到）
 ateam message --to backend-1 "内容"   # 直接发给 worker，包括手上没有卡的
-ateam spawn --role frontend   # 在设置的平台里新开一个 worker（目前只支持 DeepSeek Harness；leader 要用户在设置里允许才能用）
+ateam spawn --role frontend   # 在设置的平台里新开一个 worker（DeepSeek Harness 或 WorkBuddy；leader 要用户在设置里允许才能用）
 ateam hook install --platform dsh   # 安装工具后 hook（或 --platform workbuddy；worker 加入时自动运行）
 ateam critique agree T5 "打算怎么改" --basis "依据"   # leader 回复审卡意见（不同意用 dispute），由你在看板上决定；照你的决定改完后 critique done
 ateam task top T5        # 设为优先：同角色的 worker 下一个先领它（--off 取消；看板上点开待领取的任务也能设）

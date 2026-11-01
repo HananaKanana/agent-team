@@ -665,7 +665,9 @@ const commands = {
   async spawn({ flags }) {
     const role = requireArg(flags.role, '角色', 'ateam spawn --role frontend');
     const out = await request('POST', '/api/spawn', { role, name: flags.name });
-    return `已在 ${out.platform === 'dsh' ? 'DeepSeek Harness' : out.platform} 中新开会话（${out.sessionId}）并发出「${out.text}」。worker 加入后看板会显示它。${out.inWorkspace ? '' : '\n注意：DeepSeek Harness 里没有这个项目的工作区，会话不会列在左侧的项目名下面。'}`;
+    const where = out.platform === 'dsh' ? 'DeepSeek Harness' : 'WorkBuddy';
+    if (!out.sent) return `已在 ${where} 中填好「${out.text}」。${out.note ?? ''}`;
+    return `已在 ${where} 中新开会话${out.sessionId ? `（${out.sessionId}）` : ''}并发出「${out.text}」。worker 加入后看板会显示它。${out.inWorkspace ? '' : '\n注意：DeepSeek Harness 里没有这个项目的工作区，会话不会列在左侧的项目名下面。'}`;
   },
 
   async message({ flags, positional }) {

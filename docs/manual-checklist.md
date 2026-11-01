@@ -116,7 +116,7 @@
 3. [ ] DSH 没开、插件没装、密钥不对时，按钮旁显示对应的说明，不报看不懂的错误
 4. [ ] 设置「允许 leader 自动启动 worker」关闭时，leader 运行 `ateam spawn` 被拒绝并转告用户；开启后 leader 在缺人时自行启动，一次一个，不多开
 5. [ ] 有卡缺人时，`ateam status`、`ateam task add`、`ateam approve` 的输出末尾出现「## 缺人」，按设置分别写「可以自己启动」或「请用户开窗口」；切换「允许 leader 自动启动 worker」时 leader 收到 leader_spawn 事件
-6. [ ] 设置「启动 worker 的平台」选 WorkBuddy 时，按钮文字随之变化，点击提示暂不支持
+6. [ ] 设置「启动 worker 的平台」选 WorkBuddy：点「启动」后 WorkBuddy 切到前台，新任务的输入框填好开场提示词、工作目录选中本项目并自动发送；运行 ateam serve 的终端没有「辅助功能」权限时，停在已填好，按钮旁提示按回车发送和如何开权限；WorkBuddy 没开时先自动打开再填入
 7. [ ] 安全：不带密钥或密钥错误的请求被拒绝；角色名带空格或符号被拒绝；工作目录不是 ateam 项目被拒绝
 
 ## 直接回复 worker

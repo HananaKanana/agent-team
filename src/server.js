@@ -4,6 +4,7 @@ import http from 'node:http';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { spawnWorker } from './spawn.js';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -540,6 +541,14 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because, b.basis) }),
     'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text, b.basis) }),
     'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side, b.text) }),
+    'POST /api/spawn': (b) => {
+      const cfg = store.config();
+      // 看板上的按钮是用户点的，不受限；leader 的命令要用户在设置里开了才行
+      if (b.by !== 'user' && !cfg.leaderSpawn) {
+        throw new AteamError('NEEDS_USER', '用户没有允许 leader 自动启动 worker（看板「设置 → 自动启动 worker」）。请告诉用户需要哪个角色的 worker，由用户开窗口或在看板上点「启动」。');
+      }
+      return spawnWorker({ root, role: b.role, name: b.name, platform: cfg.spawnPlatform });
+    },
     'POST /api/message': (b) => store.messageAgent(String(b.to ?? ''), b.text, b.by === 'user' ? 'user' : 'lead'),
     'POST /api/note': (b) => ({ task: store.noteTask(requireId(b), b.text) }),
     'GET /api/cards': (_b, url) => ({ cards: store.cards({ jobId: url.searchParams.get('job') ?? '', todo: url.searchParams.get('todo') === '1' }) }),

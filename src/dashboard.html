@@ -229,6 +229,7 @@ input[type="checkbox"]:not(.switch):checked::after {
 .tpl-badge { padding: 1px 7px; border-radius: 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--sunken); }
 .tpl-badge.custom { color: var(--brand-ink); background: var(--brand-soft); }
 .tpl-preview { margin-top: 10px; padding: 14px 18px; max-height: 460px; overflow: auto; border-radius: 6px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--line-soft); font-size: 13px; }
+select.setting-num { width: auto; text-align: left; }
 .setting-num { width: 72px; height: 32px; padding: 0 8px; text-align: right; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); font: inherit; flex: none; }
 .rules-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--sunken); }
@@ -1108,6 +1109,8 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .timeline > li:last-child::after { display: none; }
 .timeline > li > div:first-child { line-height: 20px; } /* 第一行固定行高。中文字形在行框里偏下，圆点（top 6 + 高 10）比几何中心低 1px，看起来才对齐 */
 .timeline .when { color: var(--faint); font-size: 12px; }
+.spawn-row .err { color: var(--rework); }
+.spawn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; }
 .read-flag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; vertical-align: 1px; color: var(--asking); background: color-mix(in srgb, var(--asking) 12%, transparent); }
 .read-flag.read { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
@@ -1801,6 +1804,8 @@ const SETTING_ITEMS = [
   { group: 'worker' },
   { key: 'idleMin', type: 'num', label: '空闲申请下线时长（分钟）', hint: 'worker 空闲超过该时长后向 leader 申请下线，避免空等消耗 token。' },
   { key: 'leaseMin', type: 'num', label: '无响应判定时长（分钟）', hint: '持有任务的 worker 超过该时长无活动时，弹窗请求确认其状态；空闲 worker 直接判定为离线。活动从最后一次调用 ateam 或工具调用（已安装 hook 时）算起；执行耗时命令前已报备的 worker 不受影响。' },
+  { key: 'spawnPlatform', type: 'choice', options: [['dsh', 'DeepSeek Harness'], ['workbuddy', 'WorkBuddy（暂不支持）']], label: '启动 worker 的平台', hint: '「worker」页的「启动」按钮和 leader 的自动启动都在该平台中新建会话。DeepSeek Harness 需先在终端运行 ateam hook install --platform dsh；WorkBuddy 尚未支持。' },
+  { key: 'leaderSpawn', type: 'bool', label: '允许 leader 自动启动 worker', hint: '开启后，某一角色有待领取的任务但没有在线 worker 时，leader 可自行在上方平台中启动 worker。关闭时 leader 只会提醒你；「worker」页的「启动」按钮不受此项限制。' },
   { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少保留一个 worker', hint: '开启后，某一角色的最后一个 worker 下线需经用户同意（leader 会先行征询）。关闭后 leader 可直接让其下线。' },
   { group: '审卡' },
   { key: 'criticAutoLeave', type: 'bool', label: '审核完成后自动下线', hint: '审卡 worker 审核完所有待审任务后自动下线（新启动的同样适用），有新任务需审核时再启动。关闭后审卡 worker 常驻，仅在用户要求时下线。' },
@@ -1846,6 +1851,10 @@ function settingsPage() {
         input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
         input.checked = !!cfg[it.key];
         input.addEventListener('change', () => saveSetting(it.key, input.checked));
+      } else if (it.type === 'choice') {
+        input = el('select', { class: 'setting-num' }, it.options.map(([value, label]) => el('option', { value }, label)));
+        input.value = String(cfg[it.key]);
+        input.addEventListener('change', () => saveSetting(it.key, input.value));
       } else {
         input = el('input', { type: 'number', class: 'setting-num', min: '1', step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);
@@ -2243,7 +2252,8 @@ function renderHelper(force = false) {
           std ? el('b', null, std.label) : null,
           el('span', { class: 'hint grow' }, std ? std.what : ''),
           el('span', { class: 'hint' }, `在线 ${working}，待领取 ${waiting}`)),
-        promptBlock(workerPrompt(role), renderHelper));
+        promptBlock(workerPrompt(role), renderHelper),
+        spawnRow(role));
     }),
     el('div', { class: 'helper-sec' }, el('h4', null, `② 在线 worker（${online.length}）`), dismissAll),
     el('p', { class: 'hint' }, dismissAllArm
@@ -4147,6 +4157,27 @@ const STANDARD_ROLES = [
   { key: 'test', label: '测试', what: '按验收标准测试并编写报告' },
   { key: 'critic', label: '审卡', what: '审核任务卡质量，不涉及代码' },
 ];
+
+// 「在 DeepSeek Harness 中启动」：由 ateam 通过 DSH 插件新开会话并发出上面的提示词
+let spawnState = { role: null, busy: false, msg: '', error: false };
+const platformLabel = () => ((data.config?.spawnPlatform ?? 'dsh') === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness');
+function spawnRow(role) {
+  const mine = spawnState.role === role ? spawnState : { busy: false, msg: '', error: false };
+  const start = async (e) => {
+    e.stopPropagation();
+    if (spawnState.busy) return;
+    spawnState = { role, busy: true, msg: '', error: false };
+    renderHelper(true);
+    const out = await post('/api/spawn', { role, by: 'user' });
+    spawnState = out.ok
+      ? { role, busy: false, msg: `已在 ${platformLabel()} 中新开会话，worker 加入后将显示在下方。`, error: false }
+      : { role, busy: false, msg: out.message || '启动失败。', error: true };
+    renderHelper(true);
+  };
+  return el('div', { class: 'spawn-row' },
+    el('button', { class: 'btn sm', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送上方提示词。平台可在「设置」中切换`, onclick: start }, mine.busy ? '启动中…' : `在 ${platformLabel()} 中启动`),
+    mine.msg ? el('span', { class: mine.error ? 'hint err' : 'hint' }, mine.msg) : null);
+}
 
 function workerPrompt(role) {
   return `使用 ateam-worker skill，角色 ${role}`;

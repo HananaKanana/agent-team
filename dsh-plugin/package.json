@@ -1,0 +1,9 @@
+{
+  "name": "ateam-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lets ateam open a DeepSeek Harness session and send the worker opening prompt.",
+  "type": "module",
+  "main": "index.js",
+  "exports": { ".": "./index.js" }
+}

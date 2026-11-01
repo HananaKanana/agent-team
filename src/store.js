@@ -33,6 +33,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     leaderAwayMin: { type: 'int', min: 1, max: 120, def: () => 10 },
     // 演播视口：预演按它录，演播沿用这张卡预演时记下的尺寸
     demoViewport: { type: 'size', def: () => '1600x800' },
+    // 自动启动 worker：leader 能不能自己 ateam spawn（看板上的按钮不受限），以及在哪个平台里开
+    leaderSpawn: { type: 'bool', def: () => false },
+    spawnPlatform: { type: 'choice', options: ['dsh', 'workbuddy'], def: () => 'dsh' },
   };
 
   function config() {
@@ -838,6 +841,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!spec) continue;
       if (value === null) { delete state.settings[key]; continue; }
       if (spec.type === 'bool') { state.settings[key] = !!value; continue; }
+      if (spec.type === 'choice') {
+        if (!spec.options.includes(value)) throw new AteamError('INVALID', `${key} 只能是 ${spec.options.join('、')} 之一。`);
+        state.settings[key] = value;
+        continue;
+      }
       if (spec.type === 'size') {
         const m = String(value).trim().toLowerCase().match(VIEWPORT_RE);
         if (!m || [m[1], m[2]].some((v) => Number(v) < 320 || Number(v) > 7680)) throw new AteamError('INVALID', `${key} 要写成 宽x高，比如 1600x800（宽高在 320 到 7680 之间）。`);

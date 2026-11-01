@@ -3,7 +3,9 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const BRIDGE = '@deepseek-ai/dsh-hooks-claude-code';
 const PROTOCOL = '@deepseek-ai/dsh-hook-protocol';
@@ -14,6 +16,9 @@ const PRE_JOB_OUTPUT = 'hook pre-job-output';
 // 读后台输出的工具：DSH 是 job_output，WorkBuddy 是 TaskOutput
 const JOB_OUTPUT_TOOLS = '^(job_output|TaskOutput)$';
 const MANUAL = '文档：agent-team 仓库的 docs/worker-hook-setup.md。';
+
+// ateam 自带的 DSH 插件：让 ateam spawn 能在 DSH 里新开 worker 会话
+const LAUNCHER = join(dirname(fileURLToPath(import.meta.url)), '..', 'dsh-plugin', 'index.js');
 
 const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
@@ -72,11 +77,15 @@ function pnpmAdd(dir, packages) {
   }
 }
 
+function stripBlock(text, begin, end) {
+  const start = text.indexOf(begin);
+  const stop = text.indexOf(end);
+  if (start < 0 || stop < start) return text;
+  return text.slice(0, start).trimEnd() + '\n' + text.slice(stop + end.length).replace(/^\n+/, '');
+}
+
 function stripPatchBlock(text) {
-  const start = text.indexOf(BEGIN);
-  const end = text.indexOf(END);
-  if (start < 0 || end < start) return text;
-  return text.slice(0, start).trimEnd() + '\n' + text.slice(end + END.length).replace(/^\n+/, '');
+  return stripBlock(text, BEGIN, END);
 }
 
 function installDsh(flags) {
@@ -88,8 +97,11 @@ function installDsh(flags) {
   const installed = JSON.parse(read(join(dir, 'package.json')) || '{}').dependencies?.[BRIDGE];
   const patch = read(patchFile);
   const config = JSON.stringify({ hooks: dshHooks() }, null, 2) + '\n';
-  // 新插件必须放在 insert 里：只有 id 的条目是改已有的行，匹配不到会被 DSH 跳过
-  const block = `${BEGIN}\n- insert:\n    - id: ateam-hooks\n      name: '${BRIDGE}'\n      config:\n        configPath: ${JSON.stringify(configFile)}\n${END}\n`;
+  // 新插件必须放在 insert 里：只有 id 的条目是改已有的行，匹配不到会被 DSH 跳过。
+  // 启动插件的 id 和地址都带上代码的哈希：DSH 会缓存已加载的模块，代码变了要换个新行才会重新加载
+  const hash = createHash('sha256').update(read(LAUNCHER)).digest('hex').slice(0, 8);
+  const launcher = `    - id: ateam-launcher-${hash}\n      name: '${new URL(`file://${LAUNCHER}`).href}?v=${hash}'\n`;
+  const block = `${BEGIN}\n- insert:\n    - id: ateam-hooks\n      name: '${BRIDGE}'\n      config:\n        configPath: ${JSON.stringify(configFile)}\n${launcher}${END}\n`;
   if (installed === version && patch.includes(block) && read(configFile) === config) {
     return `hook 已安装（DeepSeek Harness ${version}），不需要操作。`;
   }
@@ -99,9 +111,10 @@ function installDsh(flags) {
   if (!patch.includes(block)) {
     // 备份只留第一次的，它才是 ateam 动手之前的样子
     if (patch && !existsSync(`${patchFile}.bak.ateam`)) copyFileSync(patchFile, `${patchFile}.bak.ateam`);
-    writeFileSync(patchFile, `${stripPatchBlock(patch).trimEnd()}\n${block}`);
+    // 原地写（writeFileSync 不换文件）：换成新文件的话，DSH 监视的还是旧文件，感知不到修改
+    writeFileSync(patchFile, `${stripPatchBlock(stripBlock(patch, '# ateam launcher begin', '# ateam launcher end')).trimEnd()}\n${block}`);
   }
-  return `hook 已写入 DeepSeek Harness 配置（${dir}），通常几十秒内自动生效，不用重启。如果一直不生效，由用户在菜单中点击「Restart App and Host」，这会打断所有会话，不要自己重启。${MANUAL}`;
+  return `hook 和启动插件已写入 DeepSeek Harness 配置（${dir}），通常几十秒内自动生效，不用重启。如果一直不生效，由用户在菜单中点击「Restart App and Host」，这会打断所有会话，不要自己重启。${MANUAL}`;
 }
 
 function workbuddySettingsFile() {

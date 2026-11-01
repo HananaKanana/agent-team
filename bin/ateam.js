@@ -75,6 +75,7 @@ leader
   ateam critique agree T5 "<打算怎么改>" --basis "<依据>" ／ dispute T5 "<为什么不改>" --basis "<依据>" ／ done T5 "<改了什么>"
   ateam note T5 "<给正在做的 worker 的补充说明>"
   ateam message --to <ID> "<直接发给 worker 的消息，包括手上没有卡的>"
+  ateam spawn --role <角色> [--name <名字>]   在设置的平台里新开一个 worker（看板「设置 → 自动启动 worker」开启后 leader 才能用）
   ateam rules [--role <角色>] | add "<一条规则>" [--role a,b] [--user-approved] | set --file rules.md [--user-approved]（改规则必须用户同意）
   ateam jobs [--all] [--grep <关键词>]
   ateam job show J1
@@ -646,6 +647,12 @@ const commands = {
   },
 
   // 给正在做的 worker 补充说明，它下一次调用 progress / wait / submit 时收到
+  async spawn({ flags }) {
+    const role = requireArg(flags.role, '角色', 'ateam spawn --role frontend');
+    const out = await request('POST', '/api/spawn', { role, name: flags.name });
+    return `已在 ${out.platform === 'dsh' ? 'DeepSeek Harness' : out.platform} 中新开会话（${out.sessionId}）并发出「${out.text}」。worker 加入后看板会显示它。${out.inWorkspace ? '' : '\n注意：DeepSeek Harness 里没有这个项目的工作区，会话不会列在左侧的项目名下面。'}`;
+  },
+
   async message({ flags, positional }) {
     if (!flags.to) fail('缺少 --to <worker 编号>。示例：ateam message --to frontend-1 "<消息>"');
     const text = requireArg(positional[0], '消息', `ateam message --to ${flags.to} "<消息>"`);

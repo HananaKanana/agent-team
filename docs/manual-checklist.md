@@ -85,7 +85,6 @@
 6. [ ] 某角色只剩暂停领取的卡时，该角色的 worker 计为空闲；超过「空闲申请下线时长」后：leader 在线时向 leader 申请下线，leader 未连接时直接下线（开启「每个角色至少保留一个 worker」时最后一个不下线），leader 回来后收到 worker_auto_leave 事件
 7. [ ] 设置里关掉「每个角色至少保留一个 worker」：某角色唯一的 worker 空闲申请下线时，leader 收到的 leave_request 不提「最后一个」，直接 dismiss，不问用户；看板上点它的「下线」直接下线，没有「确认下线」；打开该设置时行为照旧
 
-
 ## 无 leader 模式
 
 1. [ ] 点顶部 leader 芯片 → leader 标签页最上面的 leader 卡片点「下线」：leader 芯片变「无 leader 模式」；某 worker 提问（或提交）后，`wait` 直接给它一张没有依赖、不改同一批文件的新卡，末尾写「你转做前放下的卡：T?」，看板上原卡标「转做 T?」（T? 是 worker 新领的卡）；依赖待 review 卡的卡、和放下的卡改同一批文件的卡都不派

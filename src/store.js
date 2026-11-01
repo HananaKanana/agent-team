@@ -834,7 +834,23 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 改设置。值为 null 表示恢复默认
+  // 待领取、依赖已满足、没暂停，但没有同角色在线 worker 的卡，按角色分组（看板「需要 worker」同一口径）
+  function staffingNeeds() {
+    const approved = new Set(state.tasks.filter((t) => t.status === 'approved').map((t) => t.id));
+    const onlineRoles = new Set(state.agents.filter((a) => a.status === 'online').map((a) => a.role.trim().toLowerCase()));
+    const heldJobs = new Set(state.jobs.filter((j) => j.onHold).map((j) => j.id));
+    const byRole = new Map();
+    for (const t of state.tasks) {
+      if (t.status !== 'pending' || t.onHold || heldJobs.has(t.jobId) || !t.dependsOn.every((d) => approved.has(d))) continue;
+      if (onlineRoles.has(t.role.trim().toLowerCase())) continue;
+      if (!byRole.has(t.role)) byRole.set(t.role, []);
+      byRole.get(t.role).push(t.id);
+    }
+    return { needs: [...byRole].map(([role, tasks]) => ({ role, tasks })), leaderSpawn: config().leaderSpawn, platform: config().spawnPlatform };
+  }
+
   function setSettings(patch = {}) {
+    const before = config().leaderSpawn;
     state.settings ??= {};
     for (const [key, value] of Object.entries(patch)) {
       const spec = SETTINGS[key];
@@ -857,6 +873,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         throw new AteamError('INVALID', `${key} 必须是 ${spec.min} 到 ${spec.max} 之间的${spec.type === 'int' ? '整数' : '数'}。`);
       }
       state.settings[key] = n;
+    }
+    // leader 能不能自己启动 worker 变了：告诉 leader，它才知道该自己开还是请用户开
+    if (config().leaderSpawn !== before) {
+      emit('leader_spawn', { on: config().leaderSpawn, text: config().leaderSpawn ? '用户允许你自动启动 worker 了' : '用户收回了自动启动 worker 的权限' });
     }
     changed();
     return config();
@@ -2037,7 +2057,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

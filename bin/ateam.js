@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import {
-  formatCards, formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, formatWait, formatReview } from '../src/format.js';
+  formatCards, formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, staffingHint, formatWait, formatReview } from '../src/format.js';
 
 // 服务地址：ATEAM_URL 优先；否则从当前目录往上找 .ateam/port（serve 启动时写下的实际端口，
 // 7700 被别的项目占用时会自动换成 7701、7702……）；都没有就用 7700。
@@ -275,6 +275,20 @@ async function postToolHook() {
   }
 }
 
+// 加卡、通过之后可能有角色缺人：服务旧、接口没有时安静跳过
+async function staffing() {
+  try {
+    return await request('GET', '/api/staffing');
+  } catch {
+    return null;
+  }
+}
+
+function withStaffing(s) {
+  const hint = staffingHint(s);
+  return hint ? `\n\n${hint}` : '';
+}
+
 function isInside(dir, root) {
   try {
     const from = realpathSync(root);
@@ -452,7 +466,7 @@ const commands = {
     const { task, overlaps } = await request('POST', '/api/tasks', body);
     const deps = task.dependsOn.length ? `，依赖 ${task.dependsOn.join('、')}` : '';
     const top = task.priority ? '，优先' : '';
-    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}${top}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}`;
+    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}${top}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}${withStaffing(await staffing())}`;
   },
 
   // 设为优先：同角色的 worker 下一个先领它；--off 取消
@@ -554,7 +568,7 @@ const commands = {
   async approve({ positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam approve T3 "备注"');
     const { task } = await request('POST', '/api/approve', { id, text: positional[1] ?? '' });
-    return `已通过 ${task.id}。`;
+    return `已通过 ${task.id}。${withStaffing(await staffing())}`;
   },
 
   async reject({ positional }) {
@@ -624,7 +638,8 @@ const commands = {
     const { state, pending, root, repos, stale } = await request('GET', '/api/state');
     const { lead } = await request('GET', '/api/rules');
     const checks = lead ? `\n\n## leader 规则（项目规则 ## leader 段：review、自己改代码、推送时照做）\n\n${lead}` : '';
-    return `${formatStatus({ ...state, stale }, pending, flags.job, root, repos, !!flags.all)}${checks}`;
+    const staff = staffingHint(await staffing());
+    return `${formatStatus({ ...state, stale }, pending, flags.job, root, repos, !!flags.all)}${staff ? `\n\n${staff}` : ''}${checks}`;
   },
 
   // 审卡。审卡 worker：ateam critique --as critic-1 ok T5 T6 ／ issue T5 "<问题和建议>" [--because "和 T12 冲突"]

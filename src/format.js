@@ -581,6 +581,9 @@ const EVENT_HINT = {
       ? `review ${e.taskId} 时按用户这句话核对：用户要改的，ateam reject ${e.taskId} 把要求写进修改意见；打回后 worker 也会看到用户原话`
       : `已送给 worker（当前操作结束或下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
   user_message: (e) => (e.taskId ? `已作为 ${e.taskId} 的补充说明送给 worker，了解即可；需要配合调整就 ateam note ${e.taskId}` : '已送给 worker，了解即可；用户的话影响你的安排就相应调整'),
+  leader_spawn: (e) => (e.on
+    ? '某个角色有待领取的卡、却没有在线 worker 时，你可以 ateam spawn --role <角色> 自己启动，一次一个；ateam status 的「缺人」一节列出了要开的角色'
+    : '以后缺人时照旧请用户开窗口，或请用户在看板「worker」页点「启动」，不要再运行 ateam spawn'),
   leader_back: () => '这些卡的 worker 多半已经在做别的卡了。答复或打回后卡会自动交回原 worker（它不在线就换人接手），你照常 answer / approve / reject 就行',
   submitted: (e) => `review：ateam show ${e.taskId}，然后 ateam approve ${e.taskId} 或 ateam reject ${e.taskId} "<修改意见>"`,
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,
@@ -617,6 +620,16 @@ const PENDING_HINT = {
 };
 
 // 默认不列出已验收的需求（只给编号），免得需求越积越多、撑满 leader 的上下文；--job 或 --all 时照常列出
+// 缺人提示：哪些角色有能领的卡却没有 worker，以及 leader 该自己开还是请用户开。没有缺人时返回空串
+export function staffingHint(staffing) {
+  if (!staffing?.needs?.length) return '';
+  const list = staffing.needs.map((n) => `${n.role}（${n.tasks.join('、')}）`).join('；');
+  const how = staffing.leaderSpawn
+    ? `你可以自己启动：${staffing.needs.map((n) => `ateam spawn --role ${n.role}`).join('；')}（每个角色一个，开完告诉用户）。`
+    : '请用户开窗口，或在看板「worker」页点该角色的「启动」（用户没有允许你自动启动 worker）。';
+  return `## 缺人\n\n这些角色有能领的卡，但没有在线 worker：${list}。${how}`;
+}
+
 export function formatStatus(state, pending, jobId, root, repos, showAll = false) {
   const now = Date.now();
   const accepted = jobId || showAll ? [] : state.jobs.filter((j) => j.status === 'accepted');

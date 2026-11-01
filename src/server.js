@@ -541,6 +541,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because, b.basis) }),
     'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text, b.basis) }),
     'POST /api/critique/rule': (b) => ({ task: store.ruleCritique(requireId(b), b.side, b.text) }),
+    'GET /api/staffing': () => store.staffingNeeds(),
     'POST /api/spawn': (b) => {
       const cfg = store.config();
       // 看板上的按钮是用户点的，不受限；leader 的命令要用户在设置里开了才行

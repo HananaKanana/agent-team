@@ -115,8 +115,9 @@
 2. [ ] 看板「worker」页每个角色下方有「在 DeepSeek Harness 中启动」：点击后 DSH 左侧项目名下出现新会话，自动发送「使用 ateam-worker skill，角色 X」，worker 加入后显示在「在线 worker」
 3. [ ] DSH 没开、插件没装、密钥不对时，按钮旁显示对应的说明，不报看不懂的错误
 4. [ ] 设置「允许 leader 自动启动 worker」关闭时，leader 运行 `ateam spawn` 被拒绝并转告用户；开启后 leader 在缺人时自行启动，一次一个，不多开
-5. [ ] 设置「启动 worker 的平台」选 WorkBuddy 时，按钮文字随之变化，点击提示暂不支持
-6. [ ] 安全：不带密钥或密钥错误的请求被拒绝；角色名带空格或符号被拒绝；工作目录不是 ateam 项目被拒绝
+5. [ ] 有卡缺人时，`ateam status`、`ateam task add`、`ateam approve` 的输出末尾出现「## 缺人」，按设置分别写「可以自己启动」或「请用户开窗口」；切换「允许 leader 自动启动 worker」时 leader 收到 leader_spawn 事件
+6. [ ] 设置「启动 worker 的平台」选 WorkBuddy 时，按钮文字随之变化，点击提示暂不支持
+7. [ ] 安全：不带密钥或密钥错误的请求被拒绝；角色名带空格或符号被拒绝；工作目录不是 ateam 项目被拒绝
 
 ## 直接回复 worker
 

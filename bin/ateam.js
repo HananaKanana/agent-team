@@ -36,7 +36,8 @@ const LIST_FLAGS = new Set(['paths', 'after']);
 const USAGE = `用法：ateam <命令> [参数]
 
 服务
-  ateam serve [--port 7700] [--lease 15] [--idle 3]
+  ateam [--port 7700] [--lease 15] [--idle 3]（在项目根目录启动服务，同 ateam serve）
+  ateam help（显示本说明）
 
 worker
   ateam join --role <角色> [--id <编号>] [--name <名字>]
@@ -791,10 +792,12 @@ async function main() {
   const { flags, positional } = parseArgs(process.argv.slice(2));
   if (typeof flags.as === 'string') CURRENT_AS = flags.as;
   let name = positional.shift();
-  if (!name || name === 'help' || flags.help) {
+  if (name === 'help' || flags.help) {
     console.log(USAGE);
     return 0;
   }
+  // 只输入 ateam（可带 --port 等参数）就是启动服务
+  if (!name) name = 'serve';
   if (name === 'job' || name === 'task' || name === 'demo') name = `${name} ${positional.shift() ?? ''}`;
   const command = commands[name];
   if (!command) fail(`未知命令：${name.trim()}。\n\n${USAGE}`);

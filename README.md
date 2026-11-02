@@ -131,7 +131,7 @@ ateam hook install --platform workbuddy   # WorkBuddy
 
 ```bash
 cd ~/code/apiloop          # ⚠ 一定是要开发的项目，不是 agent-team
-ateam serve
+ateam                      # 只输入 ateam 就是启动服务，和 ateam serve 一样；看命令说明用 ateam help
 ```
 
 看到这两行就对了：
@@ -303,7 +303,7 @@ worker 加入后看板顶部会出现绿点。每个分类有固定颜色，卡�
 mkdir -p ~/code/apiloop/.ateam
 cp -R ~/code/agent-team/.ateam/. ~/code/apiloop/.ateam/
 # 3. 在正确的目录重新启动，确认「项目目录」那一行
-cd ~/code/apiloop && ateam serve
+cd ~/code/apiloop && ateam
 # 4. 对卡住的 worker 说「服务已重启，继续」
 # 5. 确认没问题后删掉旧状态
 rm -r ~/code/agent-team/.ateam

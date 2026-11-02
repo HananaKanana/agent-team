@@ -4112,9 +4112,9 @@ function installGuide() {
       `mkdir -p ~/.claude/skills ${skillsDir}\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ${skillsDir}/ateam-worker`),
     hookStep(info),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
-    step('④ 在项目根目录启动服务', '项目须为 git 仓库。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。',
-      `cd ${project}\nateam serve`),
-    step('同时运行多个项目？', `在另一项目目录中同样运行 ateam serve 即可：${port} 被占用时自动使用下一个空闲端口（见启动信息），该项目的 leader 和 worker 会自动连接，无需额外配置。看板请访问新端口地址。`, null),
+    step('④ 在项目根目录启动服务', '项目须为 git 仓库。只输入 ateam 即可启动（与 ateam serve 相同）。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。',
+      `cd ${project}\nateam`),
+    step('同时运行多个项目？', `在另一项目目录中同样运行 ateam 即可：${port} 被占用时自动使用下一个空闲端口（见启动信息），该项目的 leader 和 worker 会自动连接，无需额外配置。看板请访问新端口地址。`, null),
     el('p', { class: 'hint' }, '安装完成后，在「leader」页启动 leader，在「worker」页添加 worker。'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试浏览器')),

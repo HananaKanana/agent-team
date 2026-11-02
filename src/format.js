@@ -582,6 +582,12 @@ const EVENT_HINT = {
       : `已送给 worker（当前操作结束或下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
   user_message: (e) => (e.taskId ? `已作为 ${e.taskId} 的补充说明送给 worker，了解即可；需要配合调整就 ateam note ${e.taskId}` : '已送给 worker，了解即可；用户的话影响你的安排就相应调整'),
   worker_auto_leave: () => '你不在时它空闲太久，已自动下线。之后这个角色缺人时照常处理（看 ateam status 的「缺人」）',
+  task_hold: (e) => (e.by === 'user'
+    ? (e.on ? '用户不想现在做这张卡，它不会被派发。依赖它的卡也会一直等着，排进度和汇报时算上；要改顺序或作废，先问用户' : '用户恢复了这张卡的派发，照常排进度')
+    : ''),
+  job_hold: (e) => (/^用户/.test(e.text)
+    ? (/暂停/.test(e.text) ? '用户暂停了整个需求的派发：待领取的卡都不派，进行中的照常做完。汇报时说明，别催 worker 去领' : '用户恢复了整个需求的派发，照常推进')
+    : ''),
   staffing_needed: (e) => (e.full
     ? `在线 worker 已达上限（${e.online}/${e.maxWorkers}），不要再启动：等别的 worker 空闲下线后再开；确实急需就告诉用户可以在看板「设置」里调高上限`
     : e.leaderSpawn

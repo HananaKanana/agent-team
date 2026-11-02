@@ -542,10 +542,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       reason = String(reason ?? '').trim();
       task.onHold = { at: now(), by, ...(reason ? { reason } : {}) };
       addHistory(task, 'edited', by, `暂停领取${reason ? `：${reason}` : ''}`);
+      emit('task_hold', { taskId: task.id, on: true, by, text: `${BY_LABEL[by] ?? by}暂停了 ${task.id} 的领取${reason ? `：${reason}` : ''}` });
     } else {
       if (!task.onHold) return task;
       delete task.onHold;
       addHistory(task, 'edited', by, '恢复领取');
+      emit('task_hold', { taskId: task.id, on: false, by, text: `${BY_LABEL[by] ?? by}恢复了 ${task.id} 的领取` });
     }
     changed();
     return task;

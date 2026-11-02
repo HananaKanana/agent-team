@@ -112,7 +112,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `worker_stale` | worker 手上有任务，但 15 分钟没动静：可能在跑很长的命令，也可能窗口停了。**任务不会自动转手，你也不要自己收回。** 问用户那个窗口还在不在（看板上也会弹框问用户）。还在就不用管；停住了就请用户发叫醒话 |
 | `worker_back` | 它又有动静了，或用户确认窗口还在，了解即可 |
 | （用户确认某个 worker 窗口没了） | `ateam reclaim T3`：收回任务交给同角色的其他 worker 接手；原 worker 会被标记掉线。**只在用户确认后做** |
-| `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。事件里写着「最后一个」的（用户在看板设置里开了「每个角色至少保留一个 worker」），要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved`；没写的直接按前面的判断处理，不用问用户 |
+| `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有待领取任务），申请下线。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。事件里写着「最后一个」的（用户在看板设置里开了「每个角色至少保留一个 worker」），要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved`；没写的（包括它是这个角色唯一的 worker、但用户关掉了这个设置）由你自己决定，**不要问用户、不要请用户确认**，决定了就直接 dismiss，事后在汇报里提一句即可 |
 | `worker_auto_leave` | 你不在（未监听、近几分钟没操作）时，某个 worker 空闲超过设定时长，已自动下线。了解即可；这个角色再缺人时看 `ateam status` 的「缺人」 |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |

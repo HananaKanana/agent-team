@@ -593,7 +593,7 @@ const EVENT_HINT = {
   task_held: (e) => `处理：ateam task edit ${e.taskId} ... 后 ateam release ${e.taskId}，或自己修改后 ateam approve ${e.taskId}`,
   leave_request: (e) => (e.last
     ? `它是 ${e.role} 角色最后一个 worker，下线需要你和用户都同意：近期不会再有 ${e.role} 任务的话，先问用户，用户同意后 ateam dismiss ${e.agentId} --user-approved；要留着就不用管，它会继续等待`
-    : `近期不会再有 ${e.role} 任务的话：ateam dismiss ${e.agentId}；要留着就不用管，它会继续等待`),
+    : `由你决定，不要问用户：近期不会再有 ${e.role} 任务就 ateam dismiss ${e.agentId}（即使它是这个角色唯一的 worker，用户已在设置里允许，之后缺人再开）；还会有就不用管，它会继续等待`),
   worker_stale: (e) => `不要自己收回。问用户 ${e.agentId} 的窗口还在不在（看板上也会弹框问用户）：还在就不用管；用户确认窗口没了，才 ateam reclaim ${e.taskId}`,
   worker_offline: (e) => (e.taskId ? `任务 ${e.taskId} 已退回待领取；用 ateam status 确认，需要时提醒用户开新的 worker 窗口` : ''),
 };

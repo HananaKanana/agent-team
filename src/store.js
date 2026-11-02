@@ -849,6 +849,30 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return { needs: [...byRole].map(([role, tasks]) => ({ role, tasks })), leaderSpawn: config().leaderSpawn, platform: config().spawnPlatform };
   }
 
+  // 缺人提醒 leader：某个角色持续缺人 1 分钟（和看板的浏览器通知一样，刚开的 worker 正在加入、掉线马上重连的不提醒）
+  // 发一次 staffing_needed 事件；这个角色不缺了再缺，会再提醒。只记在内存里，服务重启后还缺的会再提醒一次
+  const STAFFING_SETTLE_MS = 60 * 1000;
+  const staffingSince = new Map(); // 角色（小写）-> 第一次发现缺人的时间
+  const staffingTold = new Set();
+  function checkStaffing() {
+    const { needs, leaderSpawn } = staffingNeeds();
+    const key = (role) => role.trim().toLowerCase();
+    const roles = new Set(needs.map((n) => key(n.role)));
+    for (const k of [...staffingSince.keys()]) {
+      if (!roles.has(k)) { staffingSince.delete(k); staffingTold.delete(k); }
+    }
+    let dirty = false;
+    for (const n of needs) {
+      const k = key(n.role);
+      if (!staffingSince.has(k)) staffingSince.set(k, now());
+      if (staffingTold.has(k) || now() - staffingSince.get(k) < STAFFING_SETTLE_MS) continue;
+      staffingTold.add(k);
+      emit('staffing_needed', { role: n.role, tasks: n.tasks, leaderSpawn, text: `${n.role} 角色有能领的卡（${n.tasks.join('、')}），但没有在线 worker` });
+      dirty = true;
+    }
+    if (dirty) changed();
+  }
+
   function setSettings(patch = {}) {
     const before = config().leaderSpawn;
     state.settings ??= {};
@@ -2068,7 +2092,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

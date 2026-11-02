@@ -120,6 +120,7 @@
 5. [ ] 有卡缺人时，`ateam status`、`ateam task add`、`ateam approve` 的输出末尾出现「## 缺人」，按设置分别写「可以自己启动」或「请用户开窗口」；切换「允许 leader 自动启动 worker」时 leader 收到 leader_spawn 事件
 6. [ ] 设置「启动 worker 的平台」选 WorkBuddy：点「启动」后 WorkBuddy 切到前台，新任务的输入框填好开场提示词、工作目录选中本项目并自动发送；运行 ateam serve 的终端没有「辅助功能」权限时，停在已填好，按钮旁提示按回车发送和如何开权限；WorkBuddy 没开时先自动打开再填入
 7. [ ] 安全：不带密钥或密钥错误的请求被拒绝；角色名带空格或符号被拒绝；工作目录不是 ateam 项目被拒绝
+8. [ ] 某角色有能领的卡、唯一的 worker 下线或掉线：约 1 分钟后 leader 的 `ateam watch` 收到 staffing_needed 事件（列出卡号），按设置写「ateam spawn」或「请用户开窗口」；1 分钟内有新 worker 加入则不提醒；同一次缺人只提醒一次，补上人后再缺会再提醒
 
 ## 直接回复 worker
 

@@ -371,7 +371,7 @@ ateam job accept J1 J2   # 验收通过（看板上点「验收通过」也一�
 ateam cards --job J5     # 看某个需求的全部卡和审卡情况
 ateam note T5 "说明"      # 给正在做 T5 的 worker 补充说明（当前操作结束或下一次调用 ateam 时收到，提交前一定看到）
 ateam message --to backend-1 "内容"   # 直接发给 worker，包括手上没有卡的
-ateam spawn --role frontend   # 在设置的平台里新开一个 worker（DeepSeek Harness 或 WorkBuddy；leader 要用户在设置里允许才能用）
+ateam spawn --role frontend   # 在设置的平台里新开一个 worker（DeepSeek Harness 或 WorkBuddy；leader 要用户在设置里允许才能用。某个角色持续 1 分钟缺人时 leader 会收到 staffing_needed 事件）
 ateam hook install --platform dsh   # 安装工具后 hook（或 --platform workbuddy；worker 加入时自动运行）
 ateam critique agree T5 "打算怎么改" --basis "依据"   # leader 回复审卡意见（不同意用 dispute），由你在看板上决定；照你的决定改完后 critique done
 ateam task top T5        # 设为优先：同角色的 worker 下一个先领它（--off 取消；看板上点开待领取的任务也能设）

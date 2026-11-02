@@ -582,6 +582,9 @@ const EVENT_HINT = {
       : `已送给 worker（当前操作结束或下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
   user_message: (e) => (e.taskId ? `已作为 ${e.taskId} 的补充说明送给 worker，了解即可；需要配合调整就 ateam note ${e.taskId}` : '已送给 worker，了解即可；用户的话影响你的安排就相应调整'),
   worker_auto_leave: () => '你不在时它空闲太久，已自动下线。之后这个角色缺人时照常处理（看 ateam status 的「缺人」）',
+  staffing_needed: (e) => (e.leaderSpawn
+    ? `近期还要做这些卡的话：ateam spawn --role ${e.role} 启动一个 worker，开完告诉用户；不打算做就暂停领取或作废这些卡`
+    : `请用户开一个 ${e.role} worker 的窗口，或在看板「worker」页点该角色的「启动」（用户没有允许你自动启动 worker）；不打算做就暂停领取或作废这些卡`),
   leader_spawn: (e) => (e.on
     ? '某个角色有待领取的卡、却没有在线 worker 时，你可以 ateam spawn --role <角色> 自己启动，一次一个；ateam status 的「缺人」一节列出了要开的角色'
     : '以后缺人时照旧请用户开窗口，或请用户在看板「worker」页点「启动」，不要再运行 ateam spawn'),

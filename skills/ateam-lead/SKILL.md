@@ -24,7 +24,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 
    开窗方法：打开 agent 窗口，发「使用 ateam-worker skill，角色 frontend」（看板「使用说明」里有现成的话），或者在看板「worker」页点该角色的「启动」。之后真到了缺人的时候，看板「待处理」会提示用户，你不用再重复提醒；只有计划变了（比如加了新角色的卡）才再说。
 
-   **自己启动 worker**：缺人时 `ateam status`、`ateam task add` 和 `ateam approve` 的输出末尾会出现「## 缺人」，列出哪些角色有能领的卡却没有在线 worker，并写明你能不能自己启动；用户改了这个设置，你会收到 `leader_spawn` 事件。用户在看板「设置」里打开了「允许 leader 自动启动 worker」时，你可以 `ateam spawn --role <角色>` 在用户设定的平台里新开一个 worker。只在某个角色有待领取、依赖已满足的卡而没有在线 worker 时开，一次一个，按上面的人手表来，不要多开；开完照常汇报一句「已启动 1 个 frontend」。没打开时命令会被拒绝，这时照旧请用户开窗口，不要反复尝试。
+   **自己启动 worker**：缺人时 `ateam status`、`ateam task add` 和 `ateam approve` 的输出末尾会出现「## 缺人」；worker 下线、掉线等原因造成某个角色持续缺人时，你还会收到 `staffing_needed` 事件。「## 缺人」列出哪些角色有能领的卡却没有在线 worker，并写明你能不能自己启动；用户改了这个设置，你会收到 `leader_spawn` 事件。用户在看板「设置」里打开了「允许 leader 自动启动 worker」时，你可以 `ateam spawn --role <角色>` 在用户设定的平台里新开一个 worker。只在某个角色有待领取、依赖已满足的卡而没有在线 worker 时开，一次一个，按上面的人手表来，不要多开；开完照常汇报一句「已启动 1 个 frontend」。没打开时命令会被拒绝，这时照旧请用户开窗口，不要反复尝试。
 
 ## 2. 拆任务
 
@@ -116,6 +116,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `worker_auto_leave` | 你不在（未监听、近几分钟没操作）时，某个 worker 空闲超过设定时长，已自动下线。了解即可；这个角色再缺人时看 `ateam status` 的「缺人」 |
 | `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
+| `staffing_needed` | 某个角色有能领的卡（依赖已满足、没暂停），却持续 1 分钟没有在线 worker，比如这个角色的 worker 下线或掉线了。允许你自动启动时 `ateam spawn --role <角色>` 开一个；不允许时请用户开窗口或在看板上点「启动」。这些卡暂时不做的话，暂停领取或作废，别让它一直缺人 |
 | `leader_spawn` | 用户打开或关闭了「允许 leader 自动启动 worker」。打开后，缺人时你可以 `ateam spawn --role <角色>` 自己开（见第 1 节）；关闭后照旧请用户开窗口 |
 | `user_message` | 用户在看板上直接给 worker 发了消息。已经送给 worker，了解即可；影响你的安排就相应调整 |
 | `user_reply` | 用户在看板上直接回复了某张卡：卡在等答复的，用户的话已经作为答复送给 worker，**你不要再 `answer`**；卡在做的（含返工中），作为补充说明送给 worker；卡在待 review 的，是用户对这张卡的要求，review 时按它核对，要改就 `reject` 并写进修改意见。用户的话改变了任务要求，就同步改卡或 `ateam note` 补充；和你之前的安排冲突时以用户为准 |

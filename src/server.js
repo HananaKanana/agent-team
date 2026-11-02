@@ -834,6 +834,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       store.sweep((id) => waiters.has(id));
       store.expireDemoRequests();
       store.checkIdle({ leaderAway: !leaderOnline() || !!store.state.noLeader });
+      store.checkStaffing();
     } finally {
       sweeping = false;
     }

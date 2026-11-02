@@ -77,10 +77,18 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (markLeaderRead(getTask(taskId))) changed();
   }
 
-  // 已读指内容已经送进 worker 的上下文，不代表它已经照做
-  function markWorkerRead(task, via) {
+  // 已读：worker 调用 ateam 时拿到了（via 'ateam'），或经 hook 送到后它运行 ateam ack 回执了（via 'ack'）。
+  // only 给了就只标这些条目
+  function markWorkerRead(task, via, only = null) {
     for (const h of task.history) {
-      if (h.workerReadAt === null) { h.workerReadAt = now(); h.workerReadVia = via; }
+      if (h.workerReadAt === null && (!only || only(h))) { h.workerReadAt = now(); h.workerReadVia = via; }
+    }
+  }
+
+  // 已送达：hook 把内容交给了平台，还没等到 worker 回执
+  function markWorkerDelivered(task) {
+    for (const h of task.history) {
+      if (h.workerReadAt === null && !h.workerDeliveredAt) h.workerDeliveredAt = now();
     }
   }
 
@@ -1352,25 +1360,49 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       changed();
       return { taskId: task.id, stop: `用户叫停了演播 ${task.id}。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。然后运行 ateam wait --as ${agent.id}，按输出的「已叫停」说明收尾。` };
     }
-    // 经 hook 送过就算送到（takeNote 不再重复给，提交时也不拦）；之后又追加了内容的，整段再经 hook 送一次
+    // 经 hook 送出只算「已送达」：平台可能运行了 hook 却没把内容交给模型。每次送出带一个回执号，
+    // worker 看完运行 ateam ack <回执号> 才算已读；没回执的仍留到下一次调用 ateam（提交前一定看到）。
+    // 同一内容只经 hook 发一次，之后又追加了内容的，整段换个回执号再发
     const note = task.pendingNote;
     if (!note || task.noteSentByHook === note) return null;
+    task.noteSeq = (task.noteSeq ?? 0) + 1;
     task.noteSentByHook = note;
-    markWorkerRead(task, 'hook');
+    task.noteAckId = `${task.id}-${task.noteSeq}`;
+    markWorkerDelivered(task);
     changed();
-    return { taskId: task.id, note };
+    return { taskId: task.id, note, ackId: task.noteAckId, agentId: agent.id };
+  }
+
+  // worker 回执经 hook 收到的补充说明：送出的那段算已读、不再重复给；之后新追加的留着，hook 会再送
+  function ackNote(agentId, ackId) {
+    const agent = touch(agentId);
+    const task = agent.currentTask && getTask(agent.currentTask);
+    ackId = String(ackId ?? '').trim();
+    if (!task || !task.pendingNote || ackId !== task.noteAckId) {
+      // 已经在别处看过（调用 ateam 时拿到了）或回执号过时：没有要确认的
+      const newer = task?.pendingNote && task.noteAckId && ackId !== task.noteAckId ? task.noteAckId : null;
+      return { taskId: task?.id ?? null, acked: false, newer };
+    }
+    const sent = task.noteSentByHook ?? '';
+    const rest = task.pendingNote.startsWith(sent) ? task.pendingNote.slice(sent.length).trim() : task.pendingNote;
+    markWorkerRead(task, 'ack', (h) => !!h.workerDeliveredAt);
+    if (rest) task.pendingNote = rest;
+    else delete task.pendingNote;
+    delete task.noteSentByHook;
+    delete task.noteAckId;
+    changed();
+    return { taskId: task.id, acked: true, newer: null };
   }
 
   function takeNote(task) {
     const note = task.pendingNote;
     if (!note) return null;
-    // hook 已经原样送过（之后没有新追加的）：算已读，不再重复给，提交时也不再拦
-    const viaHook = task.noteSentByHook === note;
-    if (!viaHook) markWorkerRead(task, 'ateam');
+    markWorkerRead(task, 'ateam');
     delete task.pendingNote;
     delete task.noteSentByHook;
+    delete task.noteAckId;
     changed();
-    return viaHook ? null : note;
+    return note;
   }
 
   // ---------- review ----------
@@ -2140,7 +2172,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

@@ -43,6 +43,7 @@ worker
   ateam hook install [--platform dsh|workbuddy]（让 worker 干活中途就能看到留言）
   ateam wait --as <ID> [--timeout 90] [--round N]（--timeout 可以很长，比如后台运行时用 1800）
   ateam progress --as <ID> "<笔记>" [--expect <分钟>]
+  ateam ack <回执号> --as <ID>（回执工具调用后收到的「# ateam 补充说明」）
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
   ateam demo step --as <ID> 3/12 "<这一步做什么>" [--slow]
@@ -275,7 +276,7 @@ async function postToolHook() {
       ? `# ateam：任务 ${delivery.taskId} 已作废\n\n${delivery.cancel}`
       : delivery.stop
         ? `# ateam：立即停手（${delivery.taskId}）\n\n${delivery.stop}`
-        : `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。`;
+        : `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。${delivery.ackId ? `\n\n看完马上运行 ateam ack ${delivery.ackId} --as ${delivery.agentId ?? '<你的编号>'} 回执（只回执，不用回复别的），然后接着干活。不回执的话，提交时会再给你看一遍。` : ''}`;
     return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } });
   } catch {
     return '';
@@ -398,6 +399,15 @@ const commands = {
     if (data?.superseded) return `这次等待已被另一条 ateam wait --as ${as} 取代，不需要处理。`;
     const round = Number.parseInt(flags.round ?? '0', 10);
     return formatWait(data?.result ?? null, as, data?.waiting, Number.isFinite(round) && round > 0 ? round : 0, flags.timeout);
+  },
+
+  async ack({ flags, positional }) {
+    const as = requireAs(flags);
+    const id = requireArg(positional[0], '回执号', `ateam ack T5-1 --as ${as}`);
+    const r = await request('POST', '/api/ack', { as, id });
+    if (r.acked) return `已回执 ${id}。接着干活。`;
+    if (r.newer) return `${id} 之后又有新的补充说明（回执号 ${r.newer}），内容见工具调用后的「# ateam 补充说明」；看完运行 ateam ack ${r.newer} --as ${as}。`;
+    return `${id} 不需要回执了（你已经在别处看到过这条说明）。接着干活。`;
   },
 
   async progress({ flags, positional }) {

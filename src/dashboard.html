@@ -1134,6 +1134,7 @@ code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; 
 .spawn-msg.err { color: var(--rework); }
 .read-flag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; vertical-align: 1px; color: var(--asking); background: color-mix(in srgb, var(--asking) 12%, transparent); }
 .read-flag.read { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
+.read-flag.sent { color: var(--muted); background: color-mix(in srgb, var(--faint) 18%, transparent); }
 .timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
 .timeline .text { white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; margin-top: 2px; color: var(--ink); }
 .timeline .text.md { white-space: normal; line-height: 1.65; }
@@ -3358,8 +3359,14 @@ function readFlags(h) {
   const flag = (who, at, tip) => el('span', { class: at ? 'read-flag read' : 'read-flag', title: at ? `${fmtTime(at)} 已读。${tip}` : tip }, `${who}${at ? '已读' : '未读'}`);
   const flags = [];
   if (h.workerReadAt !== undefined) {
-    const via = h.workerReadVia === 'hook' ? '工具调用结束后送达。' : h.workerReadAt ? '调用 ateam 时送达。' : '';
-    flags.push(flag('worker ', h.workerReadAt, `${via}已读表示内容已送入 worker 的上下文，不代表已照做。`));
+    if (!h.workerReadAt && h.workerDeliveredAt) {
+      // 经 hook 送出、还没回执：内容已交给 agent 平台，未确认 worker 看到
+      flags.push(el('span', { class: 'read-flag sent', title: `${fmtTime(h.workerDeliveredAt)} 已在工具调用结束后送出，等待 worker 回执。未回执的内容会在它下一次调用 ateam（最迟提交时）再给一遍。` }, 'worker 已送达'));
+    } else {
+      // 老记录的 via 是 'hook'（那时 hook 送出即算已读）
+      const via = h.workerReadVia === 'ack' ? '经工具调用后送达，worker 已回执。' : h.workerReadVia === 'hook' ? '工具调用结束后送达。' : h.workerReadAt ? '调用 ateam 时送达。' : '';
+      flags.push(flag('worker ', h.workerReadAt, `${via}已读表示 worker 已收到这条内容，不代表已照做。`));
+    }
   }
   if (h.leaderReadAt !== undefined) flags.push(flag('leader ', h.leaderReadAt, '已读表示 leader 已收到通知或已查看这张卡。'));
   return flags;

@@ -145,7 +145,7 @@
 15. [ ] 重启 ateam serve 后，不等 worker 调用 ateam，直接给干活中的 worker 留言：标签很快变为「worker 已读」
 16. [ ] worker 后台挂着 wait 时调用 job_output / TaskOutput：调用被拦下，提示结束本轮，worker 随后结束本轮；wait 结束收到通知后，读取不被拦
 17. [ ] 安装了 hook 的 worker 连续干活超过「无响应判定时长」不调用 ateam：不弹无响应提示，心跳时间持续更新；窗口真的停了时，超过判定时长后照常提示
-18. [ ] 装了 hook 的 worker 干活时收到补充说明（上下文里出现「# ateam 补充说明」）后直接 `ateam submit`：不再被「提交前先看补充说明」拦一次，一次提交成功；hook 送达后又追加的新说明，没经 hook 送到时提交仍会先被拦下给它看
+18. [ ] 装了 hook 的 worker 干活时收到补充说明：上下文里的「# ateam 补充说明」末尾带回执号（如 T5-1），时间线上该条标「worker 已送达」（灰色）；worker 运行 `ateam ack T5-1 --as <编号>` 后变为「worker 已读」，之后 `ateam submit` 不再被「提交前先看补充说明」拦下；没回执就提交，仍会被拦下并给它看一遍；回执后又追加的说明换新回执号再送，用旧回执号回执时提示新回执号
 
 
 ## test worker 与浏览器

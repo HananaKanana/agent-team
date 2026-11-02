@@ -2,7 +2,7 @@
 
 默认情况下，看板留言和 `ateam note`、`ateam task edit` 的通知，要等 worker 下一次调用 ateam 才送达。启用这个 hook 后，worker 每完成一次工具调用，就会收到待送达的内容。
 
-不启用也能正常工作，只是送达更晚。启用后，经 hook 送到的留言即算已读，worker 下一次调用 ateam（包括提交）时不再重复给、也不再拦下提交；hook 没生效的留言照旧在下一次调用 ateam 时送达，提交前一定看到。
+不启用也能正常工作，只是送达更晚。启用后，经 hook 送出的留言末尾带一个回执号，worker 看完运行 `ateam ack <回执号>` 回执，才算已读：之后调用 ateam（包括提交）时不再重复给、也不再拦下提交。没回执的（平台没把内容交给模型，或 worker 忘了回执）照旧在下一次调用 ateam 时再给一遍，提交前一定看到。看板时间线上，送出未回执的标「worker 已送达」，回执后标「worker 已读」。
 
 `ateam hook post-tool` 不绑定具体平台：它从 stdin 读 `session_id`、`tool_name`、`tool_input`，向 stdout 输出 `hookSpecificOutput.additionalContext`。平台只要支持这种 Claude Code 格式的 PostToolUse command hook，就能使用。
 

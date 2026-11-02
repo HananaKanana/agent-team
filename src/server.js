@@ -403,6 +403,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const agentId = store.agentIdOfHookSession(b.session);
       return { waiting: !!agentId && (waiters.has(agentId) || Date.now() - (waitRenewAt.get(agentId) ?? 0) < WAIT_RENEW_GAP_MS) };
     },
+    'POST /api/ack': (b) => store.ackNote(b.as, b.id),
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text, b.expect) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),
     'POST /api/submit': (b) => serial(async () => {

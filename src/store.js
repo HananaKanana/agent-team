@@ -422,10 +422,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   function takeCancelNotice(agent) {
-    const { taskId, wasWorking } = agent.cancelNotice;
+    const { taskId, wasWorking, sentByHook } = agent.cancelNotice;
     delete agent.cancelNotice;
     changed();
-    return { task: state.tasks.find((t) => t.id === taskId), wasWorking };
+    return { task: state.tasks.find((t) => t.id === taskId), wasWorking, sentByHook: !!sentByHook };
   }
 
   // 经 hook 叫停的文字：下线、收回都是卡退回待领取、交给别人接着做，所以不还原改动
@@ -446,9 +446,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 作废通知的文字：命令报错和 wait 输出共用
-  function cancelMessage(task, wasWorking, agentId) {
+  // seen：工具调用后已经经 hook 看过完整通知，这次只确认一句，不再重复「停手、还原」
+  function cancelMessage(task, wasWorking, agentId, seen = false) {
     if (!task) return `你手上的任务已被作废。请运行 ateam wait --as ${agentId} 领取下一个任务。`;
     const why = task.cancelReason ? `（原因：${task.cancelReason}）` : '';
+    if (seen && wasWorking) {
+      return `已确认 ${task.id} 作废${why}。你在工具调用后已收到过停手通知；还没还原完自己为它做的改动的，先还原完。然后运行 ateam wait --as ${agentId} 领取下一个任务。`;
+    }
     if (!wasWorking) {
       return `你提交的任务 ${task.id} 已被 leader 作废${why}，不用再等它的 review。请运行 ateam wait --as ${agentId} 领取下一个任务。`;
     }
@@ -598,7 +602,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // 手上的任务刚被作废：先告诉它，再谈领新任务
     if (agent.cancelNotice && !agent.currentTask) {
       const notice = takeCancelNotice(agent);
-      return { kind: 'cancelled', task: notice.task, wasWorking: notice.wasWorking, text: cancelMessage(notice.task, notice.wasWorking, agent.id) };
+      return { kind: 'cancelled', task: notice.task, wasWorking: notice.wasWorking, text: cancelMessage(notice.task, notice.wasWorking, agent.id, notice.sentByHook) };
     }
 
     // 已安排下线、手上没有任务 → 正式下线（手上有任务的，等任务通过、作废或收回后再下线）
@@ -1035,7 +1039,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!agent.currentTask) {
       if (agent.cancelNotice) {
         const notice = takeCancelNotice(agent);
-        throw new AteamError('BAD_STATE', cancelMessage(notice.task, notice.wasWorking, agent.id));
+        throw new AteamError('BAD_STATE', cancelMessage(notice.task, notice.wasWorking, agent.id, notice.sentByHook));
       }
       throw new AteamError('BAD_STATE', `你当前没有进行中的任务。请运行 ateam wait --as ${agent.id} 领取任务。`);
     }

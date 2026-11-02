@@ -24,7 +24,7 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 
    开窗方法：打开 agent 窗口，发「使用 ateam-worker skill，角色 frontend」（看板「使用说明」里有现成的话），或者在看板「worker」页点该角色的「启动」。之后真到了缺人的时候，看板「待处理」会提示用户，你不用再重复提醒；只有计划变了（比如加了新角色的卡）才再说。
 
-   **自己启动 worker**：缺人时 `ateam status`、`ateam task add` 和 `ateam approve` 的输出末尾会出现「## 缺人」；worker 下线、掉线等原因造成某个角色持续缺人时，你还会收到 `staffing_needed` 事件。「## 缺人」列出哪些角色有能领的卡却没有在线 worker，并写明你能不能自己启动；用户改了这个设置，你会收到 `leader_spawn` 事件。用户在看板「设置」里打开了「允许 leader 自动启动 worker」时，你可以 `ateam spawn --role <角色>` 在用户设定的平台里新开一个 worker。只在某个角色有待领取、依赖已满足的卡而没有在线 worker 时开，一次一个，按上面的人手表来，不要多开；开完照常汇报一句「已启动 1 个 frontend」。没打开时命令会被拒绝，这时照旧请用户开窗口，不要反复尝试。
+   **自己启动 worker**：缺人时 `ateam status`、`ateam task add` 和 `ateam approve` 的输出末尾会出现「## 缺人」；worker 下线、掉线等原因造成某个角色持续缺人时，你还会收到 `staffing_needed` 事件。「## 缺人」列出哪些角色有能领的卡却没有在线 worker，并写明你能不能自己启动；用户改了这个设置，你会收到 `leader_spawn` 事件。用户在看板「设置」里打开了「允许 leader 自动启动 worker」时，你可以 `ateam spawn --role <角色>` 在用户设定的平台里新开一个 worker。只在某个角色有待领取、依赖已满足的卡而没有在线 worker 时开，一次一个，按上面的人手表来，不要多开。用户设了「同时在线 worker 上限」（默认 5 个）：到上限后 `ateam spawn` 会被拒绝，「## 缺人」也会写明已到上限，这时不要再开、也不要催用户开，等别的 worker 空闲下线后再开，确实急需就告诉用户可以在设置里调高；开完照常汇报一句「已启动 1 个 frontend」。没打开时命令会被拒绝，这时照旧请用户开窗口，不要反复尝试。
 
 ## 2. 拆任务
 

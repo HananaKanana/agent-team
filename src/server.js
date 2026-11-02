@@ -300,6 +300,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (t - Math.max(serverStart, leaderSeenAt ?? 0, lastWatchEnd) > store.config().leaderAwayMin * 60000) store.setLeaderAway(true);
   }
 
+  const spawnTimes = []; // 最近启动 worker 的时间，算上还没加入的
+  const SPAWN_JOIN_MS = 2 * 60 * 1000;
   let doctor = null; // 自检结果：启动后在后台跑一次，看板打开「待处理」、点「修复」时重跑
   async function recheck() {
     doctor = await runDoctor({ root, install: installInfo(), multi: layout.mode === 'multi' });
@@ -558,13 +560,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
     },
     'GET /api/staffing': () => store.staffingNeeds(),
-    'POST /api/spawn': (b) => {
+    'POST /api/spawn': async (b) => {
       const cfg = store.config();
       // 看板上的按钮是用户点的，不受限；leader 的命令要用户在设置里开了才行
       if (b.by !== 'user' && !cfg.leaderSpawn) {
         throw new AteamError('NEEDS_USER', '用户没有允许 leader 自动启动 worker（看板「设置 → 自动启动 worker」）。请告诉用户需要哪个角色的 worker，由用户开窗口或在看板上点「启动」。');
       }
-      return spawnWorker({ root, role: b.role, name: b.name, platform: cfg.spawnPlatform });
+      // 同时在线上限：刚启动、还没加入的也算上，免得 leader 连着开几个都没被拦住
+      const max = cfg.maxWorkers;
+      const now = Date.now();
+      while (spawnTimes.length && now - spawnTimes[0] > SPAWN_JOIN_MS) spawnTimes.shift();
+      const joined = store.state.agents.filter((a) => a.joinedAt && now - a.joinedAt <= SPAWN_JOIN_MS).map((a) => a.joinedAt).sort((x, y) => x - y);
+      const pending = spawnTimes.filter((t) => { const i = joined.findIndex((j) => j >= t); if (i < 0) return true; joined.splice(i, 1); return false; }).length;
+      const count = store.state.agents.filter((a) => a.status === 'online').length + pending;
+      const over = max > 0 && count >= max;
+      if (b.by !== 'user' && over) {
+        throw new AteamError('NEEDS_USER', `在线 worker 已有 ${count} 个（含刚启动、还在加入的），达到用户设定的上限 ${max} 个，不能再自动启动。等别的 worker 空闲下线后再开；确实急需的话，告诉用户可以在看板「设置 → 同时在线 worker 上限」里调高。`);
+      }
+      const out = await spawnWorker({ root, role: b.role, name: b.name, platform: cfg.spawnPlatform });
+      spawnTimes.push(Date.now());
+      return { ...out, over, count: count + 1, max };
     },
     'POST /api/message': (b) => store.messageAgent(String(b.to ?? ''), b.text, b.by === 'user' ? 'user' : 'lead'),
     'POST /api/note': (b) => ({ task: store.noteTask(requireId(b), b.text) }),

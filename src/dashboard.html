@@ -1829,6 +1829,7 @@ const SETTING_ITEMS = [
   { key: 'leaseMin', type: 'num', label: '无响应判定时长（分钟）', hint: '持有任务的 worker 超过该时长无活动时，弹窗请求确认其状态；空闲 worker 直接判定为离线。活动从最后一次调用 ateam 或工具调用（已安装 hook 时）算起；执行耗时命令前已报备的 worker 不受影响。' },
   { key: 'leaderSpawn', type: 'bool', label: '允许 leader 自动启动 worker', hint: '开启后，某一角色有待领取的任务但没有在线 worker 时，leader 可自行在下方选择的平台中启动 worker。关闭时 leader 只会提醒你；「worker」页的「启动」按钮不受此项限制。' },
   { key: 'spawnPlatform', type: 'choice', options: [['dsh', 'DeepSeek Harness'], ['workbuddy', 'WorkBuddy']], label: '启动 worker 的平台', hint: '「worker」页的「启动」按钮和 leader 的自动启动都在该平台中新建会话。DeepSeek Harness 需先在「安装」页安装 hook（含启动插件）。WorkBuddy 会被切到前台并自动填入提示词，自动发送需要在「系统设置 → 隐私与安全性 → 辅助功能」中允许运行 ateam serve 的终端，否则需手动按回车。' },
+  { key: 'maxWorkers', type: 'int', min: 0, label: '同时在线 worker 上限', hint: 'leader 自动启动 worker 时，在线 worker（含刚启动、尚未加入的）达到该数量后不再启动，避免过多 worker 同时消耗额度。「worker」页的「启动」按钮不受限制，超出时仅作提示。设为 0 表示不限。' },
   { key: 'keepOnePerRole', type: 'bool', label: '每个角色至少保留一个 worker', hint: '开启后，某一角色的最后一个 worker 下线需经用户同意（leader 会先行征询）。关闭后 leader 可直接让其下线。' },
   { group: '审卡' },
   { key: 'criticAutoLeave', type: 'bool', label: '审核完成后自动下线', hint: '审卡 worker 审核完所有待审任务后自动下线（新启动的同样适用），有新任务需审核时再启动。关闭后审卡 worker 常驻，仅在用户要求时下线。' },
@@ -1879,7 +1880,7 @@ function settingsPage() {
         input.value = String(cfg[it.key]);
         input.addEventListener('change', () => saveSetting(it.key, input.value));
       } else {
-        input = el('input', { type: 'number', class: 'setting-num', min: '1', step: it.type === 'int' ? '1' : 'any' });
+        input = el('input', { type: 'number', class: 'setting-num', min: String(it.min ?? 1), step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);
         input.addEventListener('change', () => saveSetting(it.key, input.value));
       }
@@ -4228,7 +4229,7 @@ function spawnButton(role) {
     renderHelper(true);
     const out = await post('/api/spawn', { role, by: 'user' });
     spawnState = out.ok
-      ? { role, busy: false, msg: out.sent ? `已在 ${platformLabel()} 中新建会话，worker 加入后将显示在下方「在线 worker」中。` : (out.note || '已填入提示词，请在对应窗口中按回车发送。'), error: false }
+      ? { role, busy: false, msg: (out.sent ? `已在 ${platformLabel()} 中新建会话，worker 加入后将显示在下方「在线 worker」中。` : (out.note || '已填入提示词，请在对应窗口中按回车发送。')) + (out.over ? `当前在线 worker 将达 ${out.count} 个，已超过设定的上限（${out.max} 个）。` : ''), error: false }
       : { role, busy: false, msg: out.message || '启动失败。', error: true };
     renderHelper(true);
   };

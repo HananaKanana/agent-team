@@ -36,6 +36,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // 自动启动 worker：leader 能不能自己 ateam spawn（看板上的按钮不受限），以及在哪个平台里开
     leaderSpawn: { type: 'bool', def: () => false },
     spawnPlatform: { type: 'choice', options: ['dsh', 'workbuddy'], def: () => 'dsh' },
+    // leader 自动启动的上限：同时在线的 worker 到这个数就不让 leader 再开（用户自己开不受限）。0 表示不限
+    maxWorkers: { type: 'int', min: 0, max: 50, def: () => 5 },
   };
 
   function config() {
@@ -878,7 +880,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!byRole.has(t.role)) byRole.set(t.role, []);
       byRole.get(t.role).push(t.id);
     }
-    return { needs: [...byRole].map(([role, tasks]) => ({ role, tasks })), leaderSpawn: config().leaderSpawn, platform: config().spawnPlatform };
+    const online = state.agents.filter((a) => a.status === 'online').length;
+    const max = config().maxWorkers;
+    return {
+      needs: [...byRole].map(([role, tasks]) => ({ role, tasks })), leaderSpawn: config().leaderSpawn, platform: config().spawnPlatform,
+      online, maxWorkers: max, full: max > 0 && online >= max,
+    };
   }
 
   // 缺人提醒 leader：某个角色持续缺人 1 分钟（和看板的浏览器通知一样，刚开的 worker 正在加入、掉线马上重连的不提醒）
@@ -887,7 +894,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   const staffingSince = new Map(); // 角色（小写）-> 第一次发现缺人的时间
   const staffingTold = new Set();
   function checkStaffing() {
-    const { needs, leaderSpawn } = staffingNeeds();
+    const { needs, leaderSpawn, full, online, maxWorkers } = staffingNeeds();
     const key = (role) => role.trim().toLowerCase();
     const roles = new Set(needs.map((n) => key(n.role)));
     for (const k of [...staffingSince.keys()]) {
@@ -899,7 +906,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!staffingSince.has(k)) staffingSince.set(k, now());
       if (staffingTold.has(k) || now() - staffingSince.get(k) < STAFFING_SETTLE_MS) continue;
       staffingTold.add(k);
-      emit('staffing_needed', { role: n.role, tasks: n.tasks, leaderSpawn, text: `${n.role} 角色有能领的卡（${n.tasks.join('、')}），但没有在线 worker` });
+      emit('staffing_needed', { role: n.role, tasks: n.tasks, leaderSpawn, full, online, maxWorkers, text: `${n.role} 角色有能领的卡（${n.tasks.join('、')}），但没有在线 worker` });
       dirty = true;
     }
     if (dirty) changed();

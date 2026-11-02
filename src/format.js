@@ -582,7 +582,9 @@ const EVENT_HINT = {
       : `已送给 worker（当前操作结束或下一次调用 ateam 时收到），了解即可；需要配合调整就 ateam note ${e.taskId}`),
   user_message: (e) => (e.taskId ? `已作为 ${e.taskId} 的补充说明送给 worker，了解即可；需要配合调整就 ateam note ${e.taskId}` : '已送给 worker，了解即可；用户的话影响你的安排就相应调整'),
   worker_auto_leave: () => '你不在时它空闲太久，已自动下线。之后这个角色缺人时照常处理（看 ateam status 的「缺人」）',
-  staffing_needed: (e) => (e.leaderSpawn
+  staffing_needed: (e) => (e.full
+    ? `在线 worker 已达上限（${e.online}/${e.maxWorkers}），不要再启动：等别的 worker 空闲下线后再开；确实急需就告诉用户可以在看板「设置」里调高上限`
+    : e.leaderSpawn
     ? `近期还要做这些卡的话：ateam spawn --role ${e.role} 启动一个 worker，开完告诉用户；不打算做就暂停领取或作废这些卡`
     : `请用户开一个 ${e.role} worker 的窗口，或在看板「worker」页点该角色的「启动」（用户没有允许你自动启动 worker）；不打算做就暂停领取或作废这些卡`),
   leader_spawn: (e) => (e.on
@@ -628,7 +630,9 @@ const PENDING_HINT = {
 export function staffingHint(staffing) {
   if (!staffing?.needs?.length) return '';
   const list = staffing.needs.map((n) => `${n.role}（${n.tasks.join('、')}）`).join('；');
-  const how = staffing.leaderSpawn
+  const how = staffing.full
+    ? `在线 worker 已有 ${staffing.online} 个，达到用户设定的上限（${staffing.maxWorkers} 个），不要再启动，也不要催用户开：等其他角色的 worker 做完空闲下线后再开；确实急需的话，告诉用户可以在看板「设置」里调高上限。`
+    : staffing.leaderSpawn
     ? `你可以自己启动：${staffing.needs.map((n) => `ateam spawn --role ${n.role}`).join('；')}（每个角色一个，开完告诉用户）。`
     : '请用户开窗口，或在看板「worker」页点该角色的「启动」（用户没有允许你自动启动 worker）。';
   return `## 缺人\n\n这些角色有能领的卡，但没有在线 worker：${list}。${how}`;

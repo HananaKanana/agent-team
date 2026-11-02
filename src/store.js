@@ -1305,7 +1305,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 这不是 worker 自己的调用，所以不走 touch，不算它的活动。
   function noteForHook(agentId) {
     const agent = findAgent(agentId);
-    if (!agent?.currentTask || agent.dismissed) return null;
+    if (!agent || agent.dismissed) return null;
+    // 手上的卡被作废了：卡已经不归它，但它可能还在干。作废通知也经 hook 送一次（同样只看不取，
+    // 下一次调用 ateam 时照常再收到）
+    const notice = agent.cancelNotice;
+    if (notice?.wasWorking && !notice.sentByHook) {
+      notice.sentByHook = true;
+      changed();
+      return { taskId: notice.taskId, cancel: cancelMessage(state.tasks.find((t) => t.id === notice.taskId), true, agent.id) };
+    }
+    if (!agent.currentTask) return null;
     const task = getTask(agent.currentTask);
     // 只看不取：平台可能运行了 hook 却没把内容交给模型，所以留言仍保留到下一次 ateam 调用，
     // 代价是 worker 可能看到两遍。同一内容只经 hook 发一次

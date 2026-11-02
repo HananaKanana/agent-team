@@ -966,8 +966,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // leaderAway：leader 没连着（不在监听、近几分钟也没操作）。这时申请下线没人批，空闲的 worker 直接下线
   function checkIdle({ leaderAway = false } = {}) {
     let dirty = false;
-    // 暂停领取的卡（单张或整个需求）不会派发，不算这个角色还有活
+    // 暂停领取的卡（单张或整个需求）、依赖还没全部通过的卡现在都领不了，不算这个角色还有活。
+    // 依赖通过后又缺人时，leader 会收到 staffing_needed 再开
     const heldJobs = new Set(state.jobs.filter((j) => j.onHold).map((j) => j.id));
+    const approved = new Set(state.tasks.filter((t) => t.status === 'approved').map((t) => t.id));
     for (const agent of state.agents) {
       if (agent.status !== 'online') continue;
       // 审卡 worker 只有用户要求才下线，空闲也不申请
@@ -981,7 +983,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       }
       const busy = isCritic(agent)
         ? critiqueQueue().length > 0
-        : agent.currentTask || state.tasks.some((t) => t.status === 'pending' && !t.onHold && !heldJobs.has(t.jobId) && sameRole(t.role, agent.role));
+        : agent.currentTask || state.tasks.some((t) => t.status === 'pending' && !t.onHold && !heldJobs.has(t.jobId)
+          && t.dependsOn.every((d) => approved.has(d)) && sameRole(t.role, agent.role));
       if (busy) {
         if (agent.idleSince || agent.leaveAsked) {
           delete agent.idleSince;
@@ -999,9 +1002,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         const last = config().keepOnePerRole && onlineOfRole(agent.role).length === 1;
         const who = agent.name ? `${agent.name}（${agent.id}）` : agent.id;
         const min = Math.round((now() - agent.idleSince) / 60000);
+        const blocked = state.tasks.filter((t) => t.status === 'pending' && !t.onHold && !heldJobs.has(t.jobId) && sameRole(t.role, agent.role)).map((t) => t.id);
         emit('leave_request', {
           agentId: agent.id, role: agent.role, last,
-          text: `${who} 已空闲 ${min} 分钟，${agent.role} 角色没有待领取的任务，申请下线${last ? `（它是 ${agent.role} 角色最后一个在线 worker）` : ''}`,
+          text: `${who} 已空闲 ${min} 分钟，${agent.role} 角色没有能领的任务${blocked.length ? `（${blocked.join('、')} 还在等依赖）` : ''}，申请下线${last ? `（它是 ${agent.role} 角色最后一个在线 worker）` : ''}`,
+          blocked,
         });
         dirty = true;
       }

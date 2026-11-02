@@ -1352,8 +1352,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       changed();
       return { taskId: task.id, stop: `用户叫停了演播 ${task.id}。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。然后运行 ateam wait --as ${agent.id}，按输出的「已叫停」说明收尾。` };
     }
-    // 只看不取：平台可能运行了 hook 却没把内容交给模型，所以留言仍保留到下一次 ateam 调用，
-    // 代价是 worker 可能看到两遍。同一内容只经 hook 发一次
+    // 经 hook 送过就算送到（takeNote 不再重复给，提交时也不拦）；之后又追加了内容的，整段再经 hook 送一次
     const note = task.pendingNote;
     if (!note || task.noteSentByHook === note) return null;
     task.noteSentByHook = note;
@@ -1365,11 +1364,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function takeNote(task) {
     const note = task.pendingNote;
     if (!note) return null;
-    markWorkerRead(task, 'ateam');
+    // hook 已经原样送过（之后没有新追加的）：算已读，不再重复给，提交时也不再拦
+    const viaHook = task.noteSentByHook === note;
+    if (!viaHook) markWorkerRead(task, 'ateam');
     delete task.pendingNote;
     delete task.noteSentByHook;
     changed();
-    return note;
+    return viaHook ? null : note;
   }
 
   // ---------- review ----------

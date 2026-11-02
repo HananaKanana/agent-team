@@ -369,7 +369,7 @@ ateam reclaim T3         # 原窗口没了：立即收回任务，交给同角�
 ateam job edit J1 --desc-file job.md   # 改需求的说明（或 --title 改标题）
 ateam job accept J1 J2   # 验收通过（看板上点「验收通过」也一样）
 ateam cards --job J5     # 看某个需求的全部卡和审卡情况
-ateam note T5 "说明"      # 给正在做 T5 的 worker 补充说明（当前操作结束或下一次调用 ateam 时收到，提交前一定看到）
+ateam note T5 "说明"      # 给正在做 T5 的 worker 补充说明（当前操作结束或下一次调用 ateam 时收到，提交前一定看到；经 hook 收到过的提交时不再重复拦）
 ateam message --to backend-1 "内容"   # 直接发给 worker，包括手上没有卡的
 ateam spawn --role frontend   # 在设置的平台里新开一个 worker（DeepSeek Harness 或 WorkBuddy；leader 要用户在设置里允许才能用。某个角色持续 1 分钟缺人时 leader 会收到 staffing_needed 事件）
 ateam hook install --platform dsh   # 安装工具后 hook（或 --platform workbuddy；worker 加入时自动运行）

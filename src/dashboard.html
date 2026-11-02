@@ -894,6 +894,8 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 }
 .card .av { margin-left: auto; }
 .av.none { background: transparent; border: 1.5px dashed color-mix(in srgb, var(--faint) 55%, transparent); }
+.av.held { color: var(--asking); background: color-mix(in srgb, var(--asking) 15%, transparent); }
+.av.held svg { width: 11px; height: 11px; }
 /* 标签：浅底彩字的小方块 */
 .tag {
   display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 3px; white-space: nowrap;
@@ -2714,7 +2716,10 @@ function card(t, lane) {
       lane === 'working' || lane === 'rework' ? el('span', { class: 'pulse' }) : null,
       el('span', { class: 'key' }, t.id),
       el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role),
-      avatar(t.assignee, t.role)));
+      // 单张暂停领取的卡：右下角本该是「未领取」的虚线圈，换成暂停标记（整个需求暂停时列头已标明，不用）
+      waiting && t.onHold
+        ? el('span', { class: 'av held', title: `已暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '已暂停领取' }, icon('pause'))
+        : avatar(t.assignee, t.role)));
 }
 
 // ---------- 演播卡 ----------

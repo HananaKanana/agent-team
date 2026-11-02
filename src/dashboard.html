@@ -927,6 +927,9 @@ html.touch-mode .side-hold { opacity: 1; }
 .job.paused:not([aria-current="true"]) .title { color: var(--muted); }
 .lane.held h3::before { background: var(--asking); }
 .lane.held .card { opacity: .62; }
+/* 单张暂停领取的卡：和暂停的需求一样，斜纹底、标题变灰 */
+.card.paused, .card.paused:hover { background-color: var(--sunken); background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--asking) 5%, transparent) 10px 20px); }
+.card.paused .t { color: var(--muted); }
 .lane.held .card:hover { opacity: 1; }
 .tag.hold.icon-only { width: 18px; justify-content: center; padding: 0; }
 .tag .gone { text-decoration: line-through; }
@@ -2681,7 +2684,7 @@ function card(t, lane) {
   const waiting = t.status === 'pending' || t.status === 'held';
   const top = t.priority && waiting;
   return el('button', {
-    class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}${flashId === t.id ? ' flash' : ''}`, title: `${t.id} ${t.title}`, 'data-id': t.id,
+    class: `card c-${lane}${lane === 'cancelled' ? ' cancelled' : ''}${waiting && t.onHold ? ' paused' : ''}${flashId === t.id ? ' flash' : ''}`, title: `${t.id} ${t.title}`, 'data-id': t.id,
     onclick: () => { view.task = t.id; saveView(); renderDrawer(true); },
     oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openCardMenu(t.id, e.clientX, e.clientY); },
   },
@@ -2689,7 +2692,7 @@ function card(t, lane) {
     el('div', { class: 'flags' },
       // 标签放不下时只裁标签（右边渐隐），后面的计时始终完整显示
       el('span', { class: 'tags' },
-      waiting && t.onHold ? el('span', { class: 'tag hold icon-only', title: `该任务已暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}`, 'aria-label': '暂停领取' }, icon('pause')) : null,
+      waiting && t.onHold ? el('span', { class: 'tag paused', title: `该任务已暂停领取${t.onHold.reason ? `：${t.onHold.reason}` : ''}` }, '已暂停') : null,
       top ? el('span', { class: 'tag urgent' }, '优先') : null,
       t.assignTo && waiting ? el('span', { class: 'tag assigned', title: `已指派给 ${t.assignTo}` }, `指派 ${agentName(t.assignTo)}`) : null,
       t.parked ? (() => {

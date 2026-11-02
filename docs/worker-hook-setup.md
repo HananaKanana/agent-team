@@ -48,7 +48,7 @@ ateam hook install --platform dsh        # 或 --platform workbuddy
 
 - 只在工具调用结束后送达。worker 卡在一条长命令里时，要等这条命令结束。
 - worker 刚加入、还没运行过带 `--as` 的命令时收不到。worker 加入后会马上运行 `ateam wait --as`，实际不受影响。
-- 送达补充说明和任务作废通知（作废的以「# ateam：任务 T? 已作废」开头）。打回仍在 worker 下一次调用 ateam 时送达。
+- 送达补充说明、任务作废通知（以「# ateam：任务 T? 已作废」开头），以及立即停手通知（以「# ateam：立即停手」开头：worker 干活时被立即下线、任务被收回、演播被用户叫停）。打回仍在 worker 下一次调用 ateam 时送达（那时 worker 在等待，会立即收到）。
 
 ## 停用
 

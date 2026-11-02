@@ -119,7 +119,7 @@ ateam hook install --platform dsh         # DeepSeek Harness
 ateam hook install --platform workbuddy   # WorkBuddy
 ```
 
-装好后，worker 每完成一次操作就能收到补充说明，空闲等待时也不会持续消耗 token。DeepSeek Harness 上还会一并装好启动插件：看板「worker」页每个角色旁的「在 DeepSeek Harness 中启动」按钮和 `ateam spawn` 靠它新开 worker 会话。插件只接受本机、带密钥（`~/.dsh/ateam-launch.key`，仅本人可读）的请求，只能发 ateam 的开场提示词，工作目录必须是 ateam 项目。WorkBuddy 不需要插件：ateam 用它的任务链接填入提示词和工作目录，再模拟按回车发送；自动发送需要在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 `ateam serve` 的终端，否则请手动按回车。不要交给 worker 去装：agent 平台通常只允许它写项目目录；看板的按钮由 ateam 服务执行，不受这个限制。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
+装好后，worker 每完成一次操作就能收到补充说明，以及作废、立即下线、任务被收回、演播被叫停这类要它马上停手的通知，空闲等待时也不会持续消耗 token。DeepSeek Harness 上还会一并装好启动插件：看板「worker」页每个角色旁的「在 DeepSeek Harness 中启动」按钮和 `ateam spawn` 靠它新开 worker 会话。插件只接受本机、带密钥（`~/.dsh/ateam-launch.key`，仅本人可读）的请求，只能发 ateam 的开场提示词，工作目录必须是 ateam 项目。WorkBuddy 不需要插件：ateam 用它的任务链接填入提示词和工作目录，再模拟按回车发送；自动发送需要在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 `ateam serve` 的终端，否则请手动按回车。不要交给 worker 去装：agent 平台通常只允许它写项目目录；看板的按钮由 ateam 服务执行，不受这个限制。平台升级后重新运行一次。详见 [docs/worker-hook-setup.md](docs/worker-hook-setup.md)。
 
 ---
 

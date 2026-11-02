@@ -273,7 +273,9 @@ async function postToolHook() {
     if (!delivery) return '';
     const additionalContext = delivery.cancel
       ? `# ateam：任务 ${delivery.taskId} 已作废\n\n${delivery.cancel}`
-      : `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。`;
+      : delivery.stop
+        ? `# ateam：立即停手（${delivery.taskId}）\n\n${delivery.stop}`
+        : `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。`;
     return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } });
   } catch {
     return '';

@@ -360,6 +360,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       delete revive.hidden;
       delete revive.idleSince;
       delete revive.leaveAsked;
+      delete revive.hookStop;
       if (name) revive.name = name;
       const who = revive.name ? `${revive.name}（${revive.id}）` : revive.id;
       emit('worker_joined', { agentId: revive.id, text: `${who}，角色 ${role}，重新加入` });
@@ -417,6 +418,23 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     delete agent.cancelNotice;
     changed();
     return { task: state.tasks.find((t) => t.id === taskId), wasWorking };
+  }
+
+  // 经 hook 叫停的文字：下线、收回都是卡退回待领取、交给别人接着做，所以不还原改动
+  function stopMessage(stop, agent) {
+    const task = state.tasks.find((t) => t.id === stop.taskId);
+    const files = task?.paths?.length ? `（${task.paths.join('、')}）` : '';
+    if (stop.demo) {
+      return `你手上的演播 ${stop.taskId} 已被收回。**立刻停手，不要再操作浏览器，也不要清理数据。** 然后运行 ateam join --role ${agent.role} --id ${agent.id} 重新加入。`;
+    }
+    const lines = stop.kind === 'dismissed'
+      ? [`你已被安排下线，手上的任务 ${stop.taskId} 已退回待领取，会交给别的 worker 接着做。`]
+      : [`你手上的任务 ${stop.taskId} 已被收回，会交给别的 worker 接着做。`];
+    lines.push(`**立刻停手：不要再改 ${stop.taskId} 的文件${files}，不要提交，也不要还原已做的改动**（接手的 worker 会在这些改动上继续）。`);
+    lines.push(stop.kind === 'dismissed'
+      ? '工作结束：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户你已下线即可。'
+      : `然后运行 ateam join --role ${agent.role} --id ${agent.id} 重新加入（沿用原编号）。`);
+    return lines.join('\n');
   }
 
   // 作废通知的文字：命令报错和 wait 输出共用
@@ -824,6 +842,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         task.assignee = null;
         addHistory(task, 'handoff', 'lead', `${agent.id} 被安排下线，任务退回待领取，等待接手`);
         returned = task.id;
+        // 它可能还在干：经工具后 hook 叫它停手（见 noteForHook）
+        agent.hookStop = { kind: 'dismissed', taskId: task.id };
       }
       agent.currentTask = null;
       finishDismiss(agent);
@@ -1279,6 +1299,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function bindHookSession(session, agentId) {
     const agent = findAgent(agentId);
     if (!agent || agent.hookSession === session) return;
+    // 同一个会话换了编号重新加入：旧编号不再认这个会话
+    for (const a of state.agents) if (a.hookSession === session) delete a.hookSession;
     agent.hookSession = session;
     changed();
   }
@@ -1305,7 +1327,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // 这不是 worker 自己的调用，所以不走 touch，不算它的活动。
   function noteForHook(agentId) {
     const agent = findAgent(agentId);
-    if (!agent || agent.dismissed) return null;
+    if (!agent) return null;
+    // 干活时被立即下线或任务被收回：卡已经退回待领取、可能马上有人接手，它却还不知道。叫它停手，只送一次
+    if (agent.hookStop) {
+      const stop = agent.hookStop;
+      delete agent.hookStop;
+      changed();
+      return { taskId: stop.taskId, stop: stopMessage(stop, agent) };
+    }
+    if (agent.dismissed) return null;
     // 手上的卡被作废了：卡已经不归它，但它可能还在干。作废通知也经 hook 送一次（同样只看不取，
     // 下一次调用 ateam 时照常再收到）
     const notice = agent.cancelNotice;
@@ -1316,6 +1346,12 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (!agent.currentTask) return null;
     const task = getTask(agent.currentTask);
+    // 演播被用户叫停：卡已进收尾，worker 却要到报下一步时才知道，这一步里还会接着操作浏览器
+    if (task.stopNotice && !task.stopSentByHook) {
+      task.stopSentByHook = true;
+      changed();
+      return { taskId: task.id, stop: `用户叫停了演播 ${task.id}。**立刻停手，停在当前页面，不要再操作浏览器，也不要清理数据**（客户可能还在看）。然后运行 ateam wait --as ${agent.id}，按输出的「已叫停」说明收尾。` };
+    }
     // 只看不取：平台可能运行了 hook 却没把内容交给模型，所以留言仍保留到下一次 ateam 调用，
     // 代价是 worker 可能看到两遍。同一内容只经 hook 发一次
     const note = task.pendingNote;
@@ -1578,6 +1614,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         agent.status = 'offline';
         agent.currentTask = null;
         delete agent.stale;
+        agent.hookStop = { kind: 'reclaimed', taskId: task.id, demo: true };
       }
       interruptDemo(task, `收回 ${agent?.id ?? '原 worker'} 手上的演播${String(reason ?? '').trim() ? `：${String(reason).trim()}` : ''}`);
       changed();
@@ -1595,6 +1632,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       agent.status = 'offline';
       agent.currentTask = null;
       delete agent.stale;
+      agent.hookStop = { kind: 'reclaimed', taskId: task.id };
     }
     task.status = 'pending';
     task.handoff = true;
@@ -1845,7 +1883,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function demoNext(task) {
     if (task.status === 'wrapping' && task.stopNotice) {
-      delete task.stopNotice;
+      delete task.stopNotice; delete task.stopSentByHook;
       changed();
       return { kind: 'demo_stopped', task };
     }
@@ -1930,7 +1968,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     if (task.status !== 'demoing') {
       if (lastRun(task)?.outcome === 'stopped') {
-        if (task.stopNotice) { delete task.stopNotice; changed(); }
+        if (task.stopNotice) { delete task.stopNotice; delete task.stopSentByHook; changed(); }
         return { task, stopped: true };
       }
       throw new AteamError('BAD_STATE', `演播卡 ${task.id} 已经演播完，在收尾。请按收尾说明清理、写操作记录后运行 ateam demo save --as ${agent.id}。`);
@@ -1964,7 +2002,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     result = requireText(result, '演播结果');
     const { agent, task } = demoHeld(agentId);
     if (task.status === 'wrapping' && lastRun(task)?.outcome === 'stopped') {
-      delete task.stopNotice;
+      delete task.stopNotice; delete task.stopSentByHook;
       changed();
       throw new AteamError('BAD_STATE', `用户已经叫停了 ${task.id}。停在当前页面，不要清理；把已走通的操作写进脚本的「## 操作记录」段后运行 ateam demo save --as ${agent.id} "<记了哪些操作>"。`);
     }
@@ -2044,7 +2082,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     }
     task.status = 'ready';
     task.assignee = null;
-    delete task.stopNotice;
+    delete task.stopNotice; delete task.stopSentByHook;
     delete task.stopRequested;
     delete task.demoStep;
     addHistory(task, 'demo_ended', 'user', '用户结束收尾，卡回到待演播（这次的操作记录如果还没提交就不保存）');

@@ -276,7 +276,7 @@ async function postToolHook() {
       ? `# ateam：任务 ${delivery.taskId} 已作废\n\n${delivery.cancel}`
       : delivery.stop
         ? `# ateam：立即停手（${delivery.taskId}）\n\n${delivery.stop}`
-        : `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。${delivery.ackId ? `\n\n看完马上运行 ateam ack ${delivery.ackId} --as ${delivery.agentId ?? '<你的编号>'} 回执（只回执，不用回复别的），然后接着干活。不回执的话，提交时会再给你看一遍。` : ''}`;
+        : `# ateam 补充说明（${delivery.taskId}）\n\n${delivery.note}\n\n按这条说明调整你的做法（标着「用户直接说」的是用户本人说的，以它为准）。${delivery.ackId ? `\n\n看完马上运行 ateam ack ${delivery.ackId} --as ${delivery.agentId ?? '<你的编号>'} 回执。回执只是告诉 ateam 你收到了，不代替说明里要你做的事：说明里要你回复、汇报或做别的，照做（回复就直接在你自己的窗口里说）。然后接着干活。不回执的话，提交时会再给你看一遍。` : ''}`;
     return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext } });
   } catch {
     return '';

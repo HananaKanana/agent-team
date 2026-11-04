@@ -371,6 +371,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       delete revive.idleSince;
       delete revive.leaveAsked;
       delete revive.hookStop;
+      delete revive.tabOpened;
       if (name) revive.name = name;
       const who = revive.name ? `${revive.name}（${revive.id}）` : revive.id;
       emit('worker_joined', { agentId: revive.id, text: `${who}，角色 ${role}，重新加入` });
@@ -1391,6 +1392,35 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return { taskId: task.id, note, ackId: task.noteAckId, agentId: agent.id };
   }
 
+  // 浏览器操作前的 hook 来问：能把浏览器拉到前面的操作放不放行。只有演播卡（用户正看着）可以；
+  // 其他时候不许激活，新开标签页每个 worker 只放行一次（开了就一直用它）。action：activate / open
+  function browserGuard(session, action) {
+    const agentId = agentIdOfHookSession(session);
+    const agent = agentId && findAgent(agentId);
+    if (!agent || agent.status !== 'online') return {};
+    const task = agent.currentTask && getTask(agent.currentTask);
+    if (task && isDemo(task)) return {};
+    if (action === 'activate') {
+      return { deny: `不允许把标签页或浏览器切到前面：这会抢走用户正在用的窗口的焦点，只有演播卡可以。直接在后台标签页里操作（点击、输入、核对、截图都不需要它在前面）。确实操作不了，用 ateam ask --as ${agent.id} 请用户切过去，不要换别的办法置顶。` };
+    }
+    if (action === 'open' && agent.tabOpened) {
+      return { deny: `你已经开过一个标签页，再开会抢走用户的焦点。先列出标签页，用你自己的那个，换页面就在它里面跳转。确实没有了（被关掉、浏览器重启过），运行 ateam tab-lost --as ${agent.id} 后再开一次。` };
+    }
+    if (action === 'open') {
+      agent.tabOpened = true;
+      changed();
+    }
+    return {};
+  }
+
+  // worker 自己的标签页没了（被关、浏览器重启）：下一次新开放行
+  function tabLost(agentId) {
+    const agent = touch(agentId);
+    delete agent.tabOpened;
+    changed();
+    return agent;
+  }
+
   // worker 回执经 hook 收到的补充说明：送出的那段算已读、不再重复给；之后新追加的留着，hook 会再送
   function ackNote(agentId, ackId) {
     const agent = touch(agentId);
@@ -2190,7 +2220,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

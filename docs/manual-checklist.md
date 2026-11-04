@@ -167,6 +167,8 @@
 7. [ ] leader 审用例时有修改意见：worker 改完再问一次；测试卡被打回后不再要求重审用例
 8. [ ] 使用说明 →「测试用例」：测试报告模板编辑器，没改过时标「默认模板」、内容是默认模板；改几个栏目保存后标「自定义模板」、`.ateam/test-template.md` 出现；「示例预览」显示占位符替换后的效果；test worker 新领的测试卡附的是自定义模板、要求照格式写；「重置为默认模板」确认后文件删除、标回「默认模板」；清空内容保存也一样回到默认
 9. [ ] WorkBuddy 上的 test worker：用自带的 Chrome 插件操作页面，不要求安装 dsh-cdp，也不运行 `browser-cdp-setup`；DeepSeek Harness 上的流程不变
+10. [ ] 重新安装 hook 后，test worker 做普通测试卡：运行 `cmd=activate`（含 `c activate`、`cdp.sh cmd activate`）或 WorkBuddy 的 `tab_focus` 被拒绝，并提示在后台标签页操作或 `ateam ask`；第一次新开标签页放行，第二次被拒绝，`ateam tab-lost --as <编号>` 后可再开；`goto`、点击、截图不受影响；演播卡的置顶操作都放行；旧版本 hook 在看板「安装」页显示未安装，需重新安装
+
 
 ## 存储与自检
 

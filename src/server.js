@@ -140,12 +140,12 @@ function installInfo() {
     return [p, /^- id:\s*['"]?dsh-cdp['"]?[ \t]*\n(?:(?:[ \t].*)?\n)*?[ \t]+dataDir:/m.test(text)];
   }));
   const hookInstalled = profiles.some((p) => {
-    try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('# ateam hook begin'); } catch { return false; }
+    try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('ateam-hooks-3.json'); } catch { return false; }
   });
   // WorkBuddy：用户级 settings.json 里有 ateam 的 hook 命令
   const workbuddyFile = [join(home, '.workbuddy', 'settings.json'), join(home, '.codebuddy', 'settings.json')].find((f) => existsSync(f));
   let workbuddyHook = null;
-  if (workbuddyFile) { try { workbuddyHook = readFileSync(workbuddyFile, 'utf8').includes('hook post-tool'); } catch {} }
+  if (workbuddyFile) { try { workbuddyHook = readFileSync(workbuddyFile, 'utf8').includes('hook pre-browser'); } catch {} }
   return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, workbuddyHook, toolDir: TOOL_DIR };
 }
 
@@ -405,6 +405,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const agentId = store.agentIdOfHookSession(b.session);
       return { waiting: !!agentId && (waiters.has(agentId) || Date.now() - (waitRenewAt.get(agentId) ?? 0) < WAIT_RENEW_GAP_MS) };
     },
+    'POST /api/hook/browser-guard': (b) => store.browserGuard(b.session, b.action),
+    'POST /api/tab-lost': (b) => ({ agent: store.tabLost(b.as) }),
     'POST /api/ack': (b) => store.ackNote(b.as, b.id),
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text, b.expect) }),
     'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),

@@ -252,7 +252,7 @@ Chrome 是几个 agent 和用户共用的：
 - 不退出、不杀、不重启 Chrome（`pkill` / `killall` / `osascript ... quit` 都不行），也不关
   浏览器窗口。浏览器卡死、连不上就停下来问
 
-### 5.1 不要抢用户的焦点、不要占满连接：只 `open` 一次、闲着停在空白页，`activate` 不用
+### 5.1 不要抢用户的焦点、不要占满连接：只 `open` 一次、闲着停在空白页，不用 `activate`
 
 插件的 `open` 和 `activate` 会调 `Page.bringToFront`，在 macOS 上会把整个 Chrome
 拉到最前面、抢走用户正在用的窗口的焦点。其他命令（`goto`/`click`/`type`/`eval`/
@@ -264,11 +264,9 @@ CDP 里「切到某个标签页」和「把窗口拉到最前」是同一个调�
 - **整个会话只 `open` 一次**：要用浏览器时先 `cmd=tabs`，有 `owned: true` 的就接着用，
   没有才 `open`。之后换页面都在这个标签页里 `goto`（不置顶），不另开
 - **点击、输入、等待、核对、截图时一律不 `open`**，也不要为了「保险」先 `open` 一下
-- **`activate` 只在自己的标签页被压到后面时用**：几个 agent 共用一个窗口，别人新开
-  或切过去的标签页会让你的变成后台页，用户就看不到你在操作。每次 `goto` 之后、每开始
-  一段操作之前 `eval` 读 `document.visibilityState`：`visible` 就直接操作；`hidden` 才
-  `activate` 一次（会置顶一次，这是为了让用户看得见，可以接受）。窗口只是被别的程序挡住
-  时仍是 `visible`（`chrome-agent.sh` 关掉了遮挡降速），不用 `activate`
+- **不用 `activate`（演播卡除外）**：标签页被别人的压到后面（`visibilityState` 是
+  `hidden`）时照常操作，`chrome-agent.sh` 关掉了后台降速。装了 ateam 的 hook 时，`activate`
+  和第二次 `open` 会被直接拒绝；确实操作不了就 `ateam ask` 请用户切过去，不要换办法置顶
 - **不干活时 `goto about:blank`，不要 `close`**：关了下次还得 `open`，又置顶一次。
   停在 `about:blank` 的页不占被测网站的连接。原因是同一个网站，整个 Chrome 最多 6 条连接
   （HTTP/1.1，按浏览器算，不按标签页算），几个 agent 共用一个 Chrome、每页又挂着长连接

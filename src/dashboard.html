@@ -4156,7 +4156,7 @@ function hookPlatform(platform, label, installed, note) {
 
 function hookStep(info) {
   const title = el('div', { class: 'wcard-head' }, el('b', null, '③ 为 worker 安装 hook'));
-  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时不会持续消耗 token；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。只需安装实际使用的平台，也可在终端中运行对应命令。');
+  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时不会持续消耗 token，测试时抢焦点的操作也会被拦截（演播卡除外）；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。只需安装实际使用的平台，也可在终端中运行对应命令。');
   const rows = [];
   if (info.profiles?.length) rows.push(hookPlatform('dsh', 'DeepSeek Harness', info.hookInstalled, '通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。'));
   if (info.workbuddyHook !== null && info.workbuddyHook !== undefined) rows.push(hookPlatform('workbuddy', 'WorkBuddy', info.workbuddyHook, '重启会话后生效。'));

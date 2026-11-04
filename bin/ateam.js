@@ -45,6 +45,7 @@ worker
   ateam wait --as <ID> [--timeout 90] [--round N]（--timeout 可以很长，比如后台运行时用 1800）
   ateam progress --as <ID> "<笔记>" [--expect <分钟>]
   ateam ack <回执号> --as <ID>（回执工具调用后收到的「# ateam 补充说明」）
+  ateam tab-lost --as <ID>（自己的浏览器标签页没了，才需要；之后可以再开一次）
   ateam ask --as <ID> "<问题>"
   ateam submit --as <ID> "<总结>" [--no-changes]
   ateam demo step --as <ID> 3/12 "<这一步做什么>" [--slow]
@@ -328,10 +329,50 @@ async function preJobOutputHook() {
   }
 }
 
+// 从工具调用认出会抢焦点的浏览器操作。只有认出来才去问服务，普通命令不多一次请求。
+// 辅助函数常写成 c activate、cdp.sh cmd activate；读文件、报进度时提到这些词的不算
+const CDP_HELPER = String.raw`(?:^|[\s;&|(])(?:c|cmd|cdp|\S*cdp\.sh(?:\s+cmd)?)\s+['"]?`;
+const ACTIVATE_IN_COMMAND = new RegExp(String.raw`cmd=activate\b|\bbringToFront\b|\bactivateTarget\b|/json/activate\b|osascript[^\n]*\bactivate\b|\bopen\s+-a\s+[^\n]*(?:Chrome|Chromium)|${CDP_HELPER}activate\b`);
+const OPEN_IN_COMMAND = new RegExp(String.raw`cmd=open\b|${CDP_HELPER}open\b`);
+const ONLY_MENTIONS = /^\s*(?:(?:cd\s+\S+\s*&&\s*)?(?:ateam|\S*\/ateam|grep|rg|cat|echo|sed|head|tail|less)\s)/;
+
+function browserAction(payload) {
+  const input = payload.tool_input ?? {};
+  const name = String(payload.tool_name === 'DeferExecuteTool' ? input.toolName ?? '' : payload.tool_name ?? '');
+  if (name === 'mcp__browser__tab_focus') return 'activate';
+  if (name === 'mcp__browser__tabs_new') return 'open';
+  if (!/^(bash|shell)$/i.test(name)) return null;
+  const command = String(input.command ?? '');
+  if (ONLY_MENTIONS.test(command)) return null;
+  if (ACTIVATE_IN_COMMAND.test(command)) return 'activate';
+  return OPEN_IN_COMMAND.test(command) ? 'open' : null;
+}
+
+async function preBrowserHook() {
+  if (!process.env.ATEAM_URL && !findPortFile(process.cwd())) return '';
+  try {
+    const payload = JSON.parse(readFileSync(0, 'utf8'));
+    const action = browserAction(payload);
+    if (!action) return '';
+    const res = await fetch(`${BASE}/api/hook/browser-guard`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session: payload.session_id, action }),
+      signal: AbortSignal.timeout(2000),
+    });
+    const { deny } = await res.json();
+    if (!deny) return '';
+    return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: deny } });
+  } catch {
+    return '';
+  }
+}
+
 const commands = {
   async hook({ flags, positional }) {
     if (positional[0] === 'post-tool') return postToolHook();
     if (positional[0] === 'pre-job-output') return preJobOutputHook();
+    if (positional[0] === 'pre-browser') return preBrowserHook();
     if (positional[0] !== 'install' && positional[0] !== 'uninstall') fail('用法：ateam hook install ／ uninstall [--platform dsh|workbuddy] [--profile <名字>] [--dsh-version <版本号>]');
     const { installHook, uninstallHook } = await import('../src/hook-install.js');
     try {
@@ -400,6 +441,12 @@ const commands = {
     if (data?.superseded) return `这次等待已被另一条 ateam wait --as ${as} 取代，不需要处理。`;
     const round = Number.parseInt(flags.round ?? '0', 10);
     return formatWait(data?.result ?? null, as, data?.waiting, Number.isFinite(round) && round > 0 ? round : 0, flags.timeout);
+  },
+
+  async 'tab-lost'({ flags }) {
+    const as = requireAs(flags);
+    await request('POST', '/api/tab-lost', { as });
+    return '已记录。可以再新开一个标签页，开了之后就一直用它。';
   },
 
   async ack({ flags, positional }) {

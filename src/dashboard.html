@@ -126,6 +126,8 @@ header.top h1 { margin: 0; display: flex; align-items: center; gap: 9px; font-si
 .leader-chip.offline-lead .task { color: var(--rework); }
 button.worker { cursor: pointer; }
 .worker[data-id] { touch-action: pan-y; }
+.task-jump { color: var(--brand); text-decoration: none; }
+.task-jump:hover { text-decoration: underline; }
 .worker.dragging { position: relative; z-index: 2; cursor: grabbing; box-shadow: var(--shadow-lift); background: var(--surface); }
 button.worker:hover { background: var(--sunken); }
 .helper-btn { margin-left: auto; }
@@ -2371,17 +2373,19 @@ function renderHelper(force = false) {
         el('span', { class: 'grow' },
           el('span', { class: 'who-line' },
             el('b', null, agentLabel(a.id)),
-            el('span', { class: 'hint' }, `${a.role.trim().toLowerCase() === 'critic' ? criticProgress(a) : (a.currentTask ? `正在处理 ${a.currentTask}` : '空闲')} · 心跳 ${ago(a.lastSeenAt)}`)),
+            el('span', { class: 'hint' },
+              a.role.trim().toLowerCase() === 'critic' ? criticProgress(a)
+                : a.currentTask && data.state.tasks.some((t) => t.id === a.currentTask)
+                  // 卡号可点：关掉面板，切到那张卡所在的需求并打开详情
+                  ? ['正在处理 ', el('a', { href: '#', class: 'task-jump', title: `跳转到 ${a.currentTask} 并打开卡片详情`, onclick: (e) => { e.preventDefault(); e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); jumpToTask(a.currentTask); } }, a.currentTask)]
+                  : (a.currentTask ? `正在处理 ${a.currentTask}` : '空闲'),
+              ` · 心跳 ${ago(a.lastSeenAt)}`)),
           el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role),
           isStale(a) ? el('span', { class: 'pill' }, '无响应') : null,
           a.leaveAsked ? el('span', { class: 'pill', title: '空闲超时，已向 leader 申请下线' }, '申请下线') : null,
           a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审核完待审任务后下线' : '完成当前任务后下线，不再领取新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完后下线' : '完成后下线') : null,
           pendingCancel(a) ? el('span', { class: 'pill', title: '该 worker 仍在处理已作废的任务' }, `${pendingCancel(a).id} 已作废，尚未通知到`) : null),
         dismissArm === a.id ? null : el('span', { class: 'wcard-acts' },
-          // 跳到它手上的卡：关掉面板，切到那张卡所在的需求并打开详情
-          a.currentTask && data.state.tasks.some((t) => t.id === a.currentTask)
-            ? el('button', { class: 'btn ghost sm', title: `跳转到 ${a.currentTask} 所在的需求并打开卡片详情`, onclick: (e) => { e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); jumpToTask(a.currentTask); } }, `查看 ${a.currentTask}`)
-            : null,
           el('button', { class: 'btn ghost sm', title: '直接向该 worker 发送消息', onclick: (e) => { e.stopPropagation(); msgArm = msgArm === a.id ? null : a.id; msgState = { id: null, sending: false, error: '', sent: '' }; renderHelper(true); document.querySelector('#helper .msg-input')?.focus(); } }, '发消息'),
           dismissButtons(a))),
       msgArm === a.id ? messageBox(a) : null,

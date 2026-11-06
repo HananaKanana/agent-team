@@ -3,6 +3,10 @@ import { AteamError } from './errors.js';
 import { stepsLabel, VIEWPORT_RE } from './demo.js';
 
 const KEEP_DELIVERED_EVENTS = 200;
+// runtime.json 瘦身：已送达事件的文字只留开头（全文在卡的时间线里），让出编号的旧记录只留认人用的几项
+const DELIVERED_TEXT_MAX = 300;
+const KEEP_RETIRED_AGENTS = 100;
+const LONG_GONE_MS = 24 * 60 * 60 * 1000;
 
 export function emptyState() {
   return { seq: { job: 0, task: 0, event: 0 }, jobs: [], tasks: [], agents: [], events: [] };
@@ -18,6 +22,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   const defaultLeaseMs = leaseMs;
   const defaultIdleMs = idleMs;
   state = state ?? emptyState();
+  // compactState 用到的常量和函数都在下面定义，启动时的瘦身放在 createStore 末尾（见 return 前）
   const changed = () => onChange();
 
   // ---------- 设置 ----------
@@ -162,6 +167,30 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function retireAgent(agent) {
     state.agents.splice(state.agents.indexOf(agent), 1);
     (state.retiredAgents ??= []).push({ ...agent, retiredAt: now() });
+    compactState();
+  }
+
+  const clip = (text) => (typeof text === 'string' && text.length > DELIVERED_TEXT_MAX ? `${text.slice(0, DELIVERED_TEXT_MAX)}…` : text);
+  // runtime.json 里一直在长的几块收一收：启动时、送达事件后、租约扫描时各跑一次，没东西可收就不动
+  function compactState() {
+    let dirty = false;
+    for (const e of state.events) {
+      if (e.delivered && e.text !== clip(e.text)) { e.text = clip(e.text); dirty = true; }
+    }
+    const retired = state.retiredAgents ?? [];
+    const slim = retired.slice(-KEEP_RETIRED_AGENTS).map(({ id, role, name, joinedAt, retiredAt }) => ({ id, role, ...(name ? { name } : {}), joinedAt, retiredAt }));
+    if (JSON.stringify(slim) !== JSON.stringify(retired)) { state.retiredAgents = slim; dirty = true; }
+    // 已下线一天以上的 worker：只留编号复用、认人、重连要用的字段（叫停通知还没送到的留着会话号）
+    for (const a of state.agents) {
+      if (a.status === 'online') continue;
+      const last = Math.max(a.lastCallAt ?? 0, a.lastSeenAt ?? 0, a.joinedAt ?? 0);
+      if (now() - last < LONG_GONE_MS) continue;
+      for (const key of ['idleSince', 'leaveAsked', 'busyUntil', 'stale', 'lastCritiqued', 'critiqueBatch', 'demoReleased', 'pendingMessage', 'tabOpened', 'leaveNotified']) {
+        if (key in a) { delete a[key]; dirty = true; }
+      }
+      if (a.hookSession && !a.hookStop) { delete a.hookSession; dirty = true; }
+    }
+    return dirty;
   }
 
   function newAgentId(role) {
@@ -1745,6 +1774,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   //   任务一直留在它手上，等用户确认后才收回（reclaim）。worker 用 progress --expect 报备过的时长也算有动静。
   // - 其它 worker（空闲、或任务已提交等 review）：超过 leaseMs 直接判掉线，没有任务要转手。
   function sweep(isWaiting) {
+    if (compactState()) changed();
     let count = 0;
     for (const agent of state.agents) {
       if (agent.status !== 'online' || isWaiting(agent.id)) continue;
@@ -2209,9 +2239,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       const drop = new Set(delivered.slice(0, delivered.length - KEEP_DELIVERED_EVENTS));
       state.events = state.events.filter((e) => !drop.has(e));
     }
+    // 先把全文交出去再截短：返回的是同一批对象，复制一份给调用方
+    const out = fresh.map((e) => ({ ...e }));
+    compactState();
     changed();
-    return fresh;
+    return out;
   }
+
+  compactState();
 
   return {
     get state() { return state; },

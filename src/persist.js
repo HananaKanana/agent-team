@@ -71,8 +71,9 @@ export function loadState(dir) {
 
 // 上次写下去的内容，没变就不重写（文件时间不动，git 也看不出改动）
 const written = new Map();
-function writeIfChanged(file, value) {
-  const text = `${JSON.stringify(value, null, 2)}\n`;
+// compact：不缩进（runtime.json 不提交、没人手读，省一大截体积）
+function writeIfChanged(file, value, { compact = false } = {}) {
+  const text = `${compact ? JSON.stringify(value) : JSON.stringify(value, null, 2)}\n`;
   if (written.get(file) === text) return;
   if (!written.has(file) && existsSync(file) && readFileSync(file, 'utf8') === text) {
     written.set(file, text);
@@ -118,7 +119,7 @@ export function saveState(dir, state) {
 
   const runtime = {};
   for (const [key, value] of Object.entries(state)) if (!BOARD_KEYS.includes(key)) runtime[key] = value;
-  writeIfChanged(join(dir, 'runtime.json'), runtime);
+  writeIfChanged(join(dir, 'runtime.json'), runtime, { compact: true });
 
   dropStale(dir, 'archive', new Set(inPlace('archive').map((j) => j.id)));
   dropStale(dir, 'demos', new Set(inPlace('demos').map((j) => j.id)));

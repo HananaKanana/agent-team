@@ -1090,6 +1090,9 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .drawer .facts dd { margin: 0; min-height: 22px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--ink); overflow-wrap: anywhere; }
 .drawer .facts dd code { font-size: 12px; background: var(--sunken); padding: 1px 6px; border-radius: 3px; }
 .drawer h4 { font-size: 14px; color: var(--ink); margin: 24px 0 8px; font-weight: 650; }
+.drawer-sec-head { display: flex; align-items: center; gap: 8px; }
+.drawer-sec-head h4 { flex: 1; }
+.drawer-sec-head .spawn-btn { margin-top: 16px; }
 .drawer .descbox { font-size: 13.5px; line-height: 1.7; }
 .drawer .descbox.md > :first-child { margin-top: 0; }
 .drawer ul.commits { margin: 0; padding-left: 20px; }
@@ -3322,9 +3325,10 @@ function renderDrawer(fresh) {
       ] : null;
     })(),
     t.status === 'pending' ? [
-      el('h4', null, t.handoff ? '让新 worker 接手' : '分配 worker'),
-      el('p', { class: 'hint' }, '在新建的 agent 窗口（可使用其他账号）中发送以下提示词。若已有同角色 worker 在线，无需新建窗口，其完成当前任务后将自动领取。'),
+      el('div', { class: 'drawer-sec-head' }, el('h4', null, t.handoff ? '让新 worker 接手' : '分配 worker'), spawnButton(t.role)),
+      el('p', { class: 'hint' }, `点击「启动」在 ${platformLabel()} 中新建会话并自动发送提示词，或在新建的 agent 窗口（可使用其他账号）中手动发送以下提示词。若已有同角色 worker 在线，无需新建窗口，其完成当前任务后将自动领取。`),
       promptBox(t.role),
+      spawnMessage(t.role),
     ] : null,
     el('h4', null, '验收标准'),
     t.acceptance.length ? el('ol', { class: `checklist${t.status === 'approved' ? ' done' : ''}` }, t.acceptance.map((a) => el('li', null, a))) : el('p', { class: 'meta' }, '未填写'),
@@ -4219,19 +4223,28 @@ const STANDARD_ROLES = [
 
 // 「在 DeepSeek Harness 中启动」：由 ateam 通过 DSH 插件新开会话并发出上面的提示词
 let spawnState = { role: null, busy: false, msg: '', error: false };
+let spawnTimer = 0;
+// 「worker」页和任务详情里都有「启动」，状态共用一份，两边一起重画
+function rerenderSpawn() {
+  renderHelper(true);
+  if (view.task) renderDrawer();
+}
 const platformLabel = () => ((data.config?.spawnPlatform ?? 'dsh') === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness');
 function spawnButton(role) {
   const mine = spawnState.role === role ? spawnState : { busy: false };
   const start = async (e) => {
     e.stopPropagation();
     if (spawnState.busy) return;
+    clearTimeout(spawnTimer);
     spawnState = { role, busy: true, msg: '', error: false };
-    renderHelper(true);
+    rerenderSpawn();
     const out = await post('/api/spawn', { role, by: 'user' });
     spawnState = out.ok
       ? { role, busy: false, msg: (out.sent ? `已在 ${platformLabel()} 中新建会话，worker 加入后将显示在下方「在线 worker」中。` : (out.note || '已填入提示词，请在对应窗口中按回车发送。')) + (out.over ? `当前在线 worker 将达 ${out.count} 个，已超过设定的上限（${out.max} 个）。` : ''), error: false }
       : { role, busy: false, msg: out.message || '启动失败。', error: true };
-    renderHelper(true);
+    rerenderSpawn();
+    // 提示过一会儿自动消失：成功的 10 秒，出错的 30 秒（留时间看清原因）
+    spawnTimer = setTimeout(() => { spawnState = { role: null, busy: false, msg: '', error: false }; rerenderSpawn(); }, spawnState.error ? 30000 : 10000);
   };
   return el('button', { class: 'btn ghost sm spawn-btn', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送下方提示词（平台可在「设置」中切换）`, onclick: start },
     icon('play'), mine.busy ? '启动中…' : '启动');

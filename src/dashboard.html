@@ -3325,11 +3325,12 @@ function renderDrawer(fresh) {
       ] : null;
     })(),
     t.status === 'pending' ? [
-      el('div', { class: 'drawer-sec-head' }, el('h4', null, t.handoff ? '让新 worker 接手' : '分配 worker'), spawnButton(t.role)),
+      el('div', { class: 'drawer-sec-head' }, el('h4', null, t.handoff ? '让新 worker 接手' : '分配 worker'), spawnButton(t.role, t.id)),
       el('p', { class: 'hint' }, `点击「启动」在 ${platformLabel()} 中新建会话并自动发送提示词，或在新建的 agent 窗口（可使用其他账号）中手动发送以下提示词。若已有同角色 worker 在线，无需新建窗口，其完成当前任务后将自动领取。`),
       promptBox(t.role),
-      spawnMessage(t.role),
     ] : null,
+    // 从这里启动的提示：卡被新 worker 领走后也留着，直到自动消失
+    spawnState.taskId === t.id ? spawnMessage(t.role) : null,
     el('h4', null, '验收标准'),
     t.acceptance.length ? el('ol', { class: `checklist${t.status === 'approved' ? ' done' : ''}` }, t.acceptance.map((a) => el('li', null, a))) : el('p', { class: 'meta' }, '未填写'),
     el('h4', null, '描述'),
@@ -4230,18 +4231,19 @@ function rerenderSpawn() {
   if (view.task) renderDrawer();
 }
 const platformLabel = () => ((data.config?.spawnPlatform ?? 'dsh') === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness');
-function spawnButton(role) {
+// taskId：从任务详情里点的。worker 加入后很快就领走这张卡，「分配 worker」一节随之消失，提示要换个地方留着
+function spawnButton(role, taskId = null) {
   const mine = spawnState.role === role ? spawnState : { busy: false };
   const start = async (e) => {
     e.stopPropagation();
     if (spawnState.busy) return;
     clearTimeout(spawnTimer);
-    spawnState = { role, busy: true, msg: '', error: false };
+    spawnState = { role, taskId, busy: true, msg: '', error: false };
     rerenderSpawn();
     const out = await post('/api/spawn', { role, by: 'user' });
     spawnState = out.ok
-      ? { role, busy: false, msg: (out.sent ? `已在 ${platformLabel()} 中新建会话，worker 加入后将显示在下方「在线 worker」中。` : (out.note || '已填入提示词，请在对应窗口中按回车发送。')) + (out.over ? `当前在线 worker 将达 ${out.count} 个，已超过设定的上限（${out.max} 个）。` : ''), error: false }
-      : { role, busy: false, msg: out.message || '启动失败。', error: true };
+      ? { role, taskId, busy: false, msg: (out.sent ? `已在 ${platformLabel()} 中新建会话，worker 加入后将显示在下方「在线 worker」中。` : (out.note || '已填入提示词，请在对应窗口中按回车发送。')) + (out.over ? `当前在线 worker 将达 ${out.count} 个，已超过设定的上限（${out.max} 个）。` : ''), error: false }
+      : { role, taskId, busy: false, msg: out.message || '启动失败。', error: true };
     rerenderSpawn();
     // 提示过一会儿自动消失：成功的 10 秒，出错的 30 秒（留时间看清原因）
     spawnTimer = setTimeout(() => { spawnState = { role: null, busy: false, msg: '', error: false }; rerenderSpawn(); }, spawnState.error ? 30000 : 10000);

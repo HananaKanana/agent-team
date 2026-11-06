@@ -125,6 +125,8 @@ header.top h1 { margin: 0; display: flex; align-items: center; gap: 9px; font-si
 .leader-chip.offline-lead .av::after { background: var(--rework); }
 .leader-chip.offline-lead .task { color: var(--rework); }
 button.worker { cursor: pointer; }
+.worker[data-id] { touch-action: pan-y; }
+.worker.dragging { position: relative; z-index: 2; cursor: grabbing; box-shadow: var(--shadow-lift); background: var(--surface); }
 button.worker:hover { background: var(--sunken); }
 .helper-btn { margin-left: auto; }
 .btn.attention { box-shadow: none; background: var(--rework); color: var(--on-color); font-weight: 600; }
@@ -1600,7 +1602,81 @@ function criticProgress(a) {
   return `等待新任务${last}`;
 }
 
+// 顶部 worker 一排可以拖动排序：顺序只存在这个浏览器里（编号列表），没排过的新 worker 按默认顺序接在后面
+let workerOrder = [];
+try { workerOrder = JSON.parse(localStorage.getItem('ateam.workerOrder') || '[]'); } catch {}
+let workerDrag = null; // 正在拖的编号；拖动中轮询不重画这一排，免得拖到一半被换掉
+function sortByWorkerOrder(list) {
+  const rank = (a) => { const i = workerOrder.indexOf(a.id); return i < 0 ? Infinity : i; };
+  return list.map((a, i) => [a, i]).sort(([a, i], [b, j]) => (rank(a) - rank(b)) || (i - j)).map(([a]) => a);
+}
+// 按住拖动：标签跟着指针走，经过别的标签时对方滑开让位（FLIP 动画），松手后落到空出来的位置。
+// 移动超过 4 像素才算拖动，否则照常是点击；拖动后的那次点击吞掉，不打开面板
+function dragChip(chip, id) {
+  chip.dataset.id = id;
+  chip.addEventListener('pointerdown', (down) => {
+    if (down.button !== 0) return;
+    const box = chip.parentElement;
+    const startX = down.clientX;
+    const grab = startX - chip.getBoundingClientRect().left; // 按在标签上的位置
+    let moved = false;
+    const slots = () => [...box.querySelectorAll('.worker[data-id]')];
+    // 布局位置（不含拖动的位移），用来算拖到哪了、标签该偏多少
+    const baseLeft = (n) => n.getBoundingClientRect().left - (Number(n.dataset.dx) || 0);
+    const move = (e) => {
+      if (!moved) {
+        if (Math.abs(e.clientX - startX) < 4) return;
+        moved = true;
+        workerDrag = id;
+        chip.setPointerCapture(down.pointerId);
+        chip.classList.add('dragging');
+      }
+      e.preventDefault();
+      const others = slots().filter((n) => n !== chip);
+      // 指针越过谁的中线，就排到谁后面
+      const x = e.clientX - grab + chip.offsetWidth / 2;
+      const before = others.find((n) => x < baseLeft(n) + n.offsetWidth / 2) ?? null;
+      const want = before ?? (others.at(-1)?.nextSibling ?? null);
+      if (chip.nextSibling !== want && chip !== want) {
+        // FLIP：记下别的标签原来的位置，挪完 DOM 后从原位置滑到新位置
+        const was = new Map(others.map((n) => [n, n.getBoundingClientRect().left]));
+        box.insertBefore(chip, want);
+        for (const n of others) {
+          const d = was.get(n) - n.getBoundingClientRect().left;
+          if (!d) continue;
+          n.style.transition = 'none';
+          n.style.transform = `translateX(${d}px)`;
+          requestAnimationFrame(() => { n.style.transition = 'transform .18s ease'; n.style.transform = ''; });
+        }
+      }
+      const dx = e.clientX - grab - baseLeft(chip);
+      chip.dataset.dx = dx;
+      chip.style.transform = `translateX(${dx}px)`;
+    };
+    const up = () => {
+      removeEventListener('pointermove', move);
+      removeEventListener('pointerup', up);
+      removeEventListener('pointercancel', up);
+      if (!moved) return;
+      // 吞掉拖动结束时的那次点击
+      addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+      chip.style.transition = 'transform .16s ease';
+      chip.style.transform = '';
+      delete chip.dataset.dx;
+      const ids = slots().map((n) => n.dataset.id);
+      // 已离线的编号也留着：它们用原编号重连时回到原来的位置
+      workerOrder = [...ids, ...workerOrder.filter((x) => !ids.includes(x))].slice(0, 200);
+      try { localStorage.setItem('ateam.workerOrder', JSON.stringify(workerOrder)); } catch {}
+      setTimeout(() => { chip.classList.remove('dragging'); chip.style.transition = ''; workerDrag = null; renderWorkers(); }, 170);
+    };
+    addEventListener('pointermove', move, { passive: false });
+    addEventListener('pointerup', up);
+    addEventListener('pointercancel', up);
+  });
+}
+
 function renderWorkers() {
+  if (workerDrag) return;
   const box = document.getElementById('workers');
   const agents = data.state.agents;
   // 掉线的 worker 不再占位：只显示在线的，掉线的折叠成一个灰色计数，鼠标悬停可看编号
@@ -1619,12 +1695,12 @@ function renderWorkers() {
   }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: `task${leader.online && leader.watching && !leader.away ? ' idle' : ''}` }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
   // 审卡 worker 和 leader 一样常驻，紧挨着 leader 放
   const isCriticAgent = (a) => a.role.trim().toLowerCase() === 'critic';
-  const chips = [leaderChip, ...[...online.filter(isCriticAgent), ...online.filter((a) => !isCriticAgent(a))].map((a) => {
-    return el('button', {
+  const chips = [leaderChip, ...sortByWorkerOrder([...online.filter(isCriticAgent), ...online.filter((a) => !isCriticAgent(a))]).map((a) => {
+    const chip = el('button', {
       type: 'button',
       class: 'worker online',
       style: roleStyle(a.role),
-      title: `${agentLabel(a.id)}，心跳 ${ago(a.lastSeenAt)}。点击查看提示词`,
+      title: `${agentLabel(a.id)}，心跳 ${ago(a.lastSeenAt)}。点击查看提示词，拖动可调整顺序`,
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: a.id }; renderHelper(); },
     },
     el('span', { class: 'av' }, avText(a.name || a.id)),
@@ -1634,6 +1710,8 @@ function renderWorkers() {
     idHasRole(a) ? null : el('span', { class: 'role-text', style: roleStyle(a.role) }, a.role),
     el('span', { class: `task${!isCriticAgent(a) && !a.currentTask && !a.leaveAsked ? ' idle' : ''}` }, isCriticAgent(a) ? criticProgress(a) : a.currentTask ? (a.dismiss ? `${a.currentTask}，完成后下线` : a.currentTask) : (a.leaveAsked ? '空闲，已申请下线' : '空闲')),
   );
+    dragChip(chip, a.id);
+    return chip;
   })];
   if (offline.length) {
     chips.push(el('button', {
@@ -4870,7 +4948,8 @@ if (new URLSearchParams(location.search).has('inputlog')) {
 (() => {
   if (PROMPTER_ONLY) return;
   // 输入框里不接管（要能选字、移动光标）
-  const SKIP = 'input, textarea, select, [contenteditable]';
+  // 顶部 worker 标签按住是拖动排序，也不接管
+  const SKIP = 'input, textarea, select, [contenteditable], .worker[data-id]';
   // 按在按钮、链接、设置项、代码块、提示词上也能拖动滚动，只是要多拖一段才接管：手指点按时难免挪动几像素，
   // 被当成拖动后这次点击会被吞掉。卡片、需求列表这类整块的按钮照常
   const FIRM = 'pre, code, .pblock, a, summary, label, button:not(.card):not(.job):not(.job-mini):not(.worker)';

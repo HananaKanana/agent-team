@@ -253,7 +253,39 @@ function testProgressRule(agentId, task, withTemplate = true, tpl = null) {
   ];
 }
 
-function footer(agentId, task, kind, tpl) {
+// 「## 浏览器」一节：用哪个浏览器由 ateam 指定（看板设置），worker 不自己挑。
+// ego-browser 的 skill 自己写着「默认优先用它」，所以两种都要明说不用另一个
+const EGO_URL = 'https://lite.ego.app';
+export function browserSection(choice, { space, agentId, demo = false } = {}) {
+  if (choice === 'ego') {
+    return [
+      '',
+      '## 浏览器：ego-browser',
+      '',
+      `用户在看板设置里选了 **ego-browser**。这次**只用 ego-browser**，不用 dsh-cdp，也不用 WorkBuddy 自带的浏览器插件。`,
+      '1. 开工前运行 `ego-browser skill`，按它输出的指南操作（脚本用 `ego-browser nodejs` 运行）。命令找不到就 `ateam ask` 请用户安装 ego lite（' + EGO_URL + '，装好后会自己把 skill 链接好），不要换别的浏览器。',
+      `2. 这张卡只用一个 TaskSpace，名字用卡号：\`taskSpace("${space}")\`，掉线重来也用这个名字接着用；换页面在同一个页面里 \`goto\`，不要每个地址新开页面。`,
+      `3. 不碰用户自己的标签页（\`openedBy\` 不是你的就不关、不操作）。${demo ? '' : '不要用 `page.cdp` / `task.cdp` 发 `Page.bringToFront`、`Target.activateTarget` 这类把页面切到前面的命令（会被拦下）。'}`,
+      `4. 被测网站没登录：\`await task.handOff()\` 后运行 ateam ask --as ${agentId} "请在 ego 浏览器里登录 <网站>"，等答复后用 \`takeOverTaskSpace\` 接回同一个空间。`,
+      `5. ${demo ? '收尾时（演播收尾或预演保存后）' : '提交前'}调用 \`await task.finish({ keep: [] })\` 收掉这个空间。`,
+    ];
+  }
+  return [
+    '',
+    '## 浏览器：平台自带',
+    '',
+    '用户在看板设置里选了**平台自带的浏览器工具**：DeepSeek Harness 用 dsh-cdp（连接和自检见 `browser-cdp-setup` skill），WorkBuddy 用它自带的 Chrome 插件。这次**不要用 ego-browser**，即使它的 skill 说优先用它。',
+  ];
+}
+
+// 演播照录的工具走：操作记录里写的「工具：」是 ego-browser 就用它，否则按平台自带
+function recordedTool(script) {
+  const m = script?.text?.match(/^\s*工具[：:]\s*(.+)$/m);
+  if (!m) return null;
+  return /ego/i.test(m[1]) ? 'ego' : 'platform';
+}
+
+function footer(agentId, task, kind, tpl, browser) {
   return [
     '',
     '',
@@ -263,6 +295,7 @@ function footer(agentId, task, kind, tpl) {
     '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
+    ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId }) : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');
 }
@@ -396,13 +429,13 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
-  return out + footer(agentId, task, kind, result.testTemplate);
+  return out + footer(agentId, task, kind, result.testTemplate, result.browser);
 }
 
 // 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用
 const OPS_FORMAT = [
   '操作记录写在脚本的「## 操作记录」段。最开头一行「视口：<宽>x<高>」（就是这次调好的视口）。然后按「## 演示步骤」的编号每步一条，标题写「### <编号>. <简述>」，下面三样都要有：',
-  '- **工具：** 一行，写动作块是给哪个浏览器工具用的（比如「工具：browser-cdp」）。',
+  '- **工具：** 一行，写动作块是给哪个浏览器工具用的（「工具：browser-cdp」「工具：ego-browser」或 WorkBuddy 的「工具：Browser」）。演播时按这一行选浏览器，换工具要重新预演。',
   '- **动作块：** 一个 ```actions 代码块，用你当前浏览器工具的命令格式，把这一步的点击、输入、按键、等待写全，**下次演播要能一次执行完**（比如一串连续执行的命令）。按元素找目标（选择器、按钮文字、角色 + 名字），**不要录坐标**；名称里的 {时间} 照原样写。',
   '- **预期：** 一行，这一步做完页面上应该看到什么，要能用工具确定地核对（比如「出现提示『保存成功』」「表格第一行是『演示-雷达 {时间}』」「地址变成 /equip/list」），不写「页面正常」这种看不出对错的话。**录的时候实际核对一次**，确认对得上。',
   '- 造数据、跳转页面、提交表单这类「做错了后面全错」的步骤，标题末尾加【核对】。',
@@ -431,6 +464,9 @@ function formatDemoWait(result, agentId) {
     '**只改「## 操作记录」段，不要改「## 准备」「## 演示步骤」「## 清理」三段**，改了会被拒绝提交。',
     `然后运行 ${save}，服务只提交这个脚本文件。操作记录没有改动就加 --no-changes。提交后回到 ateam wait。`,
   ];
+  // 预演按设置选浏览器（录下来的就是这个工具）；演播、收尾照录的工具走，没录过才按设置
+  const tool = rehearsal ? (result.browser ?? 'platform') : (recordedTool(script) ?? result.browser ?? 'platform');
+  const browserLines = result.browser ? browserSection(tool, { space: task.id, agentId, demo: true }) : [];
   const report = `每开始一步，先报告：ateam demo step --as ${agentId} <第几步>/<总步数> "<这一步做什么>"。步数用脚本里的编号（用户的提词按这个编号取讲解），不要自己重新编号。`;
   const common = [
     '浏览器必须在前台、用户看得见。遵守项目规则和用户的浏览器规则，不用 headless / 后台浏览器。',
@@ -461,7 +497,7 @@ function formatDemoWait(result, agentId) {
         `某一步怎么也走不通（功能没了、页面报错、数据不对）：停在当前页面，ateam demo end --as ${agentId} --stuck "<卡在第几步、为什么>"。`,
         `全部走通：ateam demo end --as ${agentId} "<结果>"，然后按收到的「# 预演收尾」做。`,
       ].map(((n) => (l) => (l.startsWith('   ') ? l : `${++n}. ${l}`))(0)),
-    ].join('\n') + scriptBlock;
+    ].join('\n') + browserLines.join('\n') + scriptBlock;
   } else if (kind === 'demo') {
     const only = script?.only?.length ? script.only : null;
     out = [
@@ -496,7 +532,7 @@ function formatDemoWait(result, agentId) {
         ...common,
         `全部跑完：ateam demo end --as ${agentId} "<结果：哪些步走了慢档、为什么>"，然后按收到的「# 演播收尾」做。`,
       ].map((l, i) => `${i + 1}. ${l}`),
-    ].join('\n') + scriptBlock;
+    ].join('\n') + browserLines.join('\n') + scriptBlock;
   } else if (kind === 'demo_stopped') {
     out = [
       `# ${word}已叫停 ${title}`,
@@ -506,7 +542,7 @@ function formatDemoWait(result, agentId) {
       ...(rehearsal
         ? ['预演没跑完，这次写的操作记录不保存，服务会还原成上一版，你不用再写。', `直接运行 ateam demo save --as ${agentId} "预演被叫停"，然后回到 ateam wait。`]
         : ['这次走了慢档的步骤，把新做法更新进「## 操作记录」；没有就不用改。', ...commitLines]),
-    ].join('\n') + scriptBlock;
+    ].join('\n') + browserLines.join('\n') + scriptBlock;
   } else {
     const done = result.outcome === 'done';
     const only = result.steps?.length ? result.steps : null;
@@ -530,7 +566,7 @@ function formatDemoWait(result, agentId) {
           ...(rehearsal ? OPS_FORMAT : []),
           ...commitLines,
         ]),
-    ].join('\n') + scriptBlock;
+    ].join('\n') + browserLines.join('\n') + scriptBlock;
   }
   if (result.rules) out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   return `${out}\n\n---\n**现在就开始。** 不要先向用户汇报，也不要问用户要不要开始。整个过程中不要结束本轮回复，做完回到 ateam wait --as ${agentId}。`;

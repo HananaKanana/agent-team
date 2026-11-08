@@ -43,6 +43,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     spawnPlatform: { type: 'choice', options: ['dsh', 'workbuddy'], def: () => 'dsh' },
     // leader 自动启动的上限：同时在线的 worker 到这个数就不让 leader 再开（用户自己开不受限）。0 表示不限
     maxWorkers: { type: 'int', min: 0, max: 50, def: () => 5 },
+    // test worker 测试和预演用哪个浏览器：platform = 平台自带（DSH 用 dsh-cdp，WorkBuddy 用自带 Chrome 插件），ego = ego-browser。
+    // 演播照「## 操作记录」里录的工具走，不看这个
+    testBrowser: { type: 'choice', options: ['platform', 'ego'], def: () => 'platform' },
   };
 
   function config() {

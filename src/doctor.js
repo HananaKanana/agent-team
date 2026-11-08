@@ -45,7 +45,7 @@ async function checkCommit() {
   }
 }
 
-export async function runDoctor({ root, install, multi = false }) {
+export async function runDoctor({ root, install, multi = false, testBrowser = 'platform' }) {
   const out = [];
   let gitVersion = '';
   try { gitVersion = (await sh(root, ['--version'])).trim(); } catch {}
@@ -64,8 +64,19 @@ export async function runDoctor({ root, install, multi = false }) {
     });
   }
 
-  // 测试用的浏览器（可选）：装了 browser-cdp-setup 才检查
-  if (install && install.browserSkill !== 'missing') {
+  // 设置里选了 ego-browser：查命令和 skill 在不在
+  if (install && testBrowser === 'ego') {
+    const missing = Object.entries(install.egoSkill ?? {}).filter(([, ok]) => !ok).map(([p]) => p);
+    out.push({
+      key: 'ego', title: 'ego-browser', ok: !!install.egoBin,
+      detail: install.egoBin
+        ? `已安装（${install.egoBin}）${missing.length ? `；${missing.join('、')} 的 skill 目录里没有 ego-browser，用这个平台的 test worker 前重新运行一次 ego lite 的安装` : ''}`
+        : '设置里选了 ego-browser，但这台电脑上找不到 ego-browser 命令。在浏览器打开 https://lite.ego.app 下载安装 ego lite，安装时会自动链接 skill',
+    });
+  }
+
+  // 测试用的浏览器（可选）：选的是平台自带、并且装了 browser-cdp-setup 才检查
+  if (install && testBrowser !== 'ego' && install.browserSkill !== 'missing') {
     const configured = Object.entries(install.cdpConfigured).filter(([, v]) => v).map(([p]) => p);
     out.push({
       key: 'cdp', title: '测试浏览器配置', ok: configured.length > 0, fix: true,

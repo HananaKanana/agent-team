@@ -146,7 +146,10 @@ function installInfo() {
   const workbuddyFile = [join(home, '.workbuddy', 'settings.json'), join(home, '.codebuddy', 'settings.json')].find((f) => existsSync(f));
   let workbuddyHook = null;
   if (workbuddyFile) { try { workbuddyHook = readFileSync(workbuddyFile, 'utf8').includes('hook pre-browser'); } catch {} }
-  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, workbuddyHook, toolDir: TOOL_DIR };
+  // ego-browser：命令装在 ~/.local/bin（服务的 PATH 里不一定有），skill 由 ego lite 安装时自己链接到各平台的 skill 目录
+  const egoBin = [join(home, '.local', 'bin', 'ego-browser'), ...String(process.env.PATH ?? '').split(':').filter(Boolean).map((d) => join(d, 'ego-browser'))].find((f) => existsSync(f)) ?? null;
+  const egoSkill = Object.fromEntries([['DeepSeek Harness', skillsDir], ['WorkBuddy', join(home, '.workbuddy', 'skills')]].map(([k, d]) => [k, existsSync(join(d, 'ego-browser', 'SKILL.md'))]));
+  return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, workbuddyHook, egoBin, egoSkill, toolDir: TOOL_DIR };
 }
 
 export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
@@ -241,6 +244,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   function withRules(result) {
     if (!result) return result;
+    // 测试卡、演播卡的输出里要写明这次用哪个浏览器（看板设置「测试用的浏览器」）
+    const t = result.task;
+    if (t && (t.kind === 'demo' || /^(test|qa|测试)$/i.test(String(t.role ?? '').trim()))) result = { ...result, browser: store.config().testBrowser };
     if (!RULES_KINDS.has(result.kind)) {
       const tpl = result.task && testTemplateFor(result.task, false);
       return tpl ? { ...result, testTemplate: tpl } : result;
@@ -304,7 +310,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   const SPAWN_JOIN_MS = 2 * 60 * 1000;
   let doctor = null; // 自检结果：启动后在后台跑一次，看板打开「待处理」、点「修复」时重跑
   async function recheck() {
-    doctor = await runDoctor({ root, install: installInfo(), multi: layout.mode === 'multi' });
+    doctor = await runDoctor({ root, install: installInfo(), multi: layout.mode === 'multi', testBrowser: store.config().testBrowser });
     pushSoon();
   }
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
@@ -615,7 +621,12 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       return { dismissed };
     },
     'POST /api/agents/still-there': (b) => ({ agent: store.keepWaiting(String(b.id ?? '')) }),
-    'POST /api/settings': (b) => ({ settings: store.setSettings(b) }),
+    'POST /api/settings': (b) => {
+      const settings = store.setSettings(b);
+      // 换了测试浏览器：自检要查的东西跟着变
+      if ('testBrowser' in b) recheck().catch(() => {});
+      return { settings };
+    },
     // 没改过、或重置了：返回自带模板，custom 为 false
     'GET /api/test-template': () => {
       const text = readTestTemplate();

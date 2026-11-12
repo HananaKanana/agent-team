@@ -335,6 +335,7 @@ select.setting-num { width: auto; text-align: left; }
 .toast-x svg { width: 14px; height: 14px; }
 .needs.pop { padding-right: 40px; }
 .banner.stale { --c: var(--asking); }
+.banner.readonly { --c: var(--brand); }
 /* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
 .needs::before { top: 17px; }
 .needs { --c: var(--asking); }
@@ -1290,6 +1291,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="toasts" id="toasts">
 <div class="banner demo" id="demo-banner" hidden></div>
 <div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="banner readonly" id="readonly" hidden><b>只读访问</b>：当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="readonly"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 <div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 代码已更新，当前服务仍在运行旧版本。请在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve，再刷新本页。数据不会丢失，worker 和 leader 将自动重连。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 </div>
 <div class="layout">
@@ -1310,6 +1312,21 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 
 <script>
 'use strict';
+
+// 局域网里的其他电脑打开（ateam --lan）：只读。服务端会拒绝所有改动，这里先拦下，直接给出说明，不发请求
+const READONLY = !['127.0.0.1', 'localhost'].includes(location.hostname);
+if (READONLY) {
+  const realFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const method = String(init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return realFetch(input, init);
+    const tip = document.getElementById('readonly');
+    if (tip) tip.hidden = false;
+    const body = JSON.stringify({ ok: false, code: 'INVALID', message: '局域网访问为只读模式，请在运行 ateam 的电脑上操作。' });
+    return Promise.resolve(new Response(body, { status: 403, headers: { 'content-type': 'application/json' } }));
+  };
+  addEventListener('DOMContentLoaded', () => { document.getElementById('readonly').hidden = false; });
+}
 
 const LANES = [
   { key: 'pending', label: '待领取' },

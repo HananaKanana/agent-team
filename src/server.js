@@ -1,7 +1,7 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
 import { spawn } from 'node:child_process';
 import http from 'node:http';
-import { homedir } from 'node:os';
+import { homedir, networkInterfaces } from 'node:os';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnWorker } from './spawn.js';
@@ -152,7 +152,14 @@ function installInfo() {
   return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, workbuddyHook, egoBin, egoSkill, toolDir: TOOL_DIR };
 }
 
-export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3 } = {}) {
+// 局域网访问（--lan）：监听所有网卡，别的电脑打开看板只能看、不能改；所有改动只认本机
+function lanAddresses() {
+  // 去重；198.18.0.0/15 是代理软件（Clash、Surge 等）虚拟网卡常用的地址，别的电脑连不上，不列
+  const ips = Object.values(networkInterfaces()).flat().filter((a) => a && a.family === 'IPv4' && !a.internal).map((a) => a.address);
+  return [...new Set(ips)].filter((ip) => !/^198\.1[89]\./.test(ip));
+}
+
+export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, lan = false } = {}) {
   const layout = await detectRepos(root);
   const startHash = codeHash();
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
@@ -791,15 +798,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     });
   }
 
-  // 防止网页跨站调用接口：只认本机 Host（挡 DNS rebinding），POST 必须是 JSON（浏览器跨站发 JSON 需要预检，本服务不响应预检）
+  // 防止网页跨站调用接口：只认本机 Host（挡 DNS rebinding），POST 必须是 JSON（浏览器跨站发 JSON 需要预检，本服务不响应预检）。
+  // 局域网模式下，不是从本机来的请求只读
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+  const isLoopback = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress ?? '');
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const key = `${req.method} ${url.pathname}`;
     try {
-      if (!allowedHosts.has(req.headers.host ?? '')) {
-        return send(res, 403, { ok: false, code: 'INVALID', message: `只接受 http://127.0.0.1:${port} 或 http://localhost:${port} 的请求。` });
+      const local = isLoopback(req) && allowedHosts.has(req.headers.host ?? '');
+      if (!local) {
+        if (!lan) {
+          return send(res, 403, { ok: false, code: 'INVALID', message: `只接受 http://127.0.0.1:${port} 或 http://localhost:${port} 的请求。` });
+        }
+        // 别的电脑只读：只放行 GET（看板页面、状态、卡片详情、事件流），任何改动都拒绝
+        // 命令行请求（会被当成 leader 在线）也只认本机；leader 已读标记不让远程看板顺带写
+        if (req.method !== 'GET' || req.headers['x-ateam-cli']) {
+          return send(res, 403, { ok: false, code: 'INVALID', message: '局域网访问是只读的，改动只能在运行 ateam 的那台电脑上操作。' });
+        }
+        url.searchParams.delete('reader');
       }
       if (req.method === 'POST' && !/^application\/json\b/i.test(req.headers['content-type'] ?? '')) {
         return send(res, 415, { ok: false, code: 'INVALID', message: '请求的 Content-Type 必须是 application/json。请用 ateam 命令行操作。' });
@@ -886,12 +904,13 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         reject(err);
       }
     });
-    server.listen(port, '127.0.0.1', resolve);
+    server.listen(port, lan ? '0.0.0.0' : '127.0.0.1', resolve);
   });
   // 记下实际端口：端口被占用时会自动换成下一个，项目里的 ateam 命令读这个文件找到服务
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(join(dataDir, 'port'), `${port}\n`);
   server.ateamLayout = layout;
+  if (lan) server.ateamLan = lanAddresses().map((ip) => `http://${ip}:${port}`);
   recheck().catch(() => {});
   return server;
 }

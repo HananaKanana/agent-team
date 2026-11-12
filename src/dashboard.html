@@ -335,7 +335,6 @@ select.setting-num { width: auto; text-align: left; }
 .toast-x svg { width: 14px; height: 14px; }
 .needs.pop { padding-right: 40px; }
 .banner.stale { --c: var(--asking); }
-.banner.readonly { --c: var(--brand); }
 /* 「有任务没人做」第一行带 32px 高的按钮，图标对齐这一行的中线 */
 .needs::before { top: 17px; }
 .needs { --c: var(--asking); }
@@ -354,6 +353,14 @@ select.setting-num { width: auto; text-align: left; }
   border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); background: color-mix(in srgb, var(--working) 12%, var(--surface));
   color: var(--working); font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .mode-pill[hidden] { display: none; }
+/* 局域网其他电脑打开时，页头常驻「只读访问」标签；操作被拦下时闪一下 */
+.ro-pill { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--sunken); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: default; }
+.ro-pill[hidden] { display: none; }
+.ro-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.ro-pill.flash { animation: ro-flash .9s ease-out; }
+@keyframes ro-flash { 0%, 40% { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); } 100% { } }
+@media (prefers-reduced-motion: reduce) { .ro-pill.flash { animation: none; } }
 .linkish { appearance: none; border: 0; background: none; padding: 0; justify-self: start; color: var(--link, var(--working)); font: inherit; font-size: 12.5px; cursor: pointer; }
 .linkish:hover { text-decoration: underline; }
 .mode-pill:hover { background: color-mix(in srgb, var(--working) 20%, var(--surface)); }
@@ -1282,6 +1289,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn" id="notify-btn" type="button" hidden title="开启浏览器通知：需求待验收、任务缺少 worker、leader 离线时发送提醒">开启通知</button>
+  <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
   <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
@@ -1291,7 +1299,6 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="toasts" id="toasts">
 <div class="banner demo" id="demo-banner" hidden></div>
 <div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-<div class="banner readonly" id="readonly" hidden><b>只读访问</b>：当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="readonly"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 <div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 代码已更新，当前服务仍在运行旧版本。请在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve，再刷新本页。数据不会丢失，worker 和 leader 将自动重连。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 </div>
 <div class="layout">
@@ -1320,12 +1327,12 @@ if (READONLY) {
   window.fetch = (input, init = {}) => {
     const method = String(init.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
     if (method === 'GET' || method === 'HEAD') return realFetch(input, init);
-    const tip = document.getElementById('readonly');
-    if (tip) tip.hidden = false;
+    const pill = document.getElementById('ro-pill');
+    if (pill) { pill.classList.remove('flash'); void pill.offsetWidth; pill.classList.add('flash'); }
     const body = JSON.stringify({ ok: false, code: 'INVALID', message: '局域网访问为只读模式，请在运行 ateam 的电脑上操作。' });
     return Promise.resolve(new Response(body, { status: 403, headers: { 'content-type': 'application/json' } }));
   };
-  addEventListener('DOMContentLoaded', () => { document.getElementById('readonly').hidden = false; });
+  addEventListener('DOMContentLoaded', () => { document.getElementById('ro-pill').hidden = false; });
 }
 
 const LANES = [

@@ -28,7 +28,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 // 本来就能写多个值（逗号分隔）的参数：写了几遍就合并，不悄悄只留最后一个
 const LIST_FLAGS = new Set(['paths', 'after']);
@@ -36,7 +36,7 @@ const LIST_FLAGS = new Set(['paths', 'after']);
 const USAGE = `用法：ateam <命令> [参数]
 
 服务
-  ateam [--port 7700] [--lease 15] [--idle 3] [--lan]（在项目根目录启动服务，同 ateam serve；--lan 让局域网里的其他电脑也能打开看板，只能看不能改）
+  ateam [--port 7700] [--lease 15] [--idle 3] [--local]（在项目根目录启动服务，同 ateam serve；默认局域网里的其他电脑也能打开看板，只能看不能改，--local 只让本机访问）
   ateam help（显示本说明）
 
 worker
@@ -398,9 +398,10 @@ const commands = {
     const port = await pickPort(wanted, flags.port !== undefined);
     let server;
     try {
-      // --lan（或 --host 0.0.0.0）：局域网里的其他电脑也能打开看板，只读
-      const lan = !!flags.lan || flags.host === '0.0.0.0';
-      if (flags.host !== undefined && flags.host !== '0.0.0.0' && flags.host !== '127.0.0.1') fail('--host 只支持 127.0.0.1（默认，仅本机）或 0.0.0.0（同 --lan）。');
+      // 默认局域网里的其他电脑也能打开看板（只读）；--local（或 --host 127.0.0.1）只让本机访问。--lan、--host 0.0.0.0 是老写法，等于默认
+      if (flags.host !== undefined && flags.host !== '0.0.0.0' && flags.host !== '127.0.0.1') fail('--host 只支持 0.0.0.0（默认，局域网可只读访问）或 127.0.0.1（同 --local，仅本机）。');
+      if (flags.local && (flags.lan || flags.host === '0.0.0.0')) fail('--local 和 --lan / --host 0.0.0.0 不能同时用。');
+      const lan = !flags.local && flags.host !== '127.0.0.1';
       server = await startServer({ root: process.cwd(), port, leaseMin, idleMin, lan });
     } catch (err) {
       fail(err.message);
@@ -411,7 +412,7 @@ const commands = {
       : '';
     const moved = port !== wanted ? `\n端口 ${wanted} 已被占用，自动改用 ${port}。这个项目目录里的 ateam 命令会自动找到它，不用设置 ATEAM_URL。` : '';
     const lanLines = server.ateamLan
-      ? `\n局域网访问已开启（只读）。同一局域网里的其他电脑用下面的地址打开看板，只能看、不能改；所有操作只能在本机看板或命令行里做：\n${server.ateamLan.map((u) => `  ${u}`).join('\n') || '  （没找到局域网 IP）'}`
+      ? `\n局域网访问已开启（只读）。同一局域网里的其他电脑用下面的地址打开看板，只能看、不能改；所有操作只能在本机看板或命令行里做（不想开放就加 --local）：\n${server.ateamLan.map((u) => `  ${u}`).join('\n') || '  （没找到局域网 IP）'}`
       : '';
     return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）${moved}${lanLines}\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}`;
   },

@@ -340,10 +340,13 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         egoProfiles = { list: [], at: Date.now(), error: '未找到 ego-browser 命令，请先安装 ego lite。' };
         return done();
       }
-      execFile(bin, ['nodejs', '-e', 'console.log(JSON.stringify(await profiles()))'], { timeout: 15000 }, (err, stdout) => {
+      // ego-browser nodejs 里 console.log 的输出走 stderr，两路都找；加前缀标记，免得混进别的提示行
+      execFile(bin, ['nodejs', '-e', 'console.log("ATEAM_PROFILES " + JSON.stringify(await profiles()))'], { timeout: 15000 }, (err, stdout, stderr) => {
         try {
           if (err) throw err;
-          const all = JSON.parse(String(stdout).trim().split('\n').pop());
+          const line = `${stdout}\n${stderr}`.split('\n').find((l) => l.startsWith('ATEAM_PROFILES '));
+          if (!line) throw new Error('ego-browser 没有返回 profile 列表');
+          const all = JSON.parse(line.slice('ATEAM_PROFILES '.length));
           const list = all.filter((p) => p && !p.isDefault && /^ateam/i.test(String(p.name ?? '')))
             .map((p) => ({ id: String(p.id), name: String(p.name) }))
             .sort((a, b) => a.name.localeCompare(b.name, 'zh', { numeric: true }));

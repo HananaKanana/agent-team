@@ -29,6 +29,8 @@ const LEADER_FRESH_MS = 3 * 60 * 1000;
 const MAX_RULES = 20 * 1024;
 // 新领到、接手、继续的任务附上项目规则；打回意见和答复只是补充消息，不重复附
 const RULES_KINDS = new Set(['task', 'handoff', 'resume', 'own', 'demo', 'demo_stopped', 'demo_wrap']);
+// 输出里带「## 浏览器」一节的派发：ego-browser 时都要分配（或沿用）测试用 profile，前后说明的空间名才一致
+const EGO_KINDS = new Set([...RULES_KINDS, 'rejected', 'back', 'answer']);
 
 // 服务端代码指纹：src/*.js 和 bin/ateam.js 的内容哈希。启动时记一份，之后比对，
 // 代码被更新（git pull、改了代码）而服务没重启时，看板和 status 提示重启。
@@ -256,7 +258,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (t && (t.kind === 'demo' || /^(test|qa|测试)$/i.test(String(t.role ?? '').trim()))) {
       result = { ...result, browser: store.config().testBrowser };
       // ego-browser：派卡、开始预演 / 演播时分一个测试用 profile 给这个 worker 独占（没有 ateam 开头的 profile 时不分，输出和以前一样）
-      if (result.browser === 'ego' && agentId && RULES_KINDS.has(result.kind)) {
+      if (result.browser === 'ego' && agentId && EGO_KINDS.has(result.kind)) {
         const egoProfile = store.assignEgoProfile(t.id, agentId, egoProfileList());
         if (egoProfile) result.egoProfile = egoProfile;
       }

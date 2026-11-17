@@ -1454,6 +1454,40 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // worker 回执经 hook 收到的补充说明：送出的那段算已读、不再重复给；之后新追加的留着，hook 会再送
+  // ego-browser 测试用 profile 分配（名称以 ateam 开头的 profile，服务从 ego 读出列表传进来）。
+  // 一个 profile 同时只给一个 worker：被别的 worker 进行中的卡（含预演、演播）占着就不给。占用直接按卡的状态算，
+  // 卡提交、作废、收回或 worker 下线后状态一变就自然空出来，不单独记释放。
+  // 优先级：这个 worker 手上别的卡正在用的 → 这张卡上次用的（打回重做、预演后演播，登录状态和空间都在）→ 这个 worker 上次用的 → 第一个空闲的。
+  // 都被占：返回 { shared: true }，worker 用默认 profile，可能和别人共用登录状态
+  const EGO_ACTIVE = ['working', 'asking', 'demoing', 'wrapping'];
+  function assignEgoProfile(taskId, agentId, list) {
+    if (!list?.length) return null;
+    const task = getTask(taskId);
+    const agent = findAgent(agentId);
+    const held = new Set(state.tasks.filter((t) => t !== task && t.egoProfile && !t.egoShared && EGO_ACTIVE.includes(t.status) && t.assignee && t.assignee !== agentId).map((t) => t.egoProfile.id));
+    const free = (id) => id && list.some((p) => p.id === id) && !held.has(id);
+    const mine = state.tasks.find((t) => t !== task && t.egoProfile && !t.egoShared && EGO_ACTIVE.includes(t.status) && t.assignee === agentId)?.egoProfile?.id;
+    const pick = [mine, task.egoProfile?.id, agent?.egoProfile].find(free) ?? list.find((p) => free(p.id))?.id;
+    if (!pick) {
+      if (!task.egoShared) {
+        task.egoShared = true;
+        addHistory(task, 'profile', agentId, `测试用的 ego profile（${list.map((p) => p.name).join('、')}）均被其他 worker 占用，本次使用默认 profile，可能与其他 worker 共用登录状态`);
+        changed();
+      }
+      return { shared: true, names: list.map((p) => p.name) };
+    }
+    const profile = list.find((p) => p.id === pick);
+    if (task.egoProfile?.id !== pick || task.egoShared) {
+      const before = task.egoProfile && !task.egoShared ? task.egoProfile.name : null;
+      task.egoProfile = { id: profile.id, name: profile.name };
+      delete task.egoShared;
+      addHistory(task, 'profile', agentId, before ? `测试用的 ego profile 由「${before}」改为「${profile.name}」` : `测试使用 ego profile「${profile.name}」`);
+      changed();
+    }
+    if (agent && agent.egoProfile !== pick) { agent.egoProfile = pick; changed(); }
+    return { id: profile.id, name: profile.name };
+  }
+
   function ackNote(agentId, ackId) {
     const agent = touch(agentId);
     const task = agent.currentTask && getTask(agent.currentTask);
@@ -2258,7 +2292,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

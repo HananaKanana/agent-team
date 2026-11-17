@@ -1,5 +1,5 @@
 // HTTP 路由、长轮询挂起和唤醒、租约定时扫描、落盘、托管看板。
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import http from 'node:http';
 import { homedir, networkInterfaces } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -249,11 +249,18 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return full ? { custom: true, text } : { custom: true };
   }
 
-  function withRules(result) {
+  function withRules(result, agentId) {
     if (!result) return result;
     // 测试卡、演播卡的输出里要写明这次用哪个浏览器（看板设置「测试用的浏览器」）
     const t = result.task;
-    if (t && (t.kind === 'demo' || /^(test|qa|测试)$/i.test(String(t.role ?? '').trim()))) result = { ...result, browser: store.config().testBrowser };
+    if (t && (t.kind === 'demo' || /^(test|qa|测试)$/i.test(String(t.role ?? '').trim()))) {
+      result = { ...result, browser: store.config().testBrowser };
+      // ego-browser：派卡、开始预演 / 演播时分一个测试用 profile 给这个 worker 独占（没有 ateam 开头的 profile 时不分，输出和以前一样）
+      if (result.browser === 'ego' && agentId && RULES_KINDS.has(result.kind)) {
+        const egoProfile = store.assignEgoProfile(t.id, agentId, egoProfileList());
+        if (egoProfile) result.egoProfile = egoProfile;
+      }
+    }
     if (!RULES_KINDS.has(result.kind)) {
       const tpl = result.task && testTemplateFor(result.task, false);
       return tpl ? { ...result, testTemplate: tpl } : result;
@@ -320,6 +327,42 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     doctor = await runDoctor({ root, install: installInfo(), multi: layout.mode === 'multi', testBrowser: store.config().testBrowser });
     pushSoon();
   }
+  // ego-browser 测试用 profile：名称以 ateam 开头的（不含默认 profile）自动启用。ego 没有新建 profile 的接口，
+  // 用户在 ego lite 里新建，看板「刷新」或过 5 分钟后重新读取。只在「测试用的浏览器」选了 ego-browser 时读
+  const EGO_PROFILE_TTL = 5 * 60 * 1000;
+  let egoProfiles = { list: [], at: 0, error: null };
+  let egoLoading = null;
+  function refreshEgoProfiles() {
+    if (egoLoading) return egoLoading;
+    egoLoading = new Promise((done) => {
+      const bin = installInfo().egoBin;
+      if (!bin) {
+        egoProfiles = { list: [], at: Date.now(), error: '未找到 ego-browser 命令，请先安装 ego lite。' };
+        return done();
+      }
+      execFile(bin, ['nodejs', '-e', 'console.log(JSON.stringify(await profiles()))'], { timeout: 15000 }, (err, stdout) => {
+        try {
+          if (err) throw err;
+          const all = JSON.parse(String(stdout).trim().split('\n').pop());
+          const list = all.filter((p) => p && !p.isDefault && /^ateam/i.test(String(p.name ?? '')))
+            .map((p) => ({ id: String(p.id), name: String(p.name) }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'zh', { numeric: true }));
+          egoProfiles = { list, at: Date.now(), error: null };
+        } catch (e) {
+          // 读失败时沿用上次读到的列表，免得 ego 临时没响应就全退回默认 profile
+          egoProfiles = { list: egoProfiles.list, at: Date.now(), error: `读取 ego profile 失败：${String(e?.message ?? e).split('\n')[0].slice(0, 200)}` };
+        }
+        done();
+      });
+    }).finally(() => { egoLoading = null; pushSoon(); });
+    return egoLoading;
+  }
+  function egoProfileList() {
+    if (store.config().testBrowser !== 'ego') return [];
+    if (Date.now() - egoProfiles.at > EGO_PROFILE_TTL) refreshEgoProfiles().catch(() => {});
+    return egoProfiles.list;
+  }
+
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
   // 启动时按当前版本的文件布局写一遍（新加的拆分方式马上生效，不用等第一次状态变化；内容没变的文件不会重写）
   saveState(dataDir, store.state);
@@ -358,7 +401,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       for (const [agentId, waiter] of [...waiters]) {
         try {
           const result = store.nextFor(agentId);
-          if (result) finishWaiter(agentId, waiter, 200, { ok: true, result: withRules(result) });
+          if (result) finishWaiter(agentId, waiter, 200, { ok: true, result: withRules(result, agentId) });
         } catch (err) {
           finishWaiter(agentId, waiter, err instanceof AteamError ? 400 : 500,
             { ok: false, code: err.code ?? 'INTERNAL', message: err.message });
@@ -631,7 +674,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     'POST /api/settings': (b) => {
       const settings = store.setSettings(b);
       // 换了测试浏览器：自检要查的东西跟着变
-      if ('testBrowser' in b) recheck().catch(() => {});
+      if ('testBrowser' in b) {
+        recheck().catch(() => {});
+        if (settings.testBrowser === 'ego') refreshEgoProfiles().catch(() => {});
+      }
       return { settings };
     },
     // 没改过、或重置了：返回自带模板，custom 为 false
@@ -655,6 +701,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     // 「安装」页用：本机 DeepSeek Harness 的 skill 目录和 profile、各项是否已经装好。都是现场读出来的，不写死
     'GET /api/install-info': () => installInfo(),
+    // 看板设置页的「刷新」：重新从 ego 读取测试用 profile
+    'GET /api/ego-profiles': async (_b, url) => {
+      if (url.searchParams.get('fresh') === '1') await refreshEgoProfiles();
+      return egoProfiles;
+    },
     // 自检：启动时跑过一次，fresh=1 重跑
     'GET /api/doctor': async (_b, url) => {
       if (url.searchParams.get('fresh') === '1' || !doctor) await recheck();
@@ -702,6 +753,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
       config: store.config(),
+      // ego-browser 测试用 profile（只在选了 ego-browser 时有）
+      egoProfiles: store.config().testBrowser === 'ego' ? egoProfiles : null,
       // 自检没过的项（看板顶部提示）
       doctor: (doctor ?? []).filter((c) => !c.ok),
       // 被别人正在改的同一批文件挡住、暂时不派的卡：{ 卡号: 挡着它的卡号 }
@@ -731,7 +784,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (old) finishWaiter(agentId, old, 200, { ok: true, result: null, superseded: true, waiting: store.waitingInfo(agentId) });
 
     const result = store.nextFor(agentId); // 先 touch，掉线的 worker 在这里拿到 LEASE_LOST
-    if (result) return send(res, 200, { ok: true, result: withRules(result) });
+    if (result) return send(res, 200, { ok: true, result: withRules(result, agentId) });
 
     const waiter = { res, timer: null };
     waiter.timer = setTimeout(() => {
@@ -912,5 +965,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   server.ateamLayout = layout;
   if (lan) server.ateamLan = lanAddresses().map((ip) => `http://${ip}:${port}`);
   recheck().catch(() => {});
+  if (store.config().testBrowser === 'ego') refreshEgoProfiles().catch(() => {});
   return server;
 }

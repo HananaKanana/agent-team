@@ -256,17 +256,28 @@ function testProgressRule(agentId, task, withTemplate = true, tpl = null) {
 // 「## 浏览器」一节：用哪个浏览器由 ateam 指定（看板设置），worker 不自己挑。
 // ego-browser 的 skill 自己写着「默认优先用它」，所以两种都要明说不用另一个
 const EGO_URL = 'https://lite.ego.app';
-export function browserSection(choice, { space, agentId, demo = false } = {}) {
+export function browserSection(choice, { space, agentId, demo = false, profile = null } = {}) {
   if (choice === 'ego') {
+    // profile：服务分给这个 worker 独占的测试用 profile（名称以 ateam 开头）。空间名带上 profile 名：
+    // profileId 只在新建空间时生效，换了 profile 就是另一个空间，不会误用旧空间的登录状态
+    const own = profile && !profile.shared;
+    const spaceName = own ? `${space}-${profile.name.replace(/\s+/g, '-')}` : space;
+    const spaceCall = own ? `taskSpace("${spaceName}", { profileId: "${profile.id}" })` : `taskSpace("${spaceName}")`;
+    const login = own
+      ? `4. 这个 profile「${profile.name}」由 ateam 分给你独占，登录状态只属于你。被测网站没登录就用测试账号自己登录（账号按项目约定，没有约定就 \`ateam ask --as ${agentId}\` 问），不用 \`handOff\` 找用户。**不要调用 \`profiles()\` 自己挑，也不要换别的 profile。**`
+      : `4. 被测网站没登录：\`await task.handOff()\` 后运行 ateam ask --as ${agentId} "请在 ego 浏览器里登录 <网站>"，等答复后用 \`takeOverTaskSpace\` 接回同一个空间。`;
     return [
       '',
       '## 浏览器：ego-browser',
       '',
       `用户在看板设置里选了 **ego-browser**。这次**只用 ego-browser**，不用 dsh-cdp，也不用 WorkBuddy 自带的浏览器插件。`,
       '1. 开工前运行 `ego-browser skill`，按它输出的指南操作（脚本用 `ego-browser nodejs` 运行）。命令找不到就 `ateam ask` 请用户安装 ego lite（' + EGO_URL + '，装好后会自己把 skill 链接好），不要换别的浏览器。',
-      `2. 这张卡只用一个 TaskSpace，名字用卡号：\`taskSpace("${space}")\`，掉线重来也用这个名字接着用；换页面在同一个页面里 \`goto\`，不要每个地址新开页面。`,
+      own
+        ? `2. 这张卡只用一个 TaskSpace：\`${spaceCall}\`，掉线重来也用这个名字和参数接着用；换页面在同一个页面里 \`goto\`，不要每个地址新开页面。`
+        : `2. 这张卡只用一个 TaskSpace，名字用卡号：\`${spaceCall}\`，掉线重来也用这个名字接着用；换页面在同一个页面里 \`goto\`，不要每个地址新开页面。`,
       `3. 不碰用户自己的标签页（\`openedBy\` 不是你的就不关、不操作）。${demo ? '' : '不要用 `page.cdp` / `task.cdp` 发 `Page.bringToFront`、`Target.activateTarget` 这类把页面切到前面的命令（会被拦下）。'}`,
-      `4. 被测网站没登录：\`await task.handOff()\` 后运行 ateam ask --as ${agentId} "请在 ego 浏览器里登录 <网站>"，等答复后用 \`takeOverTaskSpace\` 接回同一个空间。`,
+      login,
+      ...(profile?.shared ? [`   注意：测试用的 profile（${profile.names.join('、')}）都被其他 worker 占用，这次用默认 profile，**可能与其他 worker 共用登录状态**：被测项目「新登录作废旧会话」时会互相踢下线，被踢后重新登录再继续，不要当成被测功能的问题。`] : []),
       `5. ${demo ? '收尾时（演播收尾或预演保存后）' : '提交前'}调用 \`await task.finish({ keep: [] })\` 收掉这个空间。`,
     ];
   }
@@ -285,7 +296,7 @@ function recordedTool(script) {
   return /ego/i.test(m[1]) ? 'ego' : 'platform';
 }
 
-function footer(agentId, task, kind, tpl, browser) {
+function footer(agentId, task, kind, tpl, browser, egoProfile) {
   return [
     '',
     '',
@@ -295,7 +306,7 @@ function footer(agentId, task, kind, tpl, browser) {
     '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
-    ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId }) : []),
+    ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId, profile: egoProfile }) : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');
 }
@@ -429,7 +440,7 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
-  return out + footer(agentId, task, kind, result.testTemplate, result.browser);
+  return out + footer(agentId, task, kind, result.testTemplate, result.browser, result.egoProfile);
 }
 
 // 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用
@@ -466,7 +477,7 @@ function formatDemoWait(result, agentId) {
   ];
   // 预演按设置选浏览器（录下来的就是这个工具）；演播、收尾照录的工具走，没录过才按设置
   const tool = rehearsal ? (result.browser ?? 'platform') : (recordedTool(script) ?? result.browser ?? 'platform');
-  const browserLines = result.browser ? browserSection(tool, { space: task.id, agentId, demo: true }) : [];
+  const browserLines = result.browser ? browserSection(tool, { space: task.id, agentId, demo: true, profile: tool === 'ego' ? result.egoProfile : null }) : [];
   const report = `每开始一步，先报告：ateam demo step --as ${agentId} <第几步>/<总步数> "<这一步做什么>"。步数用脚本里的编号（用户的提词按这个编号取讲解），不要自己重新编号。`;
   const common = [
     '浏览器必须在前台、用户看得见。遵守项目规则和用户的浏览器规则，不用 headless / 后台浏览器。',

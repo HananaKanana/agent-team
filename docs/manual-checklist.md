@@ -176,6 +176,9 @@
 11. [ ] 设置「测试用的浏览器」选 ego-browser：test worker 领到测试卡时输出有「## 浏览器：ego-browser」（写明 `ego-browser skill`、以卡号命名的 TaskSpace、测完 finish、没登录时 handOff 后 ateam ask），worker 只用 ego-browser；改回「平台自带」后新领的卡写「平台自带，不用 ego-browser」
 12. [ ] 选 ego-browser 但没装 ego lite：「待处理」出现自检「ego-browser」问题，提示打开 lite.ego.app 安装；装好后打开「待处理」该项消失；「安装」页「可选：测试浏览器」方式一显示已安装或给出 lite.ego.app 链接（新标签页打开）
 13. [ ] 演播按录的工具走：操作记录写「工具：ego-browser」的演播卡，即使设置是平台自带，演播输出也写 ego-browser；预演按设置选，录下的「工具：」随之变化
+14. [ ] ego profile 分配：在 ego lite 里新建 ateam1、ateam2、ateam3 三个 profile，设置选 ego-browser 后「测试用 profile」显示已启用 3 个（新建第 4 个后点「刷新」能读到）；两个 test worker 同时领测试卡，输出里 `taskSpace("<卡号>-ateamN", { profileId: ... })` 的 profile 不同，卡详情「ego profile」和时间线显示用的哪个
+15. [ ] ego profile 释放与沿用：一张卡提交后它的 profile 能分给别的 worker；同一 worker 连续两张卡分到同一个 profile；打回重做时沿用原来的 profile 和空间；预演后演播沿用同一个 profile
+16. [ ] ego profile 全被占：4 个 test worker 同时做卡时第 4 个的输出用 `taskSpace("<卡号>")`，并提示可能与其他 worker 共用登录状态，卡详情显示「默认（测试用 profile 均被占用）」；ego 里没有 ateam 开头的 profile 时，测试卡输出与以前完全一致
 
 
 ## 存储与自检

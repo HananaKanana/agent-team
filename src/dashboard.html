@@ -1377,7 +1377,7 @@ const HISTORY = {
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['离线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
   demo_ended: ['运行结束', 'approved'], demo_saved: ['操作记录', 'approved'],
-  note: ['补充说明', 'pending'], note_delivered: ['已送达', 'working'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做其他任务', 'held'],
+  note: ['补充说明', 'pending'], note_delivered: ['已送达', 'working'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做其他任务', 'held'], profile: ['浏览器 profile', 'working'],
 };
 // 演播卡的状态：名称、lozenge 颜色
 const DEMO_STATUS = { ready: ['待演播', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演播中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
@@ -1962,6 +1962,29 @@ try { slimLanes = localStorage.getItem('ateam.slimLanes') !== '0'; } catch {}
 let showRelations = false;
 try { showRelations = localStorage.getItem('ateam.showRelations') === '1'; } catch {}
 
+// 「测试用的浏览器」选 ego-browser 时：列出自动启用的测试用 profile（ego 中名称以 ateam 开头的 profile）
+let egoRefreshing = false;
+async function refreshEgoProfiles() {
+  egoRefreshing = true;
+  renderHelper(true);
+  try { await fetch('/api/ego-profiles?fresh=1', { cache: 'no-store' }); } catch {}
+  egoRefreshing = false;
+  await poll();
+  renderHelper(true);
+}
+function egoProfilesSetting() {
+  const info = data.egoProfiles ?? { list: [], at: 0, error: null };
+  const list = info.list ?? [];
+  const status = !info.at ? '正在读取 ego 中的 profile……'
+    : list.length ? `已启用 ${list.length} 个：${list.map((p) => p.name).join('、')}。`
+    : '未找到名称以 ateam 开头的 profile，所有 test worker 均使用默认 profile，登录状态互相共用。';
+  const btn = el('button', { class: 'btn', type: 'button', disabled: egoRefreshing, onclick: (e) => { e.preventDefault(); e.stopPropagation(); refreshEgoProfiles(); } }, egoRefreshing ? '读取中…' : '刷新');
+  return el('div', { class: 'setting' }, btn, el('span', null,
+    el('b', null, '测试用 profile'),
+    el('span', { class: 'hint' }, status, info.error ? ` ${info.error}` : ''),
+    el('span', { class: 'hint' }, '各 profile 的 Cookie 和登录状态相互独立。test worker 领取测试卡或开始预演、演播时，自动分配一个未被占用的 profile 供其独占：优先沿用该 worker 或该任务上次使用的 profile；任务提交、作废、收回或 worker 离线后释放；全部被占用时使用默认 profile，并在任务说明中提示可能互相挤下线。ego 未提供新建 profile 的接口：如需增加，请在 ego lite 中新建 profile 并以 ateam 开头命名（如 ateam4），然后点击「刷新」。')));
+}
+
 async function saveSetting(key, value) {
   try {
     const res = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
@@ -1994,7 +2017,8 @@ function settingsPage() {
         input.addEventListener('change', () => saveSetting(it.key, input.value));
       }
       input.addEventListener('click', (e) => e.stopPropagation());
-      return el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, it.hint)));
+      const row = el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, it.hint)));
+      return it.key === 'testBrowser' && cfg.testBrowser === 'ego' ? [row, egoProfilesSetting()] : row;
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
     el('div', { class: 'helper-sec' }, el('h4', null, '本设备')),
@@ -3400,6 +3424,8 @@ function renderDrawer(fresh) {
     fact('状态', el('span', { class: `lozenge c-${lane}` }, LANE_LABEL[lane])),
     fact('角色', el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
     fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '未领取'),
+    // ego-browser 测试用 profile：分到的 profile，或全被占用时共用默认 profile
+    t.egoProfile || t.egoShared ? fact('ego profile', t.egoShared ? '默认（测试用 profile 均被占用）' : t.egoProfile.name) : null,
     fact('依赖', t.dependsOn.length ? t.dependsOn.join('、') : '无'),
     fact('打回', `${t.rejectCount} 次`),
     fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—'),

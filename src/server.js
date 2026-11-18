@@ -508,6 +508,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       try {
         const collected = await collectUsage({ root, segments: store.agentSegments(), bound: store.boundSessions() });
         usageCache = buildReport({ state: store.state, collected });
+        usageCache.collected = collected; // 只看某个需求时用同一份明细重算
         return usageCache;
       } finally { usageRunning = null; }
     })();
@@ -751,7 +752,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     'GET /api/task-tokens': async (_b, url) => ({ tokens: await tokensOf(store.getTask(url.searchParams.get('id') ?? '')) }),
     'GET /api/usage': async (_b, url) => {
-      const { perTask, heavyOf, agentsSeen, ...report } = await usageReport(url.searchParams.get('fresh') === '1');
+      const all = await usageReport(url.searchParams.get('fresh') === '1');
+      const jobId = url.searchParams.get('job');
+      if (jobId) store.getJob(jobId); // 没有这个需求时报错
+      const r = jobId ? buildReport({ state: store.state, collected: all.collected, jobId }) : all;
+      const { perTask, heavyOf, agentsSeen, collected, ...report } = r;
       return { usage: report };
     },
     'GET /api/demo/ops': async (_b, url) => {

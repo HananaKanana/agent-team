@@ -13,10 +13,10 @@ const label = (t) => { const d = new Date(t); return `${String(d.getMonth() + 1)
 const brief = (u) => ({ input: u.input, cacheRead: u.cacheRead, output: u.output, calls: u.calls, total: totalOf(u) });
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
-export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
+export function buildReport({ state, collected, now = Date.now(), days = 30, jobId = null }) {
   const tasks = new Map(state.tasks.map((t) => [t.id, t]));
   const jobs = new Map(state.jobs.map((j) => [j.id, j]));
-  const records = [...collected.records];
+  let records = [...collected.records];
   const perTask = new Map(collected.perTask);
   // 会话记录已删除、只剩卡上记的数：按通过时间补一条
   for (const t of state.tasks) {
@@ -27,6 +27,28 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
     records.push({ t: at, ...u, agentId: null, task: t.id, snapshot: true });
   }
   const kind = (r) => (r.task ? 'work' : r.agentId ? 'idle' : r.leader ? 'leader' : 'other');
+
+  // 用量偏高的卡：同角色已通过的卡取中位数比较
+  const byRole = new Map();
+  for (const [id, u] of perTask) {
+    const t = tasks.get(id);
+    if (!t || t.kind === 'demo' || t.status !== 'approved' || !totalOf(u)) continue;
+    const k = t.role.trim().toLowerCase();
+    if (!byRole.has(k)) byRole.set(k, []);
+    byRole.get(k).push(totalOf(u));
+  }
+  const roleMedian = new Map([...byRole].filter(([, xs]) => xs.length >= HEAVY_MIN_SAMPLES).map(([k, xs]) => [k, median(xs)]));
+  const heavyOf = (t, u) => {
+    const m = t && t.kind !== 'demo' ? roleMedian.get(t.role.trim().toLowerCase()) : null;
+    const ratio = m ? totalOf(u) / m : 0;
+    return ratio >= HEAVY_RATIO ? Math.round(ratio * 10) / 10 : null;
+  };
+  // 只看一个需求：只留这个需求各卡上的调用（偏高的基准仍按全项目同角色的卡算，上面已算好）
+  if (jobId) {
+    const inJob = (id) => tasks.get(id)?.jobId === jobId;
+    records = records.filter((r) => r.task && inJob(r.task));
+    for (const id of [...perTask.keys()]) if (!inJob(id)) perTask.delete(id);
+  }
 
   // 合计：今天、近 7 天、全部
   const today = dayStart(now);
@@ -55,21 +77,6 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
     d.calls += r.calls ?? 1;
   }
 
-  // 用量偏高的卡：同角色已通过的卡取中位数比较
-  const byRole = new Map();
-  for (const [id, u] of perTask) {
-    const t = tasks.get(id);
-    if (!t || t.kind === 'demo' || t.status !== 'approved' || !totalOf(u)) continue;
-    const k = t.role.trim().toLowerCase();
-    if (!byRole.has(k)) byRole.set(k, []);
-    byRole.get(k).push(totalOf(u));
-  }
-  const roleMedian = new Map([...byRole].filter(([, xs]) => xs.length >= HEAVY_MIN_SAMPLES).map(([k, xs]) => [k, median(xs)]));
-  const heavyOf = (t, u) => {
-    const m = t && t.kind !== 'demo' ? roleMedian.get(t.role.trim().toLowerCase()) : null;
-    const ratio = m ? totalOf(u) / m : 0;
-    return ratio >= HEAVY_RATIO ? Math.round(ratio * 10) / 10 : null;
-  };
   const taskRow = (id, u) => {
     const t = tasks.get(id);
     return { id, title: t?.title ?? '', role: t?.role ?? '', status: t?.status ?? '', jobId: t?.jobId ?? null, ...brief(u), heavy: heavyOf(t, u) };
@@ -123,6 +130,7 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
 
   return {
     generatedAt: now,
+    job: jobId ? { id: jobId, title: jobs.get(jobId)?.title ?? '', status: jobs.get(jobId)?.status ?? '' } : null,
     sessions: collected.sessions,
     platforms: collected.platforms ?? {},
     totals,

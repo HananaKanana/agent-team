@@ -4867,9 +4867,9 @@ function setBadge(text, color) {
 }
 
 function renderAttention() {
-  document.getElementById('stale').hidden = !data?.stale || toastClosed.has('stale');
+  // 局域网只读访客重启不了服务，不显示这条提示
+  document.getElementById('stale').hidden = !data?.stale || toastClosed.has('stale') || READONLY;
   const restartBtn = document.getElementById('stale-restart');
-  restartBtn.hidden = READONLY;
   restartBtn.onclick ??= (e) => { e.stopPropagation(); restartServer(restartBtn); };
   const items = attentionItems();
   setBadge(items.length ? String(items.length) : '', '#d9534f');

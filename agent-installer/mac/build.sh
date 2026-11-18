@@ -115,7 +115,7 @@ mkdir -p "$MENU_APP/Contents/MacOS" "$MENU_APP/Contents/Resources"
 SWIFT_TARGET="${PKG_ARCH}-apple-macos${MIN_MACOS}"
 # -disable-autolinking-runtime-compatibility：命令行工具里的 Swift 兼容库只有 arm64，交叉编译 x86_64 时会链接失败；
 # 最低系统 12.0 本来就不需要这些兼容库
-swiftc -O -swift-version 5 -target "$SWIFT_TARGET" -Xfrontend -disable-autolinking-runtime-compatibility -framework AppKit \
+swiftc -O -swift-version 5 -target "$SWIFT_TARGET" -Xfrontend -disable-autolinking-runtime-compatibility -framework AppKit -framework IOKit \
     "$HERE/menubar/main.swift" -o "$MENU_APP/Contents/MacOS/ateam"
 cat > "$MENU_APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

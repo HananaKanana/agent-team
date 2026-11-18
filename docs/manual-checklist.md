@@ -229,10 +229,11 @@
 19. [ ] 项目子菜单「启动 worker（平台名）」：列出标准角色和卡上用到的角色，缺少 worker 的排最前并标「缺少 worker」，已在线的显示数量；点一个角色后在设置选的平台中新建会话并加入；超过在线上限时提示但仍启动；平台出错时弹框说明原因
 20. [ ] 项目子菜单「在 VS Code 中打开」用 VS Code 打开项目目录（未安装 VS Code 时不显示）；「在终端中打开」在终端里打开到项目目录
 21. [ ] 安装版（`ateam dev off` 后）在 DeepSeek Harness 中按角色启动 worker 成功；`/Library/Application Support/ateam/app/dsh-plugin/index.js` 存在，`~/.dsh/profiles/desktop/cordis.patch.yml` 里 `ateam-launcher-` 后的哈希不是 `e3b0c442`
-22. [ ] 安装包里不再有 `docs/`：`/Library/Application Support/ateam/app/` 下只有 `bin`、`src`、`skills`、`dsh-plugin`、`package.json`、`README.md`；在装过旧版本（带 `docs/`）的电脑上覆盖安装后，旧的 `docs/` 也被删掉；安装过程中正在运行的服务不中断，装完重启服务正常
-23. [ ] 重启服务的间隙在菜单里点「启动并打开看板」（或同时从看板和菜单各点一次）：只运行一个服务，`serve.log` 里没有「端口被占用」的报错，多出的那次提示「已经在运行」；菜单显示未运行但服务其实在运行时，点「启动并打开看板」直接打开看板
-24. [ ] 菜单「帮助与反馈」：「使用说明」「版本记录」「反馈问题」「GitHub 主页」分别在浏览器中打开仓库的说明、Releases 页、新建 issue 页和仓库主页
-25. [ ] 卸载：运行「卸载 ateam.command」后，`ateam` 命令、菜单栏程序、安装目录、登录项、指向安装目录的 skill 链接都被删除，各项目 `.ateam/` 保留
+22. [ ] 菜单「有进行中的任务时阻止休眠」默认勾选：有进行中的任务时菜单里出现「正在阻止休眠（N 个任务进行中）」，终端运行 `pmset -g assertions` 能看到 ateam 的 PreventUserIdleSystemSleep；离开电脑超过系统设置的休眠时间，屏幕熄灭但系统不休眠，worker 继续干活；任务全部完成后（最多约 15 秒）这一行消失，`pmset` 里也没有了；取消勾选后立即放开；退出菜单栏程序后放开
+23. [ ] 安装包里不再有 `docs/`：`/Library/Application Support/ateam/app/` 下只有 `bin`、`src`、`skills`、`dsh-plugin`、`package.json`、`README.md`；在装过旧版本（带 `docs/`）的电脑上覆盖安装后，旧的 `docs/` 也被删掉；安装过程中正在运行的服务不中断，装完重启服务正常
+24. [ ] 重启服务的间隙在菜单里点「启动并打开看板」（或同时从看板和菜单各点一次）：只运行一个服务，`serve.log` 里没有「端口被占用」的报错，多出的那次提示「已经在运行」；菜单显示未运行但服务其实在运行时，点「启动并打开看板」直接打开看板
+25. [ ] 菜单「帮助与反馈」：「使用说明」「版本记录」「反馈问题」「GitHub 主页」分别在浏览器中打开仓库的说明、Releases 页、新建 issue 页和仓库主页
+26. [ ] 卸载：运行「卸载 ateam.command」后，`ateam` 命令、菜单栏程序、安装目录、登录项、指向安装目录的 skill 链接都被删除，各项目 `.ateam/` 保留
 
 ## 推送到手机
 

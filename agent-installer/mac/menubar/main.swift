@@ -3,6 +3,7 @@
 // 退出菜单栏程序不停服务。项目列表在 ~/.config/ateam/projects.json（ateam serve 启动时也会写进去）。
 // 菜单顶部列出各项目待你处理的事（与看板「待处理」一致），点了在浏览器里直达；新出现的事发系统通知。
 import AppKit
+import IOKit.pwr_mgt
 import UserNotifications
 
 let WRAPPER = "/usr/local/bin/ateam"
@@ -35,6 +36,9 @@ let NOTIFY_KEY = "notify"
 // VS Code（找不到就不显示「在 VS Code 中打开」）
 func vscodeURL() -> URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.VSCode") }
 func notifyOn() -> Bool { UserDefaults.standard.object(forKey: NOTIFY_KEY) as? Bool ?? true }
+// 有进行中的任务时阻止系统休眠（默认开）
+let AWAKE_KEY = "keepAwake"
+func awakeOn() -> Bool { UserDefaults.standard.object(forKey: AWAKE_KEY) as? Bool ?? true }
 
 func ago(_ ms: Double?) -> String {
     guard let ms = ms else { return "" }
@@ -86,6 +90,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     var item: NSStatusItem!
     let menu = NSMenu()
     var menuOpen = false
+    // 阻止休眠的电源断言（和 caffeinate -i 相同：系统不因空闲休眠，屏幕照常熄灭）。退出程序时系统自动释放
+    var sleepAssertion: IOPMAssertionID = 0
+    var keepingAwake = false
+    var workingTotal = 0
     var projects: [String] = []
     var statuses: [String: Status] = [:]
     var busy: [String: String] = [:]          // 项目 → 「启动中…」「停止中…」
@@ -190,6 +198,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             }
             DispatchQueue.main.async {
                 self.statuses = next
+                self.workingTotal = next.values.reduce(0) { $0 + $1.int("working") }
+                self.updateAwake()
                 self.setIcon(attention: next.values.contains { $0.attention })
                 self.notifyNew()
                 if self.menuOpen { self.rebuild() }
@@ -372,6 +382,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         help.submenu = hsub
         menu.addItem(help)
         menu.addItem(.separator())
+        let awake = add("有进行中的任务时阻止休眠", #selector(toggleAwake(_:)))
+        awake.state = awakeOn() ? .on : .off
+        awake.toolTip = "任一项目有进行中的任务时，系统不会因空闲而休眠（屏幕照常熄灭、锁屏）；任务全部完成后自动恢复。合上笔记本盖子时仍会休眠。"
+        if keepingAwake { _ = add("　正在阻止休眠（\(workingTotal) 个任务进行中）", nil, enabled: false) }
         let notify = add("新的待处理事项发送系统通知", #selector(toggleNotify(_:)))
         notify.state = notifyOn() ? .on : .off
         let login = add("登录时自动打开", #selector(toggleLogin(_:)))
@@ -556,6 +570,24 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     // 程序在前台时也显示
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
         done([.banner, .sound])
+    }
+
+    func updateAwake() {
+        let want = awakeOn() && workingTotal > 0
+        if want && !keepingAwake {
+            var id: IOPMAssertionID = 0
+            let r = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn), "ateam：有进行中的任务" as CFString, &id)
+            if r == kIOReturnSuccess { sleepAssertion = id; keepingAwake = true }
+        } else if !want && keepingAwake {
+            IOPMAssertionRelease(sleepAssertion)
+            keepingAwake = false
+        }
+    }
+
+    @objc func toggleAwake(_ sender: NSMenuItem) {
+        UserDefaults.standard.set(!awakeOn(), forKey: AWAKE_KEY)
+        updateAwake()
+        rebuild()
     }
 
     @objc func toggleNotify(_ sender: NSMenuItem) {

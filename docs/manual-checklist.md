@@ -215,7 +215,7 @@
 2. [ ] 在一台没装过 ateam 的 Mac 上安装：装完 `ateam help` 可用；`ateam version` 显示「安装版」；`~/.claude/skills/ateam-lead` 等链接指向 `/Library/Application Support/ateam/app/skills/`；已有同名目录被移到 `~/.config/ateam/backup/`；装了 WorkBuddy / DeepSeek Harness 的，hook 已装上；`/tmp/ateam-install.log` 无报错
 3. [ ] 装错芯片的安装包时，安装程序提示「芯片类型不对」并拦下
 4. [ ] 在本机（skill 链接指向 `~/code/agent-team`）安装：自动进入开发模式（`ateam dev` 显示仓库路径），skill 链接保持指向仓库，`npm link` 留下的旧 `ateam` 命令被删掉，`which ateam` 为 `/usr/local/bin/ateam`；改仓库代码后重启服务即生效
-5. [ ] `ateam dev off` 后 skill、hook 改指向安装目录，`ateam version` 显示「安装版」；`ateam dev on ~/code/agent-team` 切回；自己另建的、指向 ateam 的 skill 软链（如 `~/.claude/skills/ateam-worker`、`~/.agents/skills/ateam-lead`）也跟着改指向，`ateam dev off` 的输出里按目录列出；菜单栏不用重启，切换后再点开菜单，顶部即显示新模式（开发模式显示「· 开发模式」，安装版只显示版本号）
+5. [ ] `ateam dev off` 后 skill、hook 改指向安装目录，`ateam version` 显示「安装版」；`ateam dev on ~/code/agent-team` 切回；自己另建的、指向 ateam 的 skill 软链（如 `~/.claude/skills/ateam-worker`、`~/.agents/skills/ateam-lead`）也跟着改指向，`ateam dev off` 的输出里按目录列出；菜单栏不用重启，切换后再点开菜单，顶部即显示新模式（开发模式在版本号后以橙色显示「开发模式」，安装版只显示版本号）
 6. [ ] 菜单栏图标：安装完自动出现，不在 Dock 里；点开列出运行过 `ateam` 的项目；「添加项目…」能选目录；未运行的项目「启动并打开看板」后服务在后台启动、浏览器打开看板、`.ateam/serve.log` 有输出；运行中的项目显示 worker 数、进行中和待处理的数量；「停止服务」「重启服务」生效；「查看日志」用控制台打开日志；有待处理事项时图标出现小红点；退出菜单栏程序后服务仍在运行
 7. [ ] 「登录时自动打开」默认勾选，注销重新登录后图标自动出现；取消勾选后不再自动打开，重新安装也不会再勾上
 8. [ ] 看板「服务需要重启」提示条上的「重启」按钮：服务按原参数（端口、`--local` 等）在后台重启，页面自动刷新；局域网只读访客看不到这个按钮
@@ -232,11 +232,12 @@
 19. [ ] 项目子菜单「启动 worker（平台名）」：列出标准角色和卡上用到的角色，缺少 worker 的排最前并标「缺少 worker」，已在线的显示数量；点一个角色后在设置选的平台中新建会话并加入；超过在线上限时提示但仍启动；平台出错时弹框说明原因
 20. [ ] 项目子菜单「在 VS Code 中打开」用 VS Code 打开项目目录（未安装 VS Code 时不显示）；「在终端中打开」在终端里打开到项目目录
 21. [ ] 安装版（`ateam dev off` 后）在 DeepSeek Harness 中按角色启动 worker 成功；`/Library/Application Support/ateam/app/dsh-plugin/index.js` 存在，`~/.dsh/profiles/desktop/cordis.patch.yml` 里 `ateam-launcher-` 后的哈希不是 `e3b0c442`
-22. [ ] 菜单「有进行中的任务时阻止休眠」默认勾选：有进行中的任务时菜单里出现「正在阻止休眠（N 个任务进行中）」，终端运行 `pmset -g assertions` 能看到 ateam 的 PreventUserIdleSystemSleep；离开电脑超过系统设置的休眠时间，屏幕熄灭但系统不休眠，worker 继续干活；任务全部完成后（最多约 15 秒）这一行消失，`pmset` 里也没有了；取消勾选后立即放开；退出菜单栏程序后放开
+22. [ ] 菜单「有进行中的任务时阻止休眠」默认勾选：有进行中的任务时菜单顶部「ateam 版本号」下方出现一行「正在阻止休眠 · N 个任务进行中」，终端运行 `pmset -g assertions` 能看到 ateam 的 PreventUserIdleSystemSleep；离开电脑超过系统设置的休眠时间，屏幕熄灭但系统不休眠，worker 继续干活；任务全部完成后（最多约 15 秒）这一行消失，`pmset` 里也没有了；取消勾选后立即放开；退出菜单栏程序后放开
 23. [ ] 安装包里不再有 `docs/`：`/Library/Application Support/ateam/app/` 下只有 `bin`、`src`、`skills`、`dsh-plugin`、`package.json`、`README.md`；在装过旧版本（带 `docs/`）的电脑上覆盖安装后，旧的 `docs/` 也被删掉；安装过程中正在运行的服务不中断，装完重启服务正常
 24. [ ] 重启服务的间隙在菜单里点「启动并打开看板」（或同时从看板和菜单各点一次）：只运行一个服务，`serve.log` 里没有「端口被占用」的报错，多出的那次提示「已经在运行」；菜单显示未运行但服务其实在运行时，点「启动并打开看板」直接打开看板
 25. [ ] 菜单「帮助与反馈」：「使用说明」「版本记录」「反馈问题」「GitHub 主页」分别在浏览器中打开仓库的说明、Releases 页、新建 issue 页和仓库主页
 26. [ ] 卸载：运行「卸载 ateam.command」后，`ateam` 命令、菜单栏程序、安装目录、登录项、指向安装目录的 skill 链接都被删除，各项目 `.ateam/` 保留
+27. [ ] 菜单栏顶部第一行是粗体「ateam」加灰色版本号（开发模式、源码运行时后面有橙色的「开发模式」「源码运行」），整行不是发灰的禁用样式、鼠标移上去不高亮；浅色、深色模式下都清晰可读
 
 ## 推送到手机
 

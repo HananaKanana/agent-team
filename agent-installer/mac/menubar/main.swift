@@ -236,6 +236,35 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         return it
     }
 
+    // 菜单顶部：粗体 ateam、版本号，开发模式 / 源码运行用橙色标出；正在阻止休眠时第二行写明。
+    // 用自定义视图：禁用的普通菜单项整行发灰，看着像不可用的选项
+    func headerItem(version: String, mode: String) -> NSMenuItem {
+        let title = NSMutableAttributedString(string: "ateam", attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: NSColor.labelColor])
+        if !version.isEmpty {
+            title.append(NSAttributedString(string: "  \(version)", attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.secondaryLabelColor]))
+        }
+        if mode == "dev" || mode == "source" {
+            title.append(NSAttributedString(string: "  \(mode == "dev" ? "开发模式" : "源码运行")", attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.systemOrange]))
+        }
+        var rows: [NSView] = [NSTextField(labelWithAttributedString: title)]
+        if keepingAwake {
+            let line = NSTextField(labelWithString: "正在阻止休眠 · \(workingTotal) 个任务进行中")
+            line.font = .systemFont(ofSize: 11)
+            line.textColor = .secondaryLabelColor
+            rows.append(line)
+        }
+        let stack = NSStackView(views: rows)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 2
+        stack.edgeInsets = NSEdgeInsets(top: 3, left: 14, bottom: 3, right: 14)
+        stack.frame = NSRect(origin: .zero, size: NSSize(width: max(220, stack.fittingSize.width), height: stack.fittingSize.height))
+        stack.autoresizingMask = [.width]
+        let it = NSMenuItem()
+        it.view = stack
+        return it
+    }
+
     func dot(_ color: NSColor) -> NSImage {
         let img = NSImage(size: NSSize(width: 10, height: 10), flipped: false) { r in
             color.setFill()
@@ -249,8 +278,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         menu.removeAllItems()
         let version = info["version"] as? String ?? ""
         let mode = info["mode"] as? String ?? ""
-        let modeText = mode == "dev" ? " · 开发模式" : mode == "source" ? " · 源码运行" : ""
-        _ = add("ateam \(version)\(modeText)", nil, enabled: false)
+        menu.addItem(headerItem(version: version, mode: mode))
         menu.addItem(.separator())
         // 待处理：各项目待你处理的事，点了直达看板上的那个需求或那张卡
         let pending = projects.flatMap { p -> [(String, [String: Any])] in (statuses[p]?.items ?? []).map { (p, $0) } }
@@ -386,7 +414,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let awake = add("有进行中的任务时阻止休眠", #selector(toggleAwake(_:)))
         awake.state = awakeOn() ? .on : .off
         awake.toolTip = "任一项目有进行中的任务时，系统不会因空闲而休眠（屏幕照常熄灭、锁屏）；任务全部完成后自动恢复。合上笔记本盖子时仍会休眠。"
-        if keepingAwake { _ = add("　正在阻止休眠（\(workingTotal) 个任务进行中）", nil, enabled: false) }
         let notify = add("新的待处理事项发送系统通知", #selector(toggleNotify(_:)))
         notify.state = notifyOn() ? .on : .off
         let login = add("登录时自动打开", #selector(toggleLogin(_:)))

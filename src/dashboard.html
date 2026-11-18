@@ -367,6 +367,9 @@ select.setting-num { width: auto; text-align: left; }
 .release-head .hint { flex: 1; }
 .release .md { font-size: 13px; margin-top: 6px; }
 .stale-restart { margin-left: 8px; }
+.version-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; margin: 0 0 12px; font-size: 13px; }
+.version-facts dt { color: var(--faint); }
+.version-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 @keyframes ro-flash { 0%, 40% { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); } 100% { } }
 @media (prefers-reduced-motion: reduce) { .ro-pill.flash { animation: none; } }
 .linkish { appearance: none; border: 0; background: none; padding: 0; justify-self: start; color: var(--link, var(--working)); font: inherit; font-size: 12.5px; cursor: pointer; }
@@ -3328,8 +3331,15 @@ function versionPage() {
   const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('zh-CN') : '');
   const job = updateJobLine(u.job);
   const busy = u.job?.status === 'downloading';
+  // 看板页面已是新的、服务还是旧代码：取不到版本信息
+  if (!data.update) return [el('p', { class: 'hint' }, '当前服务仍在运行旧版本代码，无法读取版本信息。请重启 ateam 服务后刷新本页。')];
+  const modeText = u.mode === 'installed' ? '安装版' : u.mode === 'dev' ? '开发模式' : '源码运行';
+  const where = u.mode === 'installed' ? null : (u.modeLabel ?? '').replace(/^[^：]*：/, '');
   return [
-    el('p', { class: 'tab-hint' }, `当前版本 ${u.current ?? '—'} · ${u.modeLabel ?? ''}`),
+    el('dl', { class: 'wcard version-facts' },
+      el('dt', null, '当前版本'), el('dd', null, u.current ?? '—'),
+      el('dt', null, '运行方式'), el('dd', null, modeText),
+      where ? [el('dt', null, '代码位置'), el('dd', null, el('code', null, where))] : null),
     installed ? null : el('p', { class: 'hint' }, u.mode === 'dev'
       ? '开发模式：ateam 命令、skill 和 hook 使用上述源码仓库的代码，修改后重启服务即生效，不检查更新。切回安装版请运行 ateam dev off。'
       : '当前直接从源码运行，未安装 ateam 安装包，不检查更新。'),

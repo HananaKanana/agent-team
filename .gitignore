@@ -1,3 +1,4 @@
 node_modules/
 .ateam/
 agent-installer/dist/
+.DS_Store

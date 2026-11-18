@@ -3462,6 +3462,13 @@ let usageData = null; // /api/usage 的结果
 let usageLoading = false;
 let usageOpenJob = null; // 按需求表里展开的需求
 let usageAllJobs = false;
+let usageAllAgents = false;
+// 「11-17 14:02 – 18:30」：同一天只写一次日期
+function usageSpan(from, to) {
+  const d = (t) => { const x = new Date(t); return `${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const hm = (t) => new Date(t).toTimeString().slice(0, 5);
+  return d(from) === d(to) ? `${d(from)} ${hm(from)}–${hm(to)}` : `${d(from)} – ${d(to)}`;
+}
 let usageOpen = false; // 顶栏「用量」打开的全屏页
 function openUsage() {
   usageOpen = true;
@@ -3601,15 +3608,19 @@ function usagePage() {
         el('td', { class: 'num' }, fmtTokens(r.total)),
         el('td', { class: 'num' }, r.perTask != null ? fmtTokens(r.perTask) : '—'))))),
     el('h2', null, '按 worker'),
-    el('table', { class: 'usage-table' }, cols('', '78px', '78px', '64px'),
-      el('thead', null, el('tr', null, el('th', null, 'worker'), el('th', { class: 'num' }, '卡上'), el('th', { class: 'num' }, '空转'), el('th', { class: 'num', title: '空转占这个 worker 总用量的比例' }, '空转占比'))),
+    el('p', { class: 'hint' }, '每行是一个 worker 会话。编号会让给新加入的 worker，同一编号在不同时期可能是不同的 worker，因此不合并。'),
+    el('table', { class: 'usage-table' }, cols('', '130px', '44px', '78px', '78px', '64px'),
+      el('thead', null, el('tr', null, el('th', null, 'worker'), el('th', null, '时间'), el('th', { class: 'num' }, '卡数'), el('th', { class: 'num' }, '卡上'), el('th', { class: 'num' }, '空转'), el('th', { class: 'num', title: '空转占这个 worker 总用量的比例' }, '空转占比'))),
       el('tbody', null,
-        u.totals.all.leader ? el('tr', null, el('td', { title: 'leader 的会话（运行 ateam leader / ateam watch 的会话）' }, el('b', null, 'leader')), el('td', { class: 'num' }, fmtTokens(u.totals.all.leader)), el('td', { class: 'num' }, '—'), el('td', { class: 'num' }, '—')) : null,
-        u.agents.map((a) => el('tr', null,
-        el('td', { title: `${a.id}${a.platforms?.length ? `\n平台：${a.platforms.join('、')}` : ''}` }, el('span', { class: 'who' }, avatar(a.id, a.role), agentName(a.id)), a.platforms?.length ? el('span', { class: 'hint' }, ` ${a.platforms.map((x) => (x === 'Claude Code' ? 'Claude' : 'DSH')).join(' · ')}`) : null),
-        el('td', { class: 'num' }, fmtTokens(a.work)),
-        el('td', { class: 'num' }, fmtTokens(a.idle)),
-        el('td', { class: 'num' }, pct(a.idle, a.total)))))),
+        u.totals.all.leader ? el('tr', null, el('td', { title: '运行 ateam leader / ateam watch 的会话合计' }, el('b', null, 'leader')), el('td', null, '—'), el('td', { class: 'num' }, '—'), el('td', { class: 'num' }, fmtTokens(u.totals.all.leader)), el('td', { class: 'num' }, '—'), el('td', { class: 'num' }, '—')) : null,
+        (usageAllAgents ? u.agents : u.agents.slice(0, 15)).map((a) => el('tr', null,
+          el('td', { title: `${a.id} · ${a.platform}` }, el('span', { class: 'tag role', style: roleStyle(a.role) }, a.id), el('span', { class: 'hint' }, ` ${a.platform === 'Claude Code' ? 'Claude' : 'DSH'}`)),
+          el('td', { class: 'hint', title: `${fmtTime(a.from)} – ${fmtTime(a.to)}` }, usageSpan(a.from, a.to)),
+          el('td', { class: 'num' }, String(a.tasks)),
+          el('td', { class: 'num' }, fmtTokens(a.work)),
+          el('td', { class: 'num' }, fmtTokens(a.idle)),
+          el('td', { class: 'num' }, pct(a.idle, a.total)))))),
+    u.agents.length > 15 ? el('button', { class: 'link-btn', type: 'button', onclick: (e) => { e.stopPropagation(); usageAllAgents = !usageAllAgents; renderUsagePage(); } }, usageAllAgents ? '只显示前 15 个' : `显示全部 ${u.agents.length} 个 worker 会话`) : null,
     u.totals.all.other ? el('p', { class: 'hint' }, `其他会话共 ${fmtTokens(u.totals.all.other)}：项目目录中既不是 leader、也认不出 worker 编号的会话。`) : null,
     el('h2', null, '用量偏高的卡'),
     u.heavy.length ? el('table', { class: 'usage-table' }, cols('', '78px', '64px'),

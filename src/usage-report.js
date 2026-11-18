@@ -103,18 +103,22 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
   const roleRows = [...roleMap].map(([role, r]) => ({ role, ...brief(r.sum), tasks: r.tasks, perTask: r.approved ? Math.round(r.approvedTotal / r.approved) : null }))
     .sort((a, b) => b.total - a.total);
 
-  // 按 worker：卡上和空转分开
+  // 按 worker：一个会话里的一个编号算一个 worker（编号会让给新 worker，不同时期、不同平台的同一编号不是同一个 worker，不合并）
   const roleOf = new Map([...(state.retiredAgents ?? []), ...state.agents].map((a) => [a.id, a.role]));
   const agentMap = new Map();
+  const seen = new Set();
   for (const r of records) {
     if (!r.agentId) continue;
-    if (!agentMap.has(r.agentId)) agentMap.set(r.agentId, { work: 0, idle: 0, calls: 0, idleCalls: 0, platforms: new Set() });
-    const a = agentMap.get(r.agentId);
-    if (r.platform) a.platforms.add(r.platform);
-    if (r.task) a.work += totalOf(r); else { a.idle += totalOf(r); a.idleCalls += r.calls ?? 1; }
+    seen.add(r.agentId);
+    const key = `${r.session}|${r.agentId}`;
+    if (!agentMap.has(key)) agentMap.set(key, { id: r.agentId, platform: r.platform, from: r.t, to: r.t, work: 0, idle: 0, calls: 0, tasks: new Set() });
+    const a = agentMap.get(key);
+    a.from = Math.min(a.from, r.t);
+    a.to = Math.max(a.to, r.t);
+    if (r.task) { a.work += totalOf(r); a.tasks.add(r.task); } else a.idle += totalOf(r);
     a.calls += r.calls ?? 1;
   }
-  const agentRows = [...agentMap].map(([id, a]) => ({ id, role: roleOf.get(id) ?? id.replace(/-\d+$/, ''), ...a, platforms: [...a.platforms], total: a.work + a.idle }))
+  const agentRows = [...agentMap.values()].map((a) => ({ ...a, role: roleOf.get(a.id) ?? a.id.replace(/-\d+$/, ''), tasks: a.tasks.size, total: a.work + a.idle }))
     .sort((a, b) => b.total - a.total);
 
   return {
@@ -131,6 +135,6 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
     // 给卡详情、快照用（不发给页面）
     perTask,
     heavyOf: (id) => heavyOf(tasks.get(id), perTask.get(id) ?? zeroUsage()),
-    agentsSeen: new Set(agentMap.keys()),
+    agentsSeen: seen,
   };
 }

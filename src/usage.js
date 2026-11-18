@@ -288,7 +288,7 @@ export async function collect({ root, segments, bound }) {
         for (const seg of segments.get(agentId) ?? []) if (e.t >= seg.from && e.t <= seg.to) { task = seg.task; break; }
         if (task) { if (!perTask.has(task)) perTask.set(task, zero()); add(perTask.get(task), e); }
       }
-      records.push({ ...e, agentId, task, leader: !agentId && info.leader, platform: info.platform });
+      records.push({ ...e, agentId, task, leader: !agentId && info.leader, platform: info.platform, session: s });
     }
   }
   return { perTask, records, sessions: found, platforms };

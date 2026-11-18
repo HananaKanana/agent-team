@@ -3690,7 +3690,7 @@ function usageChart(daily) {
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.setAttribute('class', 'usage-chart');
   svg.setAttribute('role', 'img');
-  svg.setAttribute('aria-label', '最近 30 天每天的 token 用量');
+  svg.setAttribute('aria-label', `最近 ${daily.length} 天每天的 token 用量`);
   daily.forEach((d, i) => {
     let y = H;
     const total = usageAll(d);
@@ -3733,7 +3733,7 @@ function usageJobPage() {
   return [
     head,
     el('div', { class: 'usage-tiles' }, tile('今天', u.totals.today), tile('近 7 天', u.totals.week), tile('合计', u.totals.all)),
-    el('h2', null, '最近 30 天'),
+    el('h2', null, `最近 ${u.daily.length} 天`),
     usageChart(u.daily),
     el('h2', null, '按卡'),
     el('table', { class: 'usage-table' }, cols('', '64px', '72px', '78px', '58px'),

@@ -48,6 +48,9 @@ export function buildReport({ state, collected, now = Date.now(), days = 30, job
     const inJob = (id) => tasks.get(id)?.jobId === jobId;
     records = records.filter((r) => r.task && inJob(r.task));
     for (const id of [...perTask.keys()]) if (!inJob(id)) perTask.delete(id);
+    // 一个需求通常几天就做完：柱状图默认 7 天，需求做得更久就往前延到第一笔用量那天（最多 30 天）
+    const first = records.length ? Math.min(...records.map((r) => r.t)) : now;
+    days = Math.min(30, Math.max(7, Math.round((dayStart(now) - dayStart(first)) / DAY) + 1));
   }
 
   // 合计：今天、近 7 天、全部

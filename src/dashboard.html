@@ -2404,7 +2404,7 @@ function renderHelper(force = false) {
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
       el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('version', '版本'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
+    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' || tab === 'install' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
     tab === 'version' ? versionPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
     el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
@@ -4349,24 +4349,19 @@ function installGuide() {
     hint ? el('p', { class: 'hint' }, hint) : null,
     cmd ? promptBlock(cmd, renderHelper) : null);
   return [
-    // 装了安装包（安装版或开发模式）：命令和 skill 已由安装包配置，前两步不用做
-    ...(['installed', 'dev'].includes(data.update?.mode) ? [
-      el('p', { class: 'hint' }, `已通过安装包安装（${data.update.modeLabel}）。ateam 命令和 skill 链接已自动配置，菜单栏的 ateam 图标可启动、停止各项目的服务。skill 链接异常时，在终端运行 ateam setup 重新配置。`),
-      step('①② 重新配置 ateam 命令与 skill', '安装包已自动完成。仅在 skill 链接被删除或平台新装后需要运行。', 'ateam setup'),
-    ] : [
-    el('p', { class: 'hint' }, `推荐使用安装包：在 https://github.com/HananaKanana/agent-team/releases 下载对应芯片的安装包（Apple 芯片选 arm64，Intel 芯片选 x64），安装后 ateam 命令、skill 和 hook 自动配置，并提供菜单栏图标和自动更新。从源码运行时按以下步骤手动配置，仅需执行一次，命令在终端中运行。`),
-    step('① 注册 ateam 命令', '输出命令列表即表示安装成功。',
-      `cd ${tool}\nnpm link\nateam help`),
-    step('提示找不到 ateam 命令？', 'npm 全局目录不在 PATH 中。运行以下命令将其加入 ~/.zshrc，然后在新终端中重试。',
-      'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
-    step('② 安装 skill', '为 AI 安装 skill：leader 的 skill 安装到 Claude Code，worker 的 skill 安装到 DeepSeek Harness（WorkBuddy 的 worker 另需链接到 ~/.workbuddy/skills）。采用符号链接方式，skill 更新后自动生效。如提示「已存在」，请先删除旧文件夹后重新运行。',
-      `mkdir -p ~/.claude/skills ${skillsDir}\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ${skillsDir}/ateam-worker`),
-    ]),
+    // 命令与 skill：装了安装包（安装版或开发模式）就已配好；从源码运行时 npm link + ateam setup 一次搞定
+    ['installed', 'dev'].includes(data.update?.mode)
+      ? el('div', { class: 'wcard' },
+        el('div', { class: 'wcard-head' }, el('b', null, 'ateam 命令与 skill')),
+        done(true, `已通过安装包安装（${data.update.modeLabel}），命令和 skill 已自动配置`),
+        el('p', { class: 'hint' }, '菜单栏的 ateam 图标可启动、停止各项目的服务，新版本在「版本」页更新。skill 链接被删除或平台是后来才安装的，在终端运行 ateam setup 重新配置。'))
+      : step('ateam 命令与 skill',
+        '推荐使用安装包：在 GitHub 的 agent-team 发布页（Releases）下载对应芯片的安装包，安装后自动完成以下配置，并提供菜单栏图标和自动更新。从源码运行时，在终端执行一次以下命令：ateam setup 会把 skill 链接到本机已安装的 Claude Code、DeepSeek Harness、WorkBuddy，并安装 hook。提示找不到 ateam 命令时，说明 npm 全局目录不在 PATH 中，需将 $(npm prefix -g)/bin 加入 ~/.zshrc 的 PATH。',
+        `cd ${tool}\nnpm link\nateam setup`),
     hookStep(info),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
-    step('④ 在项目根目录启动服务', '项目须为 git 仓库。只输入 ateam 即可启动（与 ateam serve 相同）。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。装了安装包时，也可在菜单栏的 ateam 图标中「添加项目」后启动，服务在后台运行，无需保持终端。',
+    step('在项目根目录启动服务', `项目须为 git 仓库。只输入 ateam 即可启动，保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。也可在菜单栏的 ateam 图标中「添加项目」后启动（需安装包），服务在后台运行，无需保持终端。同时运行多个项目时，${port} 被占用会自动改用下一个空闲端口，看板请访问启动信息中的地址。`,
       `cd ${project}\nateam`),
-    step('同时运行多个项目？', `在另一项目目录中同样运行 ateam 即可：${port} 被占用时自动使用下一个空闲端口（见启动信息），该项目的 leader 和 worker 会自动连接，无需额外配置。看板请访问新端口地址。`, null),
     el('p', { class: 'hint' }, '安装完成后，在「leader」页启动 leader，在「worker」页添加 worker。'),
     // 测试用浏览器：test worker 做测试、演播都在这个独立的 Chrome 里操作，和你平时用的 Chrome 互不影响
     el('div', { class: 'helper-sec' }, el('h4', null, '可选：测试浏览器')),
@@ -4413,8 +4408,8 @@ function hookPlatform(platform, label, installed, note) {
 }
 
 function hookStep(info) {
-  const title = el('div', { class: 'wcard-head' }, el('b', null, '③ 为 worker 安装 hook'));
-  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时不会持续消耗 token，测试时抢焦点的操作也会被拦截（演播卡除外）；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。只需安装实际使用的平台，也可在终端中运行对应命令。');
+  const title = el('div', { class: 'wcard-head' }, el('b', null, 'worker 的 hook'));
+  const hint = el('p', { class: 'hint' }, '安装后，worker 每完成一次操作即可收到补充说明，空闲等待时不会持续消耗 token，测试时抢焦点的操作也会被拦截（演播卡除外）；DeepSeek Harness 还会一并安装启动插件，用于在「worker」页一键启动 worker。安装包或 ateam setup 已自动安装本机检测到的平台，此处用于查看状态和重新安装。');
   const rows = [];
   if (info.profiles?.length) rows.push(hookPlatform('dsh', 'DeepSeek Harness', info.hookInstalled, '通常几十秒内自动生效；如未生效，在所有 worker 空闲时点击菜单中的「Restart App and Host」。'));
   if (info.workbuddyHook !== null && info.workbuddyHook !== undefined) rows.push(hookPlatform('workbuddy', 'WorkBuddy', info.workbuddyHook, '重启会话后生效。'));

@@ -97,6 +97,8 @@
 
 ### 方式二：从源码运行
 
+最简单的做法是一次运行 `cd ~/code/agent-team && npm link && ateam setup`：`ateam setup` 把 skill 链接到本机已安装的 Claude Code、DeepSeek Harness、WorkBuddy，并安装 hook。下面是分步说明，供排查或手动配置时参考。
+
 > 服务跑起来以后，看板右上角「使用说明」→「安装」页里也有这些步骤，命令里的路径已经填好，可以直接复制。
 
 #### 1. 注册 `ateam` 命令

@@ -14,6 +14,7 @@ import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } fr
 import { runDoctor } from './doctor.js';
 import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
 import { check as checkRelease, install as installRelease } from './update.js';
+import { anyPushOn, maskedPush, savePush, sendPush } from './push.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
@@ -485,6 +486,42 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return items;
   }
 
+  // ---------- 推送到手机（push.js）----------
+  // 与菜单栏通知同一规则：待处理清单里新出现、持续 1 分钟的事推一次；服务启动时已有的不推；事情消失后再出现会再推
+  const PUSH_SETTLE_MS = 60 * 1000;
+  const pushFirstSeen = new Map();
+  const pushDone = new Set();
+  let pushBaselined = false;
+  const lanLink = (hash = '') => (lanUrls[0] ? `${lanUrls[0]}/${hash ? `#${hash}` : ''}` : '');
+  async function checkPush() {
+    // 自检问题、服务需要重启是本机的事，不推到手机（自检结果在启动后才出来，会被当成新事项每次重启都推）
+    const items = attention().filter((i) => i.key !== 'stale' && !i.key.startsWith('doctor:'));
+    const keys = new Set(items.map((i) => i.key));
+    if (!pushBaselined) {
+      pushBaselined = true;
+      for (const k of keys) pushDone.add(k);
+      return;
+    }
+    for (const k of [...pushFirstSeen.keys()]) if (!keys.has(k)) pushFirstSeen.delete(k);
+    for (const k of [...pushDone]) if (!keys.has(k)) pushDone.delete(k);
+    const now = Date.now();
+    const due = [];
+    for (const item of items) {
+      if (pushDone.has(item.key)) continue;
+      if (!pushFirstSeen.has(item.key)) pushFirstSeen.set(item.key, now);
+      if (now - pushFirstSeen.get(item.key) < PUSH_SETTLE_MS) continue;
+      pushDone.add(item.key);
+      due.push(item);
+    }
+    if (!due.length || !anyPushOn()) return;
+    const name = basename(root);
+    const message = due.length === 1
+      ? { title: `ateam · ${name}：${due[0].text}`, lines: [], link: lanLink(due[0].hash) }
+      : { title: `ateam · ${name}：${due.length} 项待处理`, lines: due.map((i) => `· ${i.text}`), link: lanLink() };
+    const results = await sendPush(message);
+    for (const r of results) if (!r.ok) console.error(`推送到${r.channel}失败：${r.error}`);
+  }
+
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
   // 启动时按当前版本的文件布局写一遍（新加的拆分方式马上生效，不用等第一次状态变化；内容没变的文件不会重写）
   saveState(dataDir, store.state);
@@ -846,6 +883,20 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         update: updateInfo.newer ? updateInfo.latest : null,
       };
     },
+    // 推送到手机：配置（token、密钥只露末几位）、保存一个渠道、发测试消息
+    'GET /api/push': () => ({ channels: maskedPush() }),
+    'POST /api/push': (b) => {
+      try { return { channels: savePush(String(b.channel ?? ''), { on: b.on, values: b.values ?? {} }) }; } catch (err) { throw new AteamError('INVALID', err.message); }
+    },
+    'POST /api/push/test': async (b) => {
+      let results;
+      try {
+        results = await sendPush({ title: `ateam · ${basename(root)}：推送测试`, lines: ['这是一条测试消息，收到说明推送配置正确。'], link: lanLink() }, String(b.channel ?? ''));
+      } catch (err) { throw new AteamError('INVALID', err.message); }
+      const r = results[0];
+      if (!r.ok) throw new AteamError('INVALID', `发送失败：${r.error}`);
+      return { sent: true };
+    },
     'POST /api/shutdown': () => { setTimeout(() => stopServer(false), 200); return { stopping: true }; },
     'POST /api/restart': () => { setTimeout(() => stopServer(true), 200); return { restarting: true }; },
     // 版本页：带更新说明；fresh=1 立即查一次
@@ -1127,5 +1178,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // 安装版：启动时和之后每 6 小时查一次新版本
   checkUpdate().catch(() => {});
   setInterval(() => checkUpdate().catch(() => {}), UPDATE_EVERY).unref();
+  // 推送到手机：每 15 秒看一次待处理清单
+  setTimeout(() => checkPush().catch(() => {}), 5000).unref();
+  setInterval(() => checkPush().catch(() => {}), 15000).unref();
   return server;
 }

@@ -368,6 +368,12 @@ select.setting-num { width: auto; text-align: left; }
 .release .md { font-size: 13px; margin-top: 6px; }
 .stale-restart { margin-left: 8px; }
 .stale-tip { display: block; margin-top: 6px; }
+.push-channel .wcard-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.push-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.setting-text { width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink); font: inherit; font-size: 13px; }
+.setting-text:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.push-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.push-err { color: var(--rework); }
 .version-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; margin: 0 0 12px; font-size: 13px; }
 .version-facts dt { color: var(--faint); }
 .version-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
@@ -1998,6 +2004,70 @@ function egoProfilesSetting() {
     el('span', { class: 'hint' }, '各 profile 的 Cookie 和登录状态相互独立。test worker 领取测试卡或开始预演、演播时，自动分配一个未被占用的 profile 供其独占：优先沿用该 worker 或该任务上次使用的 profile；任务提交、作废、收回或 worker 离线后释放；全部被占用时使用默认 profile，并在任务说明中提示可能互相挤下线。ego 未提供新建 profile 的接口：如需增加，请在 ego lite 中新建 profile 并以 ateam 开头命名（如 ateam4），然后点击「刷新」。')));
 }
 
+// ---------- 推送到手机（服务端 push.js，配置在本机 ~/.config/ateam/push.json）----------
+let pushCfg = null;
+let pushLoading = false;
+const pushDraft = {}; // 渠道 → 正在输入、还没保存的字段
+const pushMsg = {};   // 渠道 → { text, error }
+const PUSH_FIELD = { token: 'token', webhook: 'webhook 地址', secret: '签名密钥（未开启签名校验时留空）' };
+const PUSH_HINT = {
+  pushplus: '在 pushplus.plus 用微信扫码登录，复制 token。免费版每天有发送条数上限。',
+  feishu: '群设置 → 群机器人 → 添加「自定义机器人」，复制 webhook 地址；开启了「签名校验」时同时填写密钥。',
+  wecom: '群聊 → 添加群机器人，复制 webhook 地址。',
+  dingtalk: '群设置 → 机器人 → 添加「自定义」机器人，复制 webhook 地址；安全设置选「加签」时填写密钥，选「自定义关键词」时将关键词设为 ateam。',
+};
+async function loadPush() {
+  pushLoading = true;
+  try { pushCfg = (await (await fetch('/api/push', { cache: 'no-store' })).json()).channels ?? null; } catch {}
+  pushLoading = false;
+  if (helper.open && helper.tab === 'settings') renderHelper(true);
+}
+async function savePushChannel(ch, on) {
+  try {
+    const out = await post('/api/push', { channel: ch, values: pushDraft[ch] ?? {}, ...(on === undefined ? {} : { on }) });
+    if (out.ok) { pushCfg = out.channels; delete pushDraft[ch]; pushMsg[ch] = { text: on === undefined ? '已保存。' : on ? '已开启。' : '已关闭。' }; }
+    else pushMsg[ch] = { text: out.message || '保存失败。', error: true };
+  } catch { pushMsg[ch] = { text: '无法连接 ateam 服务。', error: true }; }
+  renderHelper(true);
+}
+async function testPush(ch) {
+  if (pushDraft[ch] && Object.keys(pushDraft[ch]).length) { pushMsg[ch] = { text: '请先保存再发送测试。', error: true }; renderHelper(true); return; }
+  pushMsg[ch] = { text: '发送中…' };
+  renderHelper(true);
+  try {
+    const out = await post('/api/push/test', { channel: ch });
+    pushMsg[ch] = out.ok ? { text: '已发送，请在手机上查看。' } : { text: out.message || '发送失败。', error: true };
+  } catch { pushMsg[ch] = { text: '无法连接 ateam 服务。', error: true }; }
+  renderHelper(true);
+}
+function pushSettings() {
+  if (READONLY) return el('p', { class: 'hint' }, '推送配置仅可在运行 ateam 的电脑上查看和修改。');
+  if (!pushCfg) { if (!pushLoading) loadPush(); return el('p', { class: 'hint' }, '读取中…'); }
+  return [
+    el('p', { class: 'hint' }, '「待处理」中新出现的事项（需求待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等）持续 1 分钟后推送一次，附局域网看板链接（手机连接同一网络时可直接打开）。可同时开启多个渠道。配置保存在本机 ~/.config/ateam/push.json，所有项目共用；推送内容（需求标题、卡号）会经过对应服务商的服务器。'),
+    Object.entries(pushCfg).map(([ch, c]) => {
+      const sw = el('input', { type: 'checkbox', class: 'switch', role: 'switch', 'aria-label': `开启${c.label}` });
+      sw.checked = !!c.on;
+      sw.addEventListener('change', () => savePushChannel(ch, sw.checked));
+      const fields = c.fields.map((f) => {
+        const input = el('input', { type: 'text', class: 'setting-text', placeholder: c.values[f] ? `已保存 ${c.values[f]}，留空则不修改` : '未填写', autocomplete: 'off', spellcheck: 'false' });
+        input.value = pushDraft[ch]?.[f] ?? '';
+        input.addEventListener('input', () => { (pushDraft[ch] ??= {})[f] = input.value; });
+        return el('label', { class: 'push-field' }, el('span', { class: 'hint' }, PUSH_FIELD[f]), input);
+      });
+      const msg = pushMsg[ch];
+      return el('div', { class: 'wcard push-channel' },
+        el('div', { class: 'wcard-head' }, el('b', null, c.label), sw),
+        el('p', { class: 'hint' }, PUSH_HINT[ch]),
+        fields,
+        el('div', { class: 'push-actions' },
+          el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); savePushChannel(ch); } }, '保存'),
+          el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); testPush(ch); } }, '发送测试'),
+          msg ? el('span', { class: msg.error ? 'hint push-err' : 'hint' }, msg.text) : null));
+    }),
+  ];
+}
+
 async function saveSetting(key, value) {
   try {
     const res = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
@@ -2034,6 +2104,8 @@ function settingsPage() {
       return it.key === 'testBrowser' && cfg.testBrowser === 'ego' ? [row, egoProfilesSetting()] : row;
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
+    el('div', { class: 'helper-sec' }, el('h4', null, '推送到手机')),
+    pushSettings(),
     el('div', { class: 'helper-sec' }, el('h4', null, '本设备')),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -2359,7 +2431,7 @@ function renderHelper(force = false) {
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
   if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
-  if (!force && helper.tab === 'settings' && document.activeElement?.classList?.contains('setting-num') && panel.contains(document.activeElement)) return;
+  if (!force && helper.tab === 'settings' && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('setting-text')) && panel.contains(document.activeElement)) return;
   if (!force && document.activeElement?.classList?.contains('msg-input') && panel.contains(document.activeElement)) return;
   // 正在编辑测试报告模板：同项目规则，轮询不重画
   if (!force && helper.tab === 'tests' && panel.querySelector('.tpl-page')) return;
@@ -2398,6 +2470,7 @@ function renderHelper(force = false) {
       if (key === 'tests' && !testTpl.loading) testTpl.loaded = false; // 每次切进来重新读，别处改过也能看到
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
       if (key === 'version') loadVersion(false);
+      if (key === 'settings') pushCfg = null; // 每次切进「设置」重新读推送配置
       settingsMsg = '';
       renderHelper(true);
     },

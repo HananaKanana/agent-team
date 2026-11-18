@@ -11,6 +11,7 @@ let CONFIG_DIR = HOME.appendingPathComponent(".config/ateam")
 let PROJECTS = CONFIG_DIR.appendingPathComponent("projects.json")
 let LOGIN_ITEM = HOME.appendingPathComponent("Library/LaunchAgents/com.ateam.menubar.plist")
 let NO_LOGIN_ITEM = CONFIG_DIR.appendingPathComponent("no-login-item")
+let GITHUB = "https://github.com/HananaKanana/agent-team"  // 与 src/update.js 的 REPO 一致
 
 struct Status {
     var port: Int?
@@ -356,6 +357,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             _ = add("检查更新", #selector(checkUpdate(_:)), enabled: !updating)
             menu.addItem(.separator())
         }
+        // 帮助与反馈：GitHub 上的使用说明、版本记录和问题反馈
+        let help = NSMenuItem(title: "帮助与反馈", action: nil, keyEquivalent: "")
+        let hsub = NSMenu()
+        _ = add("使用说明", #selector(openURL(_:)), "\(GITHUB)#readme", to: hsub)
+        _ = add("版本记录", #selector(openURL(_:)), "\(GITHUB)/releases", to: hsub)
+        _ = add("反馈问题", #selector(openURL(_:)), "\(GITHUB)/issues/new", to: hsub)
+        hsub.addItem(.separator())
+        _ = add("GitHub 主页", #selector(openURL(_:)), GITHUB, to: hsub)
+        help.submenu = hsub
+        menu.addItem(help)
+        menu.addItem(.separator())
         let notify = add("新的待处理事项发送系统通知", #selector(toggleNotify(_:)))
         notify.state = notifyOn() ? .on : .off
         let login = add("登录时自动打开", #selector(toggleLogin(_:)))

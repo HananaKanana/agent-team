@@ -2,7 +2,7 @@
 #
 # 发布新版本到 GitHub Releases（HananaKanana/agent-team）。会推送 main 和 tag，由用户运行。
 #
-# 用法：bash agent-installer/release.sh 0.2.0
+# 用法：bash agent-installer/release.sh 1.0.1
 #
 # 步骤：
 #   1. 检查：在 main、工作区干净、版本号比当前新、tag 不存在、gh 已登录；
@@ -24,7 +24,7 @@ die() { printf 'release.sh: %s\n' "$*" >&2; exit 1; }
 log() { printf '\n===== %s =====\n' "$*"; }
 
 NEW="${1:-}"
-[[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "用法：bash agent-installer/release.sh <版本号，如 0.2.0>"
+[[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "用法：bash agent-installer/release.sh <版本号，如 1.0.1>"
 command -v gh >/dev/null 2>&1 || die "需要 GitHub 命令行 gh（brew install gh），并运行 gh auth login 登录"
 gh auth status >/dev/null 2>&1 || die "gh 没有登录：运行 gh auth login"
 

@@ -76,7 +76,7 @@
 
 ### 方式一：安装包（推荐，仅 macOS）
 
-在 <https://github.com/HananaKanana/agent-team/releases> 下载对应芯片的安装包：Apple 芯片（M 系列）选 `ateam-<版本>-arm64.pkg`，Intel 芯片选 `-x64.pkg`。双击安装，输入一次管理员密码。安装包没有签名，第一次打开被拦时到「系统设置 → 隐私与安全性」点「仍要打开」。
+在 <https://github.com/HananaKanana/agent-team/releases/latest> 下载对应芯片的安装包：Apple 芯片（M 系列）选 `ateam-<版本>-arm64.pkg`，Intel 芯片选 `-x64.pkg`。双击安装，输入一次管理员密码。安装包没有签名，第一次打开被拦时到「系统设置 → 隐私与安全性」点「仍要打开」。
 
 安装包自带 Node，装完自动完成：
 
@@ -89,11 +89,11 @@
 
 **菜单栏图标**：点开列出用过的项目（运行过 `ateam` 的项目自动加入，也可「添加项目…」），每个项目显示是否在运行、在线 worker 数、进行中和待处理的数量。菜单顶部列出各项目待你处理的事（与看板「待处理」相同：待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等），点一下在浏览器里直达看板上的那个需求或那张卡；有待处理事项时图标右上角出现小红点，新出现的事项持续 1 分钟后发系统通知，点通知同样直达（菜单里可关闭通知）。项目子菜单：启动并打开看板、重启、停止服务；在线 worker 及各自在做的卡和已做时长（点击直达那张卡，无响应的会标出）；按角色启动 worker（与看板「启动」按钮相同，在设置选的平台中新建会话；缺少 worker 的角色排在最前并标出）；局域网访问是否开启；在 VS Code（已安装时）或终端中打开项目；查看日志。从菜单启动的服务在后台运行，输出写到项目的 `.ateam/serve.log`；用 WorkBuddy 自动发送提示词需要在「系统设置 → 隐私与安全性 → 辅助功能」中允许 ateam。在终端里启动的服务也能识别和停止。退出菜单栏程序不会停止服务。菜单下方「帮助与反馈」可打开 GitHub 上的使用说明、版本记录和问题反馈页。
 
-**升级**：安装版的 `ateam` 服务每 6 小时检查一次 GitHub 上的新版本，有新版本时看板页头和菜单栏会提示。点「立即更新」（或运行 `ateam update`）会下载安装包、核对 sha256，再打开系统安装程序，输入一次密码即可。装完后按看板提示重启服务（提示条上有「重启」按钮），skill 自动是新的，hook 不用重装。新版本有问题时，在看板「使用说明 → 版本」选旧版本「安装此版本」，或运行 `ateam update --version 0.1.9` 回退。
+**升级**：安装版的 `ateam` 服务每 6 小时检查一次 GitHub 上的新版本，有新版本时看板页头和菜单栏会提示。点「立即更新」（或运行 `ateam update`）会下载安装包、核对 sha256，再打开系统安装程序，输入一次密码即可。装完后按看板提示重启服务（提示条上有「重启」按钮），skill 自动是新的，hook 不用重装。新版本有问题时，在看板「使用说明 → 版本」选旧版本「安装此版本」，或运行 `ateam update --version 1.0.0` 回退。
 
 **卸载**：运行 `/Library/Application Support/ateam/卸载 ateam.command`。各项目里的 `.ateam/` 不会删除。
 
-**开发模式**（维护 ateam 源码的人用）：`ateam dev on ~/code/agent-team` 让 `ateam` 命令、skill 和 hook 改用源码仓库的代码，改完代码重启服务即生效，不检查更新；`ateam dev off` 切回安装版；`ateam dev` 查看当前模式。第一次安装时，如果现有 skill 链接指向某个源码仓库（下面方式二的用法），会自动进入开发模式并保持原样，同时删掉 `npm link` 留下的旧命令。
+**开发模式**（维护 ateam 源码的人用）：`ateam dev on ~/code/agent-team` 让 `ateam` 命令、skill 和 hook 改用源码仓库的代码，改完代码重启服务即生效，不检查更新；`ateam dev off` 切回安装版；`ateam dev` 查看当前模式。切换后 skill 链接和 hook 自动改指向，正在运行的服务要重启（菜单栏「重启服务」或看板提示条上的「重启」）才会改用另一份代码；菜单栏顶部和看板「使用说明 → 版本」显示当前模式。第一次安装时，如果现有 skill 链接指向某个源码仓库（下面方式二的用法），会自动进入开发模式并保持原样，同时删掉 `npm link` 留下的旧命令。
 
 **推送到手机**（不需要安装包）：看板「使用说明 → 推送」页先打开总开关，再开启 pushplus（微信）、飞书群机器人、企业微信群机器人、钉钉群机器人，可同时开多个。「待处理」中新出现的事项（需求待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等）持续 1 分钟后推送一次，附局域网看板链接（手机连同一网络时可直接打开）；服务启动时已有的事项、自检问题和「服务需要重启」不推送。配置存在本机 `~/.config/ateam/push.json`（仅本人可读），所有项目共用；推送内容（需求标题、卡号）会经过对应服务商的服务器。飞书、钉钉机器人开了签名校验时填写密钥；钉钉选「自定义关键词」时把关键词设为 `ateam`。
 
@@ -410,7 +410,7 @@ ateam jobs --grep 公告    # 翻看已验收的历史需求（--all 包括没�
 ateam task edit T3 --role backend      # 改任务的角色（待领取或已挂起的任务）
 ateam dismiss --all --user-approved   # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号；让某个角色一个不剩时要加 --user-approved，表示用户同意）
 ateam version --check   # 版本、运行模式（安装版 / 开发模式 / 源码运行），以及有没有新版本
-ateam update        # 安装版：下载新版本并打开安装程序（--version 0.1.9 装回旧版本）
+ateam update        # 安装版：下载新版本并打开安装程序（--version 1.0.0 装回旧版本）
 ateam setup         # 重新链接 skill、安装 hook（安装包装完时自动运行）
 ateam dev on ~/code/agent-team   # 开发模式：改用源码仓库的代码；ateam dev off 切回安装版
 ateam help          # 全部命令
@@ -421,9 +421,9 @@ ateam help          # 全部命令
 在 Mac 上、main 分支、工作区干净时运行（需要 `gh` 已登录，会推送 main 和 tag）：
 
 ```bash
-bash agent-installer/release.sh 0.2.0
+bash agent-installer/release.sh 1.0.1
 ```
 
-它会依次：做发布前检查（所有脚本和看板页面的语法、文档里提到的 `ateam` 命令都存在，不通过就停）→ 改 `package.json` 版本并提交 → 打 arm64 和 x64 两个安装包（下载官方 Node 并核对 sha256，打完展开核对 Node 签名未被改动、文件齐全）→ 生成 `.sha256` → 生成更新说明（上个版本以来的提交标题，可先编辑）→ 确认后打 tag、推送、在 GitHub 建 Release 并上传。只打包不发布：`bash agent-installer/mac/build-all.sh`，产物在 `agent-installer/dist/`。GitHub 仓库需公开，未登录的电脑才能检查更新和下载。
+它会依次：做发布前检查（所有脚本和看板页面的语法、文档里提到的 `ateam` 命令都存在，不通过就停）→ 改 `package.json` 版本并提交 → 打 arm64 和 x64 两个安装包（下载官方 Node 并核对 sha256，打完展开核对 Node 签名未被改动、文件齐全）→ 生成 `.sha256` → 生成更新说明（上个版本以来的提交标题，可先编辑）→ 确认后打 tag、推送、在 GitHub 建 Release 并上传。只打包不发布：`bash agent-installer/mac/build-all.sh`，产物在 `agent-installer/dist/`，建议先装上测试，确认无误后再运行 `release.sh` 发布。GitHub 仓库需公开，未登录的电脑才能检查更新和下载。
 
 设计细节见 [docs/superpowers/specs/2026-10-03-agent-team-design.md](docs/superpowers/specs/2026-10-03-agent-team-design.md)。

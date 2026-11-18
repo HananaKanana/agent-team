@@ -35,7 +35,12 @@ async function findLauncher(key) {
   for (const port of ports) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/ateam-launch`, { headers: { 'x-ateam-key': key }, signal: AbortSignal.timeout(1500) });
-      if (res.status === 401) throw new AteamError('BAD_STATE', '启动插件的密钥不匹配。请在终端重新运行 ateam hook install --platform dsh。');
+      // 只有插件自己回的 401 才是密钥不对；插件没加载时 DSH 本身也回 401（unauthorized），按「没装上」处理
+      if (res.status === 401) {
+        const body = await res.json().catch(() => null);
+        if (body?.message === 'missing or wrong key') throw new AteamError('BAD_STATE', '启动插件的密钥不匹配。请在终端重新运行 ateam hook install --platform dsh。');
+        continue;
+      }
       if (res.ok && (await res.json()).ready) return port;
     } catch (err) {
       if (err instanceof AteamError) throw err;

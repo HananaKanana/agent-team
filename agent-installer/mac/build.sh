@@ -100,7 +100,7 @@ mkdir -p "$BASE_DIR/node/bin"
 ditto "$NODE_DIR/bin/node" "$BASE_DIR/node/bin/node"
 cp "$NODE_DIR/LICENSE" "$BASE_DIR/node/LICENSE"
 # ateam 零依赖：直接复制源码
-for d in bin src skills docs; do ditto "$REPO/$d" "$BASE_DIR/app/$d"; done
+for d in bin src skills docs dsh-plugin; do ditto "$REPO/$d" "$BASE_DIR/app/$d"; done
 cp "$REPO/package.json" "$REPO/README.md" "$BASE_DIR/app/"
 cp "$HERE/ateam" "$ROOT/usr/local/bin/ateam"
 cp "$HERE/uninstall.command" "$BASE_DIR/卸载 ateam.command"
@@ -261,6 +261,7 @@ for f in \
     "Library/Application Support/ateam/app/skills/ateam-lead/SKILL.md" \
     "Library/Application Support/ateam/app/skills/ateam-worker/SKILL.md" \
     "Library/Application Support/ateam/app/skills/browser-cdp-setup/SKILL.md" \
+    "Library/Application Support/ateam/app/dsh-plugin/index.js" \
     "Library/Application Support/ateam/app/package.json" \
     "Library/Application Support/ateam/卸载 ateam.command" \
     "Applications/ateam.app/Contents/MacOS/ateam" \

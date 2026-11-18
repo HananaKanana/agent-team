@@ -102,6 +102,8 @@ function stripPatchBlock(text) {
 }
 
 function installDsh(flags) {
+  // 插件文件不在时不能写配置：哈希会变成空内容的哈希，DSH 加载不到插件，按角色启动 worker 全部失败
+  if (!existsSync(LAUNCHER)) throw new Error(`找不到 ateam 的启动插件 ${LAUNCHER}，ateam 安装不完整。请重新安装 ateam（或在源码仓库中运行）。`);
   const dir = dshProfileDir(flags);
   const version = dshVersion(flags);
   const patchFile = join(dir, 'cordis.patch.yml');

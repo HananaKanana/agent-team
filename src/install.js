@@ -78,6 +78,29 @@ function skillTargets() {
   return out;
 }
 
+const SKILL_NAMES = ['ateam-lead', 'ateam-worker', 'browser-cdp-setup'];
+// 固定位置以外、用户自己建的 ateam skill 软链（比如把 ateam-worker 也链进 ~/.claude/skills，让 Claude Code 当 worker）。
+// 只认指向某份 ateam（源码仓库或安装目录）skills/ 的软链，切换模式、卸载时跟着改，不新建
+function extraLinks() {
+  const h = home();
+  const dshHome = process.env.DSH_HOME || join(h, '.dsh');
+  const dirs = [join(h, '.claude', 'skills'), join(h, '.agents', 'skills'), join(dshHome, 'skills'), join(h, '.workbuddy', 'skills'), join(h, '.codebuddy', 'skills')];
+  const fixed = new Set(skillTargets().map((t) => join(t.dir, t.name)));
+  const out = [];
+  for (const dir of dirs) {
+    for (const name of SKILL_NAMES) {
+      const dest = join(dir, name);
+      if (fixed.has(dest)) continue;
+      try {
+        if (!lstatSync(dest).isSymbolicLink()) continue;
+        const target = resolve(dir, readlinkSync(dest));
+        if (basename(target) === name && basename(dirname(target)) === 'skills' && isRepo(dirname(dirname(target)))) out.push({ platform: dir.replace(h, '~'), name, dir });
+      } catch {}
+    }
+  }
+  return out;
+}
+
 // 现有 skill 软链指向的源码仓库（老的 npm link + 手动软链用法）
 function linkedRepo() {
   for (const t of skillTargets()) {
@@ -96,7 +119,7 @@ function linkedRepo() {
 function linkSkills(source) {
   const lines = [];
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
-  for (const t of skillTargets()) {
+  for (const t of [...skillTargets(), ...extraLinks()]) {
     const dest = join(t.dir, t.name);
     const target = join(source, 'skills', t.name);
     try {
@@ -125,7 +148,7 @@ function linkSkills(source) {
 // 卸载：删掉指向 source 的 skill 软链
 function unlinkSkills(source) {
   const lines = [];
-  for (const t of skillTargets()) {
+  for (const t of [...skillTargets(), ...extraLinks()]) {
     const dest = join(t.dir, t.name);
     try {
       if (lstatSync(dest).isSymbolicLink() && resolve(t.dir, readlinkSync(dest)).startsWith(`${source}/`)) {

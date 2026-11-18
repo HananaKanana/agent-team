@@ -116,6 +116,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         item.menu = menu
         setIcon(attention: false)
         UNUserNotificationCenter.current().delegate = self
+        registerNotifyActions()
         if notifyOn() { requestNotify() }
         loadProjects()
         rebuild()
@@ -531,12 +532,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
 
     func notifyNew() {
-        var current: [String: (String, String, URL?)] = [:]   // key → (项目名, 文字, 直达地址)
+        var current: [String: (String, String, URL?, [String: Any]?, String)] = [:]   // key → (项目名, 文字, 直达地址, 可执行的操作, 项目目录)
         for p in projects {
             guard let st = statuses[p], st.running else { continue }
             for item in st.items {
                 guard let key = item["key"] as? String else { continue }
-                current["\(p)|\(key)"] = (URL(fileURLWithPath: p).lastPathComponent, item["text"] as? String ?? "", st.url(item["hash"] as? String ?? ""))
+                current["\(p)|\(key)"] = (URL(fileURLWithPath: p).lastPathComponent, item["text"] as? String ?? "", st.url(item["hash"] as? String ?? ""), item["act"] as? [String: Any], p)
             }
         }
         // 程序刚启动时已经存在的事不通知
@@ -557,15 +558,85 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             content.title = "ateam · \(v.0)"
             content.body = v.1
             content.sound = .default
-            if let u = v.2 { content.userInfo = ["url": u.absoluteString] }
+            var info: [String: Any] = ["key": k, "path": v.4]
+            if let u = v.2 { info["url"] = u.absoluteString }
+            if let act = v.3, let type = act["type"] as? String {
+                info["act"] = act
+                content.categoryIdentifier = "ateam.\(type)"
+                if type == "accept", let job = act["job"] as? String, let u = statuses[v.4]?.url("\(job)/report") { info["report"] = u.absoluteString }
+            } else {
+                content.categoryIdentifier = "ateam.open"
+            }
+            content.userInfo = info
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: k, content: content, trigger: nil))
         }
     }
 
-    // 点通知：在浏览器里直达
+    // 通知上的按钮。macOS 的横幅通知把按钮收在「选项」里；在「系统设置 → 通知 → ateam」把样式改成「提醒」，按钮会一直显示
+    func registerNotifyActions() {
+        let snooze = UNNotificationAction(identifier: "snooze", title: "30 分钟后再提醒")
+        let cat = { (id: String, actions: [UNNotificationAction]) in UNNotificationCategory(identifier: id, actions: actions + [snooze], intentIdentifiers: []) }
+        UNUserNotificationCenter.current().setNotificationCategories([
+            cat("ateam.accept", [UNNotificationAction(identifier: "accept", title: "验收通过"), UNNotificationAction(identifier: "report", title: "查看汇报", options: [.foreground])]),
+            cat("ateam.spawn", [UNNotificationAction(identifier: "spawn", title: "启动 worker")]),
+            cat("ateam.reclaim", [UNNotificationAction(identifier: "reclaim", title: "收回任务", options: [.destructive])]),
+            cat("ateam.restart", [UNNotificationAction(identifier: "restart", title: "重启服务")]),
+            cat("ateam.open", []),
+        ])
+    }
+
+    // 点通知本身：在浏览器里直达；点按钮：直接执行
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
-        if let text = response.notification.request.content.userInfo["url"] as? String, let url = URL(string: text) { NSWorkspace.shared.open(url) }
-        done()
+        let info = response.notification.request.content.userInfo
+        let open = { (key: String) in if let text = info[key] as? String, let url = URL(string: text) { NSWorkspace.shared.open(url) } }
+        let act = info["act"] as? [String: Any] ?? [:]
+        let path = info["path"] as? String ?? ""
+        let key = info["key"] as? String ?? ""
+        DispatchQueue.main.async {
+            switch response.actionIdentifier {
+            case "accept":
+                guard let job = act["job"] as? String else { break }
+                self.notifyAct(path, "/api/jobs/accept", ["ids": [job]], "\(job) 已验收通过", "验收失败")
+            case "report": open("report")
+            case "spawn":
+                guard let role = act["role"] as? String else { break }
+                self.notifyAct(path, "/api/spawn", ["role": role, "by": "user"], "已启动 \(role) worker", "启动 worker 失败", timeout: 30)
+            case "reclaim":
+                guard let task = act["task"] as? String else { break }
+                self.notifyAct(path, "/api/reclaim", ["id": task, "text": "用户从通知收回"], "\(task) 已收回，退回待领取", "收回任务失败")
+            case "restart":
+                self.notifyAct(path, "/api/restart", [:], "服务正在重启", "重启失败")
+            case "snooze":
+                // 30 分钟后事情还在就再通知一次
+                DispatchQueue.main.asyncAfter(deadline: .now() + 30 * 60) {
+                    self.notified.remove(key)
+                    self.firstSeen[key] = Date(timeIntervalSinceNow: -60)
+                    self.notifyNew()
+                }
+            case UNNotificationDismissActionIdentifier: break
+            default: open("url")
+            }
+            done()
+        }
+    }
+
+    // 通知按钮的操作：成功时发一条简短的确认通知，失败时弹框
+    func notifyAct(_ p: String, _ path: String, _ body: [String: Any], _ okText: String, _ failTitle: String, timeout: TimeInterval = 5) {
+        guard let port = port(p) else { alert(failTitle, "该项目的 ateam 服务没有在运行。"); return }
+        DispatchQueue.global().async {
+            let out = httpJSON("http://127.0.0.1:\(port)\(path)", post: true, body: body, timeout: timeout)
+            DispatchQueue.main.async {
+                if out == nil { self.alert(failTitle, "无法连接该项目的 ateam 服务。") }
+                else if (out?["ok"] as? Bool) != true { self.alert(failTitle, out?["message"] as? String ?? "未知错误") }
+                else {
+                    let c = UNMutableNotificationContent()
+                    c.title = "ateam · \(URL(fileURLWithPath: p).lastPathComponent)"
+                    c.body = okText
+                    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+                }
+                self.refreshStatuses()
+            }
+        }
     }
     // 程序在前台时也显示
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {

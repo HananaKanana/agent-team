@@ -155,3 +155,71 @@ export async function sendPush(message, only = null) {
     }
   }));
 }
+
+// ---------- 定时小结（每日 / 每周），所有项目共用这份设置，各项目的服务各发各的 ----------
+// daily：每天 time 发当天的小结；weekly：每周 weekday（0 = 周日 … 6 = 周六）的 time 发最近 7 天的小结
+const DIGEST_DEFAULT = { daily: { on: false, time: '18:00' }, weekly: { on: false, weekday: 5, time: '18:00' }, sections: {} };
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export function readDigest() {
+  const d = readPush().digest ?? {};
+  return {
+    daily: { ...DIGEST_DEFAULT.daily, ...(d.daily ?? {}) },
+    weekly: { ...DIGEST_DEFAULT.weekly, ...(d.weekly ?? {}) },
+    sections: { ...(d.sections ?? {}) }, // 段落开关，缺省都要（见 digest.js 的 DIGEST_SECTIONS）
+  };
+}
+
+export function saveDigest(kind, { on, time, weekday, sections } = {}) {
+  const cfg = readPush();
+  if (kind === 'sections') {
+    cfg.digest = { ...readDigest(), sections: { ...readDigest().sections, ...Object.fromEntries(Object.entries(sections ?? {}).map(([k, v]) => [k, !!v])) } };
+    writeConfig(cfg);
+    return readDigest();
+  }
+  if (kind !== 'daily' && kind !== 'weekly') throw new Error(`没有这种小结：${kind}`);
+  const cur = readDigest()[kind];
+  if (on !== undefined) cur.on = !!on;
+  if (time !== undefined) {
+    if (!TIME_RE.test(String(time))) throw new Error('时间格式应为 HH:MM，比如 18:00。');
+    cur.time = String(time);
+  }
+  if (kind === 'weekly' && weekday !== undefined) {
+    const w = Number(weekday);
+    if (!Number.isInteger(w) || w < 0 || w > 6) throw new Error('星期应为 0（周日）到 6（周六）。');
+    cur.weekday = w;
+  }
+  cfg.digest = { ...readDigest(), [kind]: cur };
+  writeConfig(cfg);
+  return readDigest();
+}
+
+// ---------- 推哪些事、什么格式 ----------
+// 待处理事项按类型（待处理清单里 key 的前缀）开关，缺省都推
+export const EVENT_TYPES = { accept: '需求待验收', needs: '缺少 worker', quiet: 'worker 无响应', dispute: '审卡分歧待决定', assign: '指派的 worker 不在线', cancel: 'worker 仍在处理已作废的任务', leader: 'leader 未连接' };
+// brief：简洁（只推一行标题）；link：附看板链接；merge：同时出现的几件事合成一条；prefix：标题前缀
+const FORMAT_DEFAULT = { brief: false, link: true, merge: true, prefix: 'ateam' };
+
+export function readPrefs() {
+  const p = readPush().prefs ?? {};
+  return { events: { ...(p.events ?? {}) }, format: { ...FORMAT_DEFAULT, ...(p.format ?? {}) } };
+}
+
+export function savePrefs({ events, format } = {}) {
+  const cfg = readPush();
+  const cur = readPrefs();
+  if (events) for (const [k, v] of Object.entries(events)) if (k in EVENT_TYPES) cur.events[k] = !!v;
+  if (format) {
+    for (const k of ['brief', 'link', 'merge']) if (k in format) cur.format[k] = !!format[k];
+    if ('prefix' in format) {
+      const v = String(format.prefix ?? '').trim();
+      if (v.length > 20) throw new Error('标题前缀最多 20 个字。');
+      cur.format.prefix = v;
+    }
+  }
+  cfg.prefs = cur;
+  writeConfig(cfg);
+  return readPrefs();
+}
+
+export const eventOn = (prefs, key) => prefs.events[String(key).split(':')[0]] !== false;

@@ -14,7 +14,8 @@ import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } fr
 import { runDoctor } from './doctor.js';
 import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
 import { check as checkRelease, install as installRelease } from './update.js';
-import { anyPushOn, maskedPush, pushEnabled, savePush, sendPush, setPushEnabled } from './push.js';
+import { anyPushOn, EVENT_TYPES, eventOn, maskedPush, pushEnabled, readDigest, readPrefs, saveDigest, savePrefs, savePush, sendPush, setPushEnabled } from './push.js';
+import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
 import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
@@ -453,20 +454,21 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 待你处理的事，与看板「待处理」（dashboard.html 的 attentionItems）同一套规则。hash 是看板地址的 #需求/卡号，菜单栏点了直达
   let lanUrls = [];
+  // act：菜单栏通知上可以直接点的操作（验收、启动 worker、收回任务、重启服务），没有就只能打开看板
   function attention() {
     const st = store.state;
     const taskOf = (id) => st.tasks.find((t) => t.id === id);
     const items = [];
     for (const j of st.jobs.slice().reverse()) {
-      if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待验收：${j.title}`, hash: j.id });
+      if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待验收：${j.title}`, hash: j.id, act: { type: 'accept', job: j.id } });
     }
     if (!store.demoFrozen()) {
       for (const n of store.staffingNeeds().needs) {
         const t = taskOf(n.tasks[0]);
-        items.push({ key: `needs:${n.role.toLowerCase()}`, text: `${n.role} 缺少 worker（${n.tasks.join('、')}）`, hash: t ? `${t.jobId}/${t.id}` : '' });
+        items.push({ key: `needs:${n.role.toLowerCase()}`, text: `${n.role} 缺少 worker（${n.tasks.join('、')}）`, hash: t ? `${t.jobId}/${t.id}` : '', act: { type: 'spawn', role: n.role } });
       }
     }
-    if (codeHash() !== startHash) items.push({ key: 'stale', text: '服务需要重启', hash: '' });
+    if (codeHash() !== startHash) items.push({ key: 'stale', text: '服务需要重启', hash: '', act: { type: 'restart' } });
     for (const t of st.tasks) {
       if ((t.critiques || []).some((c) => c.status === 'proposed' || c.status === 'disputed')) items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧待决定`, hash: `${t.jobId}/${t.id}` });
     }
@@ -480,7 +482,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const cancelled = a.cancelNotice?.wasWorking ? taskOf(a.cancelNotice.taskId) : null;
       if (cancelled) items.push({ key: `cancel:${a.id}:${cancelled.id}`, text: `${a.id} 仍在处理已作废的 ${cancelled.id}`, hash: `${cancelled.jobId}/${cancelled.id}` });
       const t = a.stale && a.currentTask ? taskOf(a.currentTask) : null;
-      if (t) items.push({ key: `quiet:${a.id}`, text: `${a.id} 无响应（${t.id}）`, hash: `${t.jobId}/${t.id}` });
+      if (t) items.push({ key: `quiet:${a.id}`, text: `${a.id} 无响应（${t.id}）`, hash: `${t.jobId}/${t.id}`, act: { type: 'reclaim', task: t.id, agent: a.id } });
     }
     for (const c of (doctor ?? []).filter((x) => !x.ok)) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, hash: '' });
     const busy = st.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
@@ -559,13 +561,44 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       pushDone.add(item.key);
       due.push(item);
     }
-    if (!due.length || !anyPushOn()) return;
+    await checkDigest();
+    if (!anyPushOn()) return;
+    const { format, ...prefs } = readPrefs();
+    const send = due.filter((i) => eventOn(prefs, i.key));
+    if (!send.length) return;
     const name = basename(root);
-    const message = due.length === 1
-      ? { title: `ateam · ${name}：${due[0].text}`, lines: [], link: lanLink(due[0].hash) }
-      : { title: `ateam · ${name}：${due.length} 项待处理`, lines: due.map((i) => `· ${i.text}`), link: lanLink() };
-    const results = await sendPush(message);
-    for (const r of results) if (!r.ok) console.error(`推送到${r.channel}失败：${r.error}`);
+    const head = format.prefix ? `${format.prefix} · ${name}` : name;
+    const link = (hash) => (format.link ? lanLink(hash) : '');
+    // 合并：几件事一条；不合并：一件事一条
+    const messages = send.length === 1 || !format.merge
+      ? send.map((i) => ({ title: `${head}：${i.text}`, lines: [], link: link(i.hash) }))
+      : [{ title: `${head}：${send.length} 项待处理`, lines: format.brief ? [] : send.map((i) => `· ${i.text}`), link: link() }];
+    for (const m of messages) {
+      const results = await sendPush(m);
+      for (const r of results) if (!r.ok) console.error(`推送到${r.channel}失败：${r.error}`);
+    }
+  }
+
+  // ---------- 定时小结（digest.js），设置在 push.json，与推送共用渠道 ----------
+  async function digestMessage(kind) {
+    const { format } = readPrefs();
+    let usage = null;
+    try { usage = await usageReport(); } catch {}
+    const d = buildDigest({ kind, state: store.state, usage, items: attention(), name: basename(root), sections: readDigest().sections, brief: format.brief, prefix: format.prefix });
+    return d && { ...d, link: format.link ? lanLink() : '' };
+  }
+  async function checkDigest() {
+    if (!anyPushOn()) return;
+    const cfg = readDigest();
+    for (const kind of ['daily', 'weekly']) {
+      const at = dueAt(kind, cfg, store.digestSent(kind));
+      if (!at) continue;
+      store.markDigest(kind, Date.now()); // 先记下，发送失败也不反复重试
+      const m = await digestMessage(kind);
+      if (!m) continue; // 这一期什么都没发生：不发
+      const results = await sendPush(m);
+      for (const r of results) if (!r.ok) console.error(`小结推送到${r.channel}失败：${r.error}`);
+    }
   }
 
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
@@ -939,7 +972,31 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       };
     },
     // 推送到手机：配置（token、密钥只露末几位）、保存一个渠道、发测试消息
-    'GET /api/push': () => ({ enabled: pushEnabled(), channels: maskedPush() }),
+    'GET /api/push': () => ({ enabled: pushEnabled(), channels: maskedPush(), digest: readDigest(), prefs: readPrefs(), eventTypes: EVENT_TYPES, digestSections: DIGEST_SECTIONS }),
+    // 推哪些事、什么格式
+    'POST /api/push/prefs': (b) => {
+      try { return { prefs: savePrefs({ events: b.events, format: b.format }) }; } catch (err) { throw new AteamError('INVALID', err.message); }
+    },
+    // 定时小结：kind = daily / weekly 改开关和时间，kind = sections 改段落
+    'POST /api/push/digest': (b) => {
+      try { return { digest: saveDigest(String(b.kind ?? ''), b) }; } catch (err) { throw new AteamError('INVALID', err.message); }
+    },
+    // 预览：按现在的数据和设置生成一份（不发）
+    'GET /api/push/digest': async (_b, url) => {
+      const kind = url.searchParams.get('kind') === 'weekly' ? 'weekly' : 'daily';
+      return { preview: await digestMessage(kind) };
+    },
+    // 立即发一份到所有开启的渠道
+    'POST /api/push/digest/send': async (b) => {
+      const kind = b.kind === 'weekly' ? 'weekly' : 'daily';
+      if (!anyPushOn()) throw new AteamError('INVALID', '请先打开推送总开关并开启至少一个渠道。');
+      const m = await digestMessage(kind);
+      if (!m) throw new AteamError('INVALID', '这段时间没有任何进展，没有可发送的内容。');
+      const results = await sendPush(m);
+      const bad = results.filter((r) => !r.ok);
+      if (bad.length === results.length) throw new AteamError('INVALID', `发送失败：${bad.map((r) => r.error).join('；')}`);
+      return { sent: results.filter((r) => r.ok).length, failed: bad };
+    },
     // 只给 enabled：改总开关；给 channel：保存一个渠道
     'POST /api/push': (b) => {
       try {

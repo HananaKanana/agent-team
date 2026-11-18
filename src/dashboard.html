@@ -375,6 +375,11 @@ select.setting-num { width: auto; text-align: left; }
 .setting-text:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .push-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .push-err { color: var(--rework); }
+.push-time { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.push-sections { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; font-size: 13px; }
+.push-section { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.push-preview { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: var(--sunken); font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; }
+.push-preview b { display: block; margin-bottom: 4px; }
 .usage-wrap { grid-template-columns: minmax(0, 960px); }
 .usage-sheet h2 { font-size: 15px; margin: 28px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
 .usage-sheet .usage-chart { height: 160px; }
@@ -2061,7 +2066,7 @@ const PUSH_HINT = {
 };
 async function loadPush() {
   pushLoading = true;
-  try { const out = await (await fetch('/api/push', { cache: 'no-store' })).json(); pushCfg = out.channels ?? null; pushOn = !!out.enabled; } catch {}
+  try { const out = await (await fetch('/api/push', { cache: 'no-store' })).json(); pushCfg = out.channels ?? null; pushOn = !!out.enabled; pushExtra = out.prefs ? { prefs: out.prefs, digest: out.digest, eventTypes: out.eventTypes, digestSections: out.digestSections } : null; } catch {}
   pushLoading = false;
   if (helper.open && helper.tab === 'push') renderHelper(true);
 }
@@ -2083,6 +2088,82 @@ async function testPush(ch) {
   } catch { pushMsg[ch] = { text: '无法连接 ateam 服务。', error: true }; }
   renderHelper(true);
 }
+// 推哪些事、格式、定时小结（push.json 里，所有项目共用）
+let pushExtra = null;
+let pushExtraMsg = '';
+let pushPreview = null; // { kind, title, lines } 或 { kind, error }
+async function savePushPrefs(body) {
+  const out = await post('/api/push/prefs', body);
+  if (out.ok) { pushExtra.prefs = out.prefs; pushExtraMsg = '已保存。'; } else pushExtraMsg = out.message || '保存失败。';
+  renderHelper(true);
+}
+async function saveDigestCfg(kind, body) {
+  const out = await post('/api/push/digest', { kind, ...body });
+  if (out.ok) { pushExtra.digest = out.digest; pushExtraMsg = '已保存。'; } else pushExtraMsg = out.message || '保存失败。';
+  renderHelper(true);
+}
+async function previewDigest(kind) {
+  pushPreview = { kind, loading: true };
+  renderHelper(true);
+  try {
+    const out = await (await fetch(`/api/push/digest?kind=${kind}`, { cache: 'no-store' })).json();
+    pushPreview = !out.ok ? { kind, error: out.message } : out.preview ? { kind, ...out.preview } : { kind, error: '这段时间没有任何进展，到点时不会发送。' };
+  } catch { pushPreview = { kind, error: '无法连接 ateam 服务。' }; }
+  renderHelper(true);
+}
+async function sendDigestNow(kind) {
+  pushExtraMsg = '发送中…';
+  renderHelper(true);
+  const out = await post('/api/push/digest/send', { kind });
+  pushExtraMsg = out.ok ? `已发送到 ${out.sent} 个渠道${out.failed?.length ? `，${out.failed.length} 个失败` : ''}。` : out.message || '发送失败。';
+  renderHelper(true);
+}
+function pushOptions() {
+  if (!pushExtra) return el('p', { class: 'hint' }, '当前服务版本不支持推送内容和定时小结设置，请重启 ateam 服务。');
+  const { prefs, digest, eventTypes, digestSections } = pushExtra;
+  const stop = (n) => { n.addEventListener('click', (e) => e.stopPropagation()); return n; };
+  const sw = (checked, onChange, label) => { const i = stop(el('input', { type: 'checkbox', class: 'switch', role: 'switch', 'aria-label': label })); i.checked = checked; i.addEventListener('change', () => onChange(i.checked)); return i; };
+  const row = (input, title, hint) => el('label', { class: 'setting' }, input, el('span', null, el('b', null, title), hint ? el('span', { class: 'hint' }, hint) : null));
+  const timeInput = (value, onChange) => { const i = stop(el('input', { type: 'time', class: 'setting-num', value })); i.addEventListener('change', () => i.value && onChange(i.value)); return i; };
+  const fmt = prefs.format;
+  const style = stop(el('select', { class: 'setting-num' }, el('option', { value: 'detail' }, '详细'), el('option', { value: 'brief' }, '简洁')));
+  style.value = fmt.brief ? 'brief' : 'detail';
+  style.addEventListener('change', () => savePushPrefs({ format: { brief: style.value === 'brief' } }));
+  const prefix = stop(el('input', { type: 'text', class: 'setting-text', value: fmt.prefix, placeholder: '不加前缀', maxlength: '20' }));
+  prefix.style.width = '140px';
+  prefix.addEventListener('change', () => savePushPrefs({ format: { prefix: prefix.value } }));
+  const weekday = stop(el('select', { class: 'setting-num' }, ['周日', '周一', '周二', '周三', '周四', '周五', '周六'].map((w, i) => el('option', { value: String(i) }, w))));
+  weekday.value = String(digest.weekly.weekday);
+  weekday.addEventListener('change', () => saveDigestCfg('weekly', { weekday: Number(weekday.value) }));
+  const pv = pushPreview;
+  return [
+    el('div', { class: 'helper-sec' }, el('h4', null, '推送哪些事项')),
+    el('p', { class: 'hint' }, '「待处理」中新出现的事项按类型推送。关闭的类型不推送，看板和菜单栏照常提示。'),
+    Object.entries(eventTypes).map(([k, label]) => row(sw(prefs.events[k] !== false, (on) => savePushPrefs({ events: { [k]: on } }), label), label)),
+    el('div', { class: 'helper-sec' }, el('h4', null, '格式')),
+    el('label', { class: 'setting' }, style, el('span', null, el('b', null, '内容'), el('span', { class: 'hint' }, '详细：标题加逐项明细；简洁：只推一行标题（几件事合并时只写数量，小结压成一行）。'))),
+    row(sw(fmt.link, (on) => savePushPrefs({ format: { link: on } }), '附带看板链接'), '附带看板链接', '附局域网只读看板的地址，手机连接同一网络时可直接打开并定位到对应事项。'),
+    row(sw(fmt.merge, (on) => savePushPrefs({ format: { merge: on } }), '多项合并为一条'), '同时出现的多项合并为一条', '关闭后每件事单独推送一条。'),
+    el('label', { class: 'setting' }, prefix, el('span', null, el('b', null, '标题前缀'), el('span', { class: 'hint' }, '标题形如「前缀 · 项目名：内容」，留空则不加。钉钉机器人用「自定义关键词」校验时，关键词须出现在标题中。'))),
+    el('div', { class: 'helper-sec' }, el('h4', null, '定时小结')),
+    el('p', { class: 'hint' }, '到点时，通过上方开启的渠道推送各项目的小结：每日小结统计当天，每周小结统计最近 7 天。服务未运行时不补发；这段时间没有任何进展时不发送。'),
+    el('label', { class: 'setting' }, sw(digest.daily.on, (on) => saveDigestCfg('daily', { on }), '每日小结'), el('span', null, el('b', null, '每日小结'), el('span', { class: 'hint push-time' }, '每天 ', timeInput(digest.daily.time, (v) => saveDigestCfg('daily', { time: v })), ' 发送'))),
+    el('label', { class: 'setting' }, sw(digest.weekly.on, (on) => saveDigestCfg('weekly', { on }), '每周小结'), el('span', null, el('b', null, '每周小结'), el('span', { class: 'hint push-time' }, '每', weekday, ' ', timeInput(digest.weekly.time, (v) => saveDigestCfg('weekly', { time: v })), ' 发送'))),
+    el('p', { class: 'hint' }, '小结包含：'),
+    el('div', { class: 'push-sections' }, Object.entries(digestSections).map(([k, label]) => {
+      const c = stop(el('input', { type: 'checkbox' }));
+      c.checked = digest.sections[k] !== false;
+      c.addEventListener('change', () => saveDigestCfg('sections', { sections: { [k]: c.checked } }));
+      return el('label', { class: 'push-section' }, c, label);
+    })),
+    el('div', { class: 'push-actions' },
+      el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); previewDigest('daily'); } }, '预览每日小结'),
+      el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); previewDigest('weekly'); } }, '预览每周小结'),
+      pv && !pv.loading && !pv.error ? el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); sendDigestNow(pv.kind); } }, '立即发送这份') : null,
+      pushExtraMsg ? el('span', { class: 'hint' }, pushExtraMsg) : null),
+    pv ? el('div', { class: 'push-preview' }, pv.loading ? '生成中…' : pv.error ? pv.error : [el('b', null, pv.title), pv.lines.map((l) => el('div', null, l))]) : null,
+  ];
+}
 async function setPushOn(on) {
   const out = await post('/api/push', { enabled: on });
   if (out.ok) { pushCfg = out.channels; pushOn = !!out.enabled; }
@@ -2100,7 +2181,7 @@ function pushPage() {
   if (!pushOn) return [head];
   return [
     head,
-    el('p', { class: 'hint' }, '「待处理」中新出现的事项（需求待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等）持续 1 分钟后推送一次，附局域网看板链接（手机连接同一网络时可直接打开）。可同时开启多个渠道。配置保存在本机 ~/.config/ateam/push.json，所有项目共用；推送内容（需求标题、卡号）会经过对应服务商的服务器。'),
+    el('p', { class: 'hint' }, '「待处理」中新出现的事项（需求待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等）持续 1 分钟后推送一次；推送哪些事项、格式和定时小结在下方设置。可同时开启多个渠道。配置保存在本机 ~/.config/ateam/push.json，所有项目共用；推送内容（需求标题、卡号）会经过对应服务商的服务器。'),
     Object.entries(pushCfg).map(([ch, c]) => {
       const sw = el('input', { type: 'checkbox', class: 'switch', role: 'switch', 'aria-label': `开启${c.label}` });
       sw.checked = !!c.on;
@@ -2121,6 +2202,7 @@ function pushPage() {
           el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); testPush(ch); } }, '发送测试'),
           msg ? el('span', { class: msg.error ? 'hint push-err' : 'hint' }, msg.text) : null));
     }),
+    pushOptions(),
   ];
 }
 

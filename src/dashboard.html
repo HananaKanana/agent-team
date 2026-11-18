@@ -380,6 +380,8 @@ select.setting-num { width: auto; text-align: left; }
 .push-section { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .push-preview { margin-top: 10px; padding: 10px 12px; border-radius: 6px; background: var(--sunken); font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; }
 .push-preview b { display: block; margin-bottom: 4px; }
+.push-preview b.inline { display: inline; margin: 0; }
+.push-preview-h { margin-top: 6px; }
 .usage-wrap { grid-template-columns: minmax(0, 960px); }
 .usage-sheet h2 { font-size: 15px; margin: 28px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
 .usage-sheet .usage-chart { height: 160px; }
@@ -2150,9 +2152,9 @@ function pushOptions() {
     el('label', { class: 'setting' }, sw(digest.daily.on, (on) => saveDigestCfg('daily', { on }), '每日小结'), el('span', null, el('b', null, '每日小结'), el('span', { class: 'hint push-time' }, '每天 ', timeInput(digest.daily.time, (v) => saveDigestCfg('daily', { time: v })), ' 发送'))),
     el('label', { class: 'setting' }, sw(digest.weekly.on, (on) => saveDigestCfg('weekly', { on }), '每周小结'), el('span', null, el('b', null, '每周小结'), el('span', { class: 'hint push-time' }, '每', weekday, ' ', timeInput(digest.weekly.time, (v) => saveDigestCfg('weekly', { time: v })), ' 发送'))),
     el('p', { class: 'hint' }, '小结包含：'),
-    el('div', { class: 'push-sections' }, Object.entries(digestSections).map(([k, label]) => {
+    el('div', { class: 'push-sections' }, Object.entries(digestSections).map(([k, [label, def]]) => {
       const c = stop(el('input', { type: 'checkbox' }));
-      c.checked = digest.sections[k] !== false;
+      c.checked = digest.sections[k] ?? def;
       c.addEventListener('change', () => saveDigestCfg('sections', { sections: { [k]: c.checked } }));
       return el('label', { class: 'push-section' }, c, label);
     })),
@@ -2161,7 +2163,11 @@ function pushOptions() {
       el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); previewDigest('weekly'); } }, '预览每周小结'),
       pv && !pv.loading && !pv.error ? el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); sendDigestNow(pv.kind); } }, '立即发送这份') : null,
       pushExtraMsg ? el('span', { class: 'hint' }, pushExtraMsg) : null),
-    pv ? el('div', { class: 'push-preview' }, pv.loading ? '生成中…' : pv.error ? pv.error : [el('b', null, pv.title), pv.lines.map((l) => el('div', null, l))]) : null,
+    pv ? el('div', { class: 'push-preview' }, pv.loading ? '生成中…' : pv.error ? pv.error : [el('b', null, pv.title), pv.lines.map((l) => {
+      // 「**今天完成**」这样的小标题加粗显示，「**Token**：…」只加粗前面一段
+      const m = l.match(/^\*\*(.+?)\*\*(.*)$/);
+      return m ? el('div', { class: m[2] ? '' : 'push-preview-h' }, el('b', { class: 'inline' }, m[1]), m[2]) : el('div', null, l);
+    })]) : null,
   ];
 }
 async function setPushOn(on) {

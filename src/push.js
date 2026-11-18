@@ -110,7 +110,8 @@ const SENDERS = {
     if (out.code !== 200) throw new Error(out.msg || `返回码 ${out.code}`);
   },
   async feishu(c, { title, lines, link }) {
-    const body = { msg_type: 'text', content: { text: [title, ...lines, ...(link ? [link] : [])].join('\n') } };
+    // 飞书发纯文本：去掉 Markdown 的加粗记号
+    const body = { msg_type: 'text', content: { text: [title, ...lines.map((l) => l.replace(/\*\*/g, '')), ...(link ? [link] : [])].join('\n') } };
     if (c.secret) {
       // 飞书签名：以「时间戳\n密钥」为 key 对空字符串做 HmacSHA256，再 base64
       const timestamp = String(Math.floor(Date.now() / 1000));

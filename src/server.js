@@ -1185,7 +1185,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   await new Promise((resolve, reject) => {
     server.once('error', (err) => {
       if (err.code === 'EADDRINUSE') {
-        reject(new Error(`端口 ${port} 被占用。请重新运行 ateam serve（会自动找空闲端口），或用 --port 指定一个。`));
+        reject(Object.assign(new Error(`端口 ${port} 被占用。请重新运行 ateam serve（会自动找空闲端口），或用 --port 指定一个。`), { code: 'EADDRINUSE' }));
       } else {
         reject(err);
       }

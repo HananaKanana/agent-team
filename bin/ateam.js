@@ -244,7 +244,13 @@ async function pickPort(wanted, explicit) {
   const here = resolve(process.cwd());
   for (let port = wanted; port < wanted + 20 && port <= 65535; port++) {
     if (await portFree(port)) return port;
-    const root = await ateamRootAt(port);
+    let root = await ateamRootAt(port);
+    // 占着端口却不是 ateam 服务：可能是同时启动的另一个 ateam 在试探端口或刚开始监听，稍等再看
+    for (let i = 0; !root && i < 4; i++) {
+      await new Promise((r) => setTimeout(r, 300));
+      if (await portFree(port)) return port;
+      root = await ateamRootAt(port);
+    }
     if (root && resolve(root) === here) fail(`这个项目的 ateam 服务已经在运行：http://127.0.0.1:${port}。不用再启动；要重启的话，点看板提示条上的「重启」或菜单栏 ateam 图标里的「重启服务」，或在原来的终端里按 Ctrl+C 后重新运行。`);
     if (explicit) fail(`端口 ${port} 被占用${root ? `（另一个项目 ${root} 的 ateam 服务）` : ''}。换一个端口，或者去掉 --port 让它自动找空闲端口。`);
   }
@@ -408,6 +414,15 @@ const commands = {
       const lan = !flags.local && flags.host !== '127.0.0.1';
       server = await startServer({ root: process.cwd(), port, leaseMin, idleMin, lan, argv: process.argv.slice(2) });
     } catch (err) {
+      // 两个启动同时进行（比如重启的间隙又点了「启动」）：检查时端口还空着，监听时被另一个抢先。
+      // 抢到的是本项目的服务就不算出错
+      if (err.code === 'EADDRINUSE') {
+        const root = await ateamRootAt(port);
+        if (root && resolve(root) === resolve(process.cwd())) {
+          console.log(`这个项目的 ateam 服务已经在运行（同时启动了两次，另一次先启动成功）：http://127.0.0.1:${port}。不用再启动。`);
+          process.exit(0);
+        }
+      }
       fail(err.message);
     }
     const layout = server.ateamLayout;

@@ -468,10 +468,33 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     }
 
     // 后台启动：用登录 shell（带上用户的 PATH，git 等命令才找得到），输出追加到 .ateam/serve.log
+    // 正在运行的话返回端口（同步发请求，不要在主线程调用）
+    func runningPort(_ p: String) -> Int? {
+        guard let text = try? String(contentsOfFile: p + "/.ateam/port", encoding: .utf8), let port = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
+        guard let s = httpJSON("http://127.0.0.1:\(port)/api/summary"), (s["ok"] as? Bool) == true, let root = s["root"] as? String, samePath(root, p) else { return nil }
+        return port
+    }
+
     @objc func start(_ sender: NSMenuItem) {
         guard let p = sender.representedObject as? String else { return }
         busy[p] = "启动中…"
         rebuild()
+        // 菜单里的状态可能是旧的（比如刚好在重启的间隙刷新到「未运行」）：先确认一次，已在运行就直接打开看板，不再启动第二个
+        DispatchQueue.global().async {
+            let running = self.runningPort(p)
+            DispatchQueue.main.async {
+                if let port = running {
+                    self.busy[p] = nil
+                    self.refreshStatuses()
+                    if let url = URL(string: "http://127.0.0.1:\(port)/") { NSWorkspace.shared.open(url) }
+                    return
+                }
+                self.launch(p)
+            }
+        }
+    }
+
+    func launch(_ p: String) {
         try? FileManager.default.createDirectory(atPath: p + "/.ateam", withIntermediateDirectories: true)
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")

@@ -178,6 +178,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // runtime.json 里一直在长的几块收一收：启动时、送达事件后、租约扫描时各跑一次，没东西可收就不动
   function compactState() {
     let dirty = false;
+    // 早期测试版给没有会话记录的旧卡写过 "tokens": null（没有意义，还改动了已归档的需求文件），去掉
+    for (const t of state.tasks) if (t.tokens === null) { delete t.tokens; dirty = true; }
     for (const e of state.events) {
       if (e.delivered && e.text !== clip(e.text)) { e.text = clip(e.text); dirty = true; }
     }
@@ -1379,10 +1381,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   const TOKEN_ON = new Set(['claimed', 'progress', 'asked', 'demo_saved']);
   const TOKEN_OFF_BY_WORKER = new Set(['submitted', 'parked']);
   const TOKEN_OFF = new Set(['approved', 'released', 'cancelled', 'handoff']);
-  function taskTokenWindows(taskId) {
-    const target = getTask(taskId);
-    const agents = new Set(target.history.filter((h) => TOKEN_ON.has(h.type) && !NOT_WORKER.has(h.actor)).map((h) => h.actor));
-    if (!agents.size) return [];
+  // 每个 worker 编号做过哪些卡、各在什么时间段：Map(编号 → [{ task, from, to }])，按时间排好。
+  // 编号会让给新 worker，但同一时间只属于一个 worker，按时间段对会话记录不会串
+  function agentSegments() {
     const marks = [];
     for (const t of state.tasks) {
       let last = null;
@@ -1395,28 +1396,44 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       }
     }
     marks.sort((a, b) => a.ts - b.ts);
-    const out = [];
-    for (const agentId of agents) {
-      const sessions = [...new Set([
-        ...(state.hookSessions ?? []).filter((x) => x.agentId === agentId).map((x) => x.session),
-        ...state.agents.filter((a) => a.id === agentId && a.hookSession).map((a) => a.hookSession),
-      ])];
-      let cur = null;
-      let from = 0;
-      const close = (to) => { if (cur === taskId) out.push({ agentId, sessions, from, to }); };
-      for (const m of marks) {
-        if (m.agentId !== agentId) continue;
-        if (m.on) {
-          if (cur === m.task) continue;
-          close(m.ts);
-          cur = m.task;
-          from = m.ts;
-        } else if (cur === m.task) {
-          close(m.ts);
-          cur = null;
-        }
+    const out = new Map();
+    const cur = new Map(); // 编号 → { task, from }
+    const close = (agentId, to) => {
+      const c = cur.get(agentId);
+      if (!c) return;
+      if (!out.has(agentId)) out.set(agentId, []);
+      out.get(agentId).push({ task: c.task, from: c.from, to });
+      cur.delete(agentId);
+    };
+    for (const m of marks) {
+      const c = cur.get(m.agentId);
+      if (m.on) {
+        if (c?.task === m.task) continue;
+        close(m.agentId, m.ts);
+        cur.set(m.agentId, { task: m.task, from: m.ts });
+      } else if (c?.task === m.task) {
+        close(m.agentId, m.ts);
       }
-      close(now());
+    }
+    for (const agentId of [...cur.keys()]) close(agentId, now());
+    return out;
+  }
+
+  // hook 记下的编号 → 会话（含历史）
+  function boundSessions() {
+    const out = [...(state.hookSessions ?? [])].map(({ agentId, session }) => ({ agentId, session }));
+    for (const a of state.agents) if (a.hookSession && !out.some((x) => x.session === a.hookSession)) out.push({ agentId: a.id, session: a.hookSession });
+    return out;
+  }
+
+  // 一张卡的处理时间段：[{ agentId, sessions, from, to }]（server 没有项目级明细时用）
+  function taskTokenWindows(taskId) {
+    getTask(taskId);
+    const bound = boundSessions();
+    const out = [];
+    for (const [agentId, segs] of agentSegments()) {
+      const sessions = [...new Set(bound.filter((x) => x.agentId === agentId).map((x) => x.session))];
+      for (const seg of segs) if (seg.task === taskId) out.push({ agentId, sessions, from: seg.from, to: seg.to });
     }
     return out;
   }
@@ -2357,7 +2374,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, taskTokenWindows, setTaskTokens, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, taskTokenWindows, agentSegments, boundSessions, setTaskTokens, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

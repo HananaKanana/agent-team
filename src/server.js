@@ -16,7 +16,8 @@ import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamV
 import { check as checkRelease, install as installRelease } from './update.js';
 import { anyPushOn, maskedPush, pushEnabled, savePush, sendPush, setPushEnabled } from './push.js';
 import { loadState, saveState } from './persist.js';
-import { taskUsage } from './usage.js';
+import { collect as collectUsage, totalOf } from './usage.js';
+import { buildReport } from './usage-report.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -494,23 +495,47 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   const pushDone = new Set();
   let pushBaselined = false;
   const lanLink = (hash = '') => (lanUrls[0] ? `${lanUrls[0]}/${hash ? `#${hash}` : ''}` : '');
-  // ---------- token 用量（DeepSeek Harness 的会话记录，见 usage.js）----------
-  // 已通过的卡用记在卡上的数；其他卡现算（进行中的卡随 worker 干活增长）。
-  // 返回 { input, cacheRead, output, calls, missing, live }；没人做过 { none }；本机没有会话记录 { unavailable }
-  function tokensOf(task) {
-    if (task.status === 'approved' && 'tokens' in task) return task.tokens ? { ...task.tokens, live: false } : { unavailable: true };
-    const windows = store.taskTokenWindows(task.id);
-    if (!windows.length) return { none: true };
-    const u = taskUsage(windows);
-    return u ? { ...u, live: task.status !== 'approved' } : { unavailable: true };
+  // ---------- token 用量（DeepSeek Harness 的会话记录，见 usage.js、usage-report.js）----------
+  // 明细要解压会话记录，30 秒内复用上一次的结果（解压结果按文件缓存，会话没变就不再解）
+  let usageCache = null;
+  let usageRunning = null;
+  async function usageReport(fresh = false) {
+    if (!fresh && usageCache && Date.now() - usageCache.generatedAt < 30000) return usageCache;
+    // 同时来的几个请求共用一次计算
+    usageRunning ??= (async () => {
+      try {
+        const collected = await collectUsage({ root, segments: store.agentSegments(), bound: store.boundSessions() });
+        usageCache = buildReport({ state: store.state, collected });
+        return usageCache;
+      } finally { usageRunning = null; }
+    })();
+    return usageRunning;
+  }
+  // 卡详情的「Token」：已通过的卡用记在卡上的数，其他卡现算（进行中的卡随 worker 干活增长）。
+  // 返回 { input, cacheRead, output, calls, live, heavy }；没人做过 { none }；本机没有会话记录 { unavailable }
+  async function tokensOf(task) {
+    const r = await usageReport();
+    const heavy = r.heavyOf(task.id);
+    if (task.status === 'approved' && task.tokens) return { ...task.tokens, live: false, heavy };
+    const segs = [...store.agentSegments()].filter(([, list]) => list.some((x) => x.task === task.id));
+    if (!segs.length) return { none: true };
+    const u = r.perTask.get(task.id);
+    if (u) return { ...u, live: task.status !== 'approved', heavy };
+    // 做这张卡的 worker 有会话记录（只是这张卡还没调用过模型）记 0；都没有（WorkBuddy 等）算没有数据
+    if (segs.some(([agentId]) => r.agentsSeen.has(agentId))) return { input: 0, cacheRead: 0, output: 0, calls: 0, live: task.status !== 'approved', heavy: null };
+    return { unavailable: true };
   }
   // 卡通过后把用量记到卡上：之后 worker 下线、编号让给别人、会话记录被删，都不影响查看
-  function snapshotTokens() {
-    for (const t of store.state.tasks) {
-      if (t.status !== 'approved' || 'tokens' in t) continue;
-      const windows = store.taskTokenWindows(t.id);
-      const u = windows.length ? taskUsage(windows) : null;
-      store.setTaskTokens(t.id, u ? { input: u.input, cacheRead: u.cacheRead, output: u.output, calls: u.calls, ...(u.missing ? { missing: u.missing } : {}) } : null);
+  // 只记最近 7 天内通过、确实有用量的卡：更早的卡会话多半已不在，不往已归档的需求文件里写空值（它们提交在项目的 git 里）
+  const SNAPSHOT_WINDOW = 7 * 24 * 60 * 60 * 1000;
+  const approvedAt = (t) => [...t.history].reverse().find((h) => h.type === 'approved')?.ts ?? 0;
+  async function snapshotTokens() {
+    const due = () => store.state.tasks.filter((t) => t.status === 'approved' && !('tokens' in t) && Date.now() - approvedAt(t) < SNAPSHOT_WINDOW);
+    if (!due().length) return;
+    const r = await usageReport(true);
+    for (const t of due()) {
+      const u = r.perTask.get(t.id);
+      if (u && totalOf(u)) store.setTaskTokens(t.id, { input: u.input, cacheRead: u.cacheRead, output: u.output, calls: u.calls });
     }
   }
 
@@ -691,7 +716,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total, b.viewport ?? null) };
     },
-    'GET /api/task-tokens': (_b, url) => ({ tokens: tokensOf(store.getTask(url.searchParams.get('id') ?? '')) }),
+    'GET /api/task-tokens': async (_b, url) => ({ tokens: await tokensOf(store.getTask(url.searchParams.get('id') ?? '')) }),
+    'GET /api/usage': async (_b, url) => {
+      const { perTask, heavyOf, agentsSeen, ...report } = await usageReport(url.searchParams.get('fresh') === '1');
+      return { usage: report };
+    },
     'GET /api/demo/ops': async (_b, url) => {
       await settleOps();
       const task = store.getTask(url.searchParams.get('id') ?? '');
@@ -1209,7 +1238,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   setTimeout(() => checkPush().catch(() => {}), 5000).unref();
   setInterval(() => checkPush().catch(() => {}), 15000).unref();
   // token 用量：每分钟把新通过的卡的用量记到卡上
-  setTimeout(() => { try { snapshotTokens(); } catch {} }, 10000).unref();
-  setInterval(() => { try { snapshotTokens(); } catch {} }, 60000).unref();
+  // 启动 10 秒后先算一遍（顺带把会话记录解压进缓存，之后打开「用量」页就快了），之后每分钟看一次
+  setTimeout(() => { usageReport(true).then(snapshotTokens).catch(() => {}); }, 10000).unref();
+  setInterval(() => { snapshotTokens().catch(() => {}); }, 60000).unref();
   return server;
 }

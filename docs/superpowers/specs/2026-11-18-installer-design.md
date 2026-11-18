@@ -65,13 +65,17 @@ postinstall 永远成功退出，出问题写进 `/tmp/ateam-install.log`；看�
 - **检查**：安装版的 `ateam serve` 启动时和之后每 6 小时请求 `https://api.github.com/repos/HananaKanana/agent-team/releases/latest`（不带用户信息，User-Agent 写 `ateam-update`）。tag `vX.Y.Z` 比本机 `package.json` 的版本新，且有本机架构的安装包时，看板页头显示「有新版本 X.Y.Z」。查不到（没联网、仓库不公开、超出 GitHub 未登录限额）就不显示，不报错。
 - **更新**：点开显示该版本的更新说明（Release 正文）和「立即更新」。ateam 下载 `ateam-X.Y.Z-<arm64|x64>.pkg` 到临时目录（显示进度），`open` 打开系统安装程序，用户输一次密码完成安装。Node 下载的文件不带隔离标记，不会被 Gatekeeper 拦。
 - **装完**：正在运行的 `ateam serve` 发现代码变了，显示现有的「服务需要重启」提示。skill 是软链，自动是新内容。
+- **校验**：每个安装包在 Release 里附一份 `<安装包名>.sha256`。下载完先核对，对不上就删除文件、提示「安装包校验失败」，不打开安装程序。
+- **回退**：`ateam update --version X.Y.Z` 安装指定版本（可以比当前旧）；看板「版本」页列出最近的版本，旧版本旁有「安装此版本」。
 - 局域网只读访客看不到「立即更新」。
 - 命令行：`ateam version` 显示版本和模式，`ateam update` 做同样的检查和下载安装。
+- **看板「使用说明 → 版本」页**：当前版本、模式（安装版 / 开发模式：仓库路径）、上次检查更新的时间和结果、「检查更新」按钮，以及最近几个版本的更新说明（取自 Release 正文）。
 
 ## 打包与发布
 
 - `agent-installer/mac/build.sh`：下载官方 Node（与 apiloop 同版本，核 sha256，不重新签名），复制 app 文件，写启动脚本，`pkgbuild` + `productbuild` 生成 `agent-installer/dist/ateam-<版本>-<arm64|x64>.pkg`（不入库）。安装界面拦下装错架构的情况。
-- `agent-installer/release.sh <版本>`：要求在 main、工作区干净；改 `package.json` 版本并提交、打 tag、打两个包、推送 main 和 tag、`gh release create` 上传两个包，更新说明默认取上个 tag 以来的提交标题，可先编辑。**由用户运行**（会推送）。
+- **发布前检查**（`release.sh` 打包前，任何一项不过就停止，不发布）：所有源码 `node --check`；README、skills、看板说明里出现的 `ateam <子命令>` 都是存在的命令；打完包展开核对文件齐全、Node 的 TeamIdentifier 和 sha256 与下载件一致。
+- `agent-installer/release.sh <版本>`：要求在 main、工作区干净；改 `package.json` 版本并提交、打 tag、打两个包、推送 main 和 tag、`gh release create` 上传两个包和各自的 `.sha256`，更新说明默认取上个 tag 以来的提交标题，可先编辑。**由用户运行**（会推送）。
 
 ## 卸载
 

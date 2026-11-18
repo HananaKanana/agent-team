@@ -17,6 +17,14 @@ if [ -L /usr/local/bin/ateam ]; then
     rm -f /usr/local/bin/ateam
 fi
 
+# 旧版本的程序目录整个删掉再装：Installer 只覆盖、不删多余的文件，新版本删掉或不再打包的文件
+# （比如 1.0.2 及以前带的 docs/）会一直留着。node/ 不动。正在运行的服务已经把代码读进内存，不受影响
+APP_DIR="/Library/Application Support/ateam/app"
+if [ -d "$APP_DIR" ]; then
+    log "删除旧的程序目录 $APP_DIR"
+    rm -rf "$APP_DIR" >>"$LOG" 2>&1 || log "删除失败，继续安装。"
+fi
+
 MENU_APP="/Applications/ateam.app"
 if pkill -f "$MENU_APP/Contents/MacOS/ateam" >>"$LOG" 2>&1; then
     log "退出了正在运行的 ateam 菜单栏程序"

@@ -100,7 +100,8 @@ mkdir -p "$BASE_DIR/node/bin"
 ditto "$NODE_DIR/bin/node" "$BASE_DIR/node/bin/node"
 cp "$NODE_DIR/LICENSE" "$BASE_DIR/node/LICENSE"
 # ateam 零依赖：直接复制源码
-for d in bin src skills docs dsh-plugin; do ditto "$REPO/$d" "$BASE_DIR/app/$d"; done
+# 只放运行要用的：docs/ 是给维护者看的设计记录和核对清单，运行时不读
+for d in bin src skills dsh-plugin; do ditto "$REPO/$d" "$BASE_DIR/app/$d"; done
 cp "$REPO/package.json" "$REPO/README.md" "$BASE_DIR/app/"
 cp "$HERE/ateam" "$ROOT/usr/local/bin/ateam"
 cp "$HERE/uninstall.command" "$BASE_DIR/卸载 ateam.command"

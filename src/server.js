@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import http from 'node:http';
 import { homedir, networkInterfaces } from 'node:os';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnWorker } from './spawn.js';
 import { readFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
@@ -12,7 +12,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { runDoctor } from './doctor.js';
-import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion } from './install.js';
+import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
 import { check as checkRelease, install as installRelease } from './update.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
@@ -414,8 +414,13 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
           if (String(argv[i]).startsWith('--port=')) continue;
           args.push(argv[i]);
         }
+        // 装了安装包：用 /usr/local/bin/ateam 启动（它按开发模式 / 安装版选代码，切换模式后重启也跟着走）。
+        // 否则用当前程序的真实路径：argv[1] 可能是 npm link 的软链，装安装包时会被删掉
         const log = openSync(join(dataDir, 'serve.log'), 'a');
-        const child = spawn(process.execPath, [process.argv[1], ...args, '--port', String(port)], { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env });
+        let script = process.argv[1];
+        try { script = realpathSync(script); } catch {}
+        const [cmd, ...pre] = existsSync(WRAPPER) ? [WRAPPER] : [process.execPath, script];
+        const child = spawn(cmd, [...pre, ...args, '--port', String(port)], { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env });
         child.unref();
         console.log(`\nateam 服务已在后台重启（进程 ${child.pid}），输出写到 ${join(dataDir, 'serve.log')}。`);
       } else {

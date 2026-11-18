@@ -367,6 +367,7 @@ select.setting-num { width: auto; text-align: left; }
 .release-head .hint { flex: 1; }
 .release .md { font-size: 13px; margin-top: 6px; }
 .stale-restart { margin-left: 8px; }
+.stale-tip { display: block; margin-top: 6px; }
 .version-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; margin: 0 0 12px; font-size: 13px; }
 .version-facts dt { color: var(--faint); }
 .version-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
@@ -3386,7 +3387,17 @@ function renderUpdatePill() {
 async function restartServer(btn) {
   btn.disabled = true;
   btn.textContent = '重启中…';
-  try { await fetch('/api/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch {}
+  const tip = (text) => {
+    btn.disabled = false;
+    btn.textContent = '重启';
+    btn.after(Object.assign(document.createElement('span'), { className: 'hint stale-tip', textContent: text }));
+  };
+  document.querySelectorAll('.stale-tip').forEach((n) => n.remove());
+  try {
+    const res = await fetch('/api/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    // 旧版本服务没有这个接口
+    if (res.status === 404) return tip('当前运行的服务版本较旧，不支持从看板重启。请在运行 ateam 的终端中按 Ctrl+C 后重新运行 ateam，之后即可使用此按钮。');
+  } catch {}
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     try {
@@ -3394,8 +3405,7 @@ async function restartServer(btn) {
       if (out.ok && !out.stale) { location.reload(); return; }
     } catch {}
   }
-  btn.disabled = false;
-  btn.textContent = '重启';
+  tip('服务未能在 30 秒内重新启动，请查看项目中的 .ateam/serve.log，或在终端中运行 ateam 启动。');
 }
 
 function renderModePill() {

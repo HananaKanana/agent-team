@@ -1,7 +1,7 @@
 // 给 agent 平台装工具后 hook：DSH 走官方桥接包，WorkBuddy 写 settings.json。
 // 重复运行是安全的；改动都在 ateam 标记过的条目里，不碰别人的配置。
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -25,8 +25,12 @@ const LAUNCHER = join(dirname(fileURLToPath(import.meta.url)), '..', 'dsh-plugin
 
 const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 
+// 写真实路径：从 npm link 的软链（~/.npm-global/bin/ateam 之类）启动时，argv[1] 是软链，
+// 装了安装包后软链会被删掉，hook 就找不到程序了
 function hookCommand(sub) {
-  return `"${process.execPath}" "${process.argv[1]}" ${sub}`;
+  let script = process.argv[1];
+  try { script = realpathSync(script); } catch {}
+  return `"${process.execPath}" "${script}" ${sub}`;
 }
 
 function dshHooks() {

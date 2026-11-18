@@ -375,6 +375,16 @@ select.setting-num { width: auto; text-align: left; }
 .setting-text:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .push-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .push-err { color: var(--rework); }
+.push-fold { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; user-select: none; }
+.push-fold > svg { width: 14px; height: 14px; flex: none; color: var(--faint); transform: rotate(-90deg); transition: transform .15s; }
+.push-fold.open > svg { transform: none; }
+.push-fold > b { flex: none; font-size: 13.5px; }
+.push-fold .fold-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.push-fold:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.push-channel .push-fold + .hint { margin-top: 6px; }
+.push-group { border-top: 1px solid var(--line-soft); padding: 8px 0; }
+.push-group:first-of-type { margin-top: 8px; }
+.push-group-body { padding: 4px 0 4px 22px; }
 .push-time { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .push-sections { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 8px; font-size: 13px; }
 .push-section { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -2090,6 +2100,16 @@ async function testPush(ch) {
   } catch { pushMsg[ch] = { text: '无法连接 ateam 服务。', error: true }; }
   renderHelper(true);
 }
+// 推送页各块默认收起，只显示一行摘要；展开的记在这里（重画不丢）
+const pushOpen = new Set();
+function pushFold(key, title, summary, right) {
+  const open = pushOpen.has(key);
+  return el('div', {
+    class: `push-fold${open ? ' open' : ''}`, role: 'button', tabindex: '0', 'aria-expanded': open ? 'true' : 'false',
+    onclick: (e) => { if (e.target.closest('input, select, button, label')) return; e.stopPropagation(); if (open) pushOpen.delete(key); else pushOpen.add(key); renderHelper(true); },
+    onkeydown: (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); e.currentTarget.click(); } },
+  }, icon('chev-down'), el('b', null, title), el('span', { class: 'hint fold-sum' }, summary), right ?? null);
+}
 // 推哪些事、格式、定时小结（push.json 里，所有项目共用）
 let pushExtra = null;
 let pushExtraMsg = '';
@@ -2138,16 +2158,21 @@ function pushOptions() {
   weekday.value = String(digest.weekly.weekday);
   weekday.addEventListener('change', () => saveDigestCfg('weekly', { weekday: Number(weekday.value) }));
   const pv = pushPreview;
+  const evOn = Object.keys(eventTypes).filter((k) => prefs.events[k] !== false).length;
+  const fmtSum = [fmt.brief ? '简洁' : '详细', fmt.link ? '附链接' : '不附链接', fmt.merge ? '合并推送' : '逐条推送', fmt.prefix ? `前缀「${fmt.prefix}」` : '无前缀'].join(' · ');
+  const week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const digestSum = [digest.daily.on ? `每日 ${digest.daily.time}` : null, digest.weekly.on ? `每${week[digest.weekly.weekday]} ${digest.weekly.time}` : null].filter(Boolean).join('、') || '未开启';
+  const sec = (key, title, summary, body) => el('div', { class: 'push-group' }, pushFold(key, title, summary), pushOpen.has(key) ? el('div', { class: 'push-group-body' }, body) : null);
   return [
-    el('div', { class: 'helper-sec' }, el('h4', null, '推送哪些事项')),
+    sec('events', '推送哪些事项', evOn === Object.keys(eventTypes).length ? '全部类型' : `${evOn} / ${Object.keys(eventTypes).length} 类`, [
     el('p', { class: 'hint' }, '「待处理」中新出现的事项按类型推送。关闭的类型不推送，看板和菜单栏照常提示。'),
-    Object.entries(eventTypes).map(([k, label]) => row(sw(prefs.events[k] !== false, (on) => savePushPrefs({ events: { [k]: on } }), label), label)),
-    el('div', { class: 'helper-sec' }, el('h4', null, '格式')),
+    Object.entries(eventTypes).map(([k, label]) => row(sw(prefs.events[k] !== false, (on) => savePushPrefs({ events: { [k]: on } }), label), label))]),
+    sec('format', '格式', fmtSum, [
     el('label', { class: 'setting' }, style, el('span', null, el('b', null, '内容'), el('span', { class: 'hint' }, '详细：标题加逐项明细；简洁：只推一行标题（几件事合并时只写数量，小结压成一行）。'))),
     row(sw(fmt.link, (on) => savePushPrefs({ format: { link: on } }), '附带看板链接'), '附带看板链接', '附局域网只读看板的地址，手机连接同一网络时可直接打开并定位到对应事项。'),
     row(sw(fmt.merge, (on) => savePushPrefs({ format: { merge: on } }), '多项合并为一条'), '同时出现的多项合并为一条', '关闭后每件事单独推送一条。'),
-    el('label', { class: 'setting' }, prefix, el('span', null, el('b', null, '标题前缀'), el('span', { class: 'hint' }, '标题形如「前缀 · 项目名：内容」，留空则不加。钉钉机器人用「自定义关键词」校验时，关键词须出现在标题中。'))),
-    el('div', { class: 'helper-sec' }, el('h4', null, '定时小结')),
+    el('label', { class: 'setting' }, prefix, el('span', null, el('b', null, '标题前缀'), el('span', { class: 'hint' }, '标题形如「前缀 · 项目名：内容」，留空则不加。钉钉机器人用「自定义关键词」校验时，关键词须出现在标题中。')))]),
+    sec('digest', '定时小结', digestSum, [
     el('p', { class: 'hint' }, '到点时，通过上方开启的渠道推送各项目的小结：每日小结统计当天，每周小结统计最近 7 天。服务未运行时不补发；这段时间没有任何进展时不发送。'),
     el('label', { class: 'setting' }, sw(digest.daily.on, (on) => saveDigestCfg('daily', { on }), '每日小结'), el('span', null, el('b', null, '每日小结'), el('span', { class: 'hint push-time' }, '每天 ', timeInput(digest.daily.time, (v) => saveDigestCfg('daily', { time: v })), ' 发送'))),
     el('label', { class: 'setting' }, sw(digest.weekly.on, (on) => saveDigestCfg('weekly', { on }), '每周小结'), el('span', null, el('b', null, '每周小结'), el('span', { class: 'hint push-time' }, '每', weekday, ' ', timeInput(digest.weekly.time, (v) => saveDigestCfg('weekly', { time: v })), ' 发送'))),
@@ -2167,7 +2192,7 @@ function pushOptions() {
       // 「**今天完成**」这样的小标题加粗显示，「**Token**：…」只加粗前面一段
       const m = l.match(/^\*\*(.+?)\*\*(.*)$/);
       return m ? el('div', { class: m[2] ? '' : 'push-preview-h' }, el('b', { class: 'inline' }, m[1]), m[2]) : el('div', null, l);
-    })]) : null,
+    })]) : null]),
   ];
 }
 async function setPushOn(on) {
@@ -2187,7 +2212,7 @@ function pushPage() {
   if (!pushOn) return [head];
   return [
     head,
-    el('p', { class: 'hint' }, '「待处理」中新出现的事项（需求待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等）持续 1 分钟后推送一次；推送哪些事项、格式和定时小结在下方设置。可同时开启多个渠道。配置保存在本机 ~/.config/ateam/push.json，所有项目共用；推送内容（需求标题、卡号）会经过对应服务商的服务器。'),
+    el('p', { class: 'hint' }, '「待处理」中新出现的事项持续 1 分钟后推送一次，可同时开启多个渠道。点各项标题展开设置。配置保存在本机 ~/.config/ateam/push.json，所有项目共用；推送内容会经过对应服务商的服务器。'),
     Object.entries(pushCfg).map(([ch, c]) => {
       const sw = el('input', { type: 'checkbox', class: 'switch', role: 'switch', 'aria-label': `开启${c.label}` });
       sw.checked = !!c.on;
@@ -2199,8 +2224,12 @@ function pushPage() {
         return el('label', { class: 'push-field' }, el('span', { class: 'hint' }, PUSH_FIELD[f]), input);
       });
       const msg = pushMsg[ch];
+      const first = c.values[c.fields[0]];
+      const summary = c.on ? `已开启 · ${first || '未填写'}` : first ? `已填写，未开启 · ${first}` : '未配置';
+      const open = pushOpen.has(`ch:${ch}`) || !!msg;
+      if (!open) return el('div', { class: 'wcard push-channel' }, pushFold(`ch:${ch}`, c.label, summary, sw));
       return el('div', { class: 'wcard push-channel' },
-        el('div', { class: 'wcard-head' }, el('b', null, c.label), sw),
+        pushFold(`ch:${ch}`, c.label, summary, sw),
         el('p', { class: 'hint' }, PUSH_HINT[ch]),
         fields,
         el('div', { class: 'push-actions' },

@@ -90,6 +90,8 @@ header.top {
   min-height: 56px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--surface);
 }
 header.top h1 { margin: 0; display: flex; align-items: center; gap: 9px; font-size: 15.5px; font-weight: 650; white-space: nowrap; }
+header.top h1 .ver { align-self: flex-start; margin: -4px 0 0 -6px; font-size: 10.5px; font-weight: 500; line-height: 1; color: var(--faint); cursor: default; font-variant-numeric: tabular-nums; }
+header.top h1 .ver:empty { display: none; }
 .brand-mark { width: 24px; height: 24px; border-radius: 6px; background: var(--brand); display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 5px; flex: none; }
 .brand-mark i { background: var(--on-color); border-radius: 1.5px; }
 .brand-mark i:nth-child(4) { opacity: .45; }
@@ -359,13 +361,8 @@ select.setting-num { width: auto; text-align: left; }
 .ro-pill[hidden] { display: none; }
 .ro-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
 .ro-pill.flash { animation: ro-flash .9s ease-out; }
-/* 页头「有新版本」：点开「使用说明 → 版本」 */
+/* 页头「有新版本」：点击下载并安装 */
 .update-pill { --working: var(--approved); }
-.release { padding: 12px 0; border-top: 1px solid var(--line-soft); }
-.release-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.release-head b { font-size: 14px; }
-.release-head .hint { flex: 1; }
-.release .md { font-size: 13px; margin-top: 6px; }
 .stale-restart { margin-left: 8px; }
 .stale-tip { display: block; margin-top: 6px; }
 .push-master { border-top: none; }
@@ -1367,7 +1364,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13.5 2.5v11M2.5 8h8M7.5 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 <header class="top">
-  <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>ateam 调度台</h1>
+  <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>ateam 调度台<span class="ver" id="ver"></span></h1>
   <span class="vr"></span>
   <div class="workers" id="workers"></div>
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
@@ -2638,7 +2635,7 @@ function renderHelper(force = false) {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'push', 'version'].includes(helper.tab) ? helper.tab : 'worker';
+  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'push'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
     onclick: (e) => {
@@ -2648,7 +2645,6 @@ function renderHelper(force = false) {
       if (key === 'rules') loadRules();
       if (key === 'tests' && !testTpl.loading) testTpl.loaded = false; // 每次切进来重新读，别处改过也能看到
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
-      if (key === 'version') loadVersion(false);
       if (key === 'push') pushCfg = null; // 每次切进「推送」重新读配置
       settingsMsg = '';
       renderHelper(true);
@@ -2658,10 +2654,10 @@ function renderHelper(force = false) {
   fill(panel,
     el('div', { class: 'panel-top' },
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('push', '推送'), tabBtn('version', '版本'))),
+      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('push', '推送'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' || tab === 'install' || tab === 'push' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
-    tab === 'version' ? versionPage() : tab === 'push' ? pushPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
+    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'install' || tab === 'push' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
+    tab === 'push' ? pushPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
     el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
     [...roles.values()].map((role) => {
@@ -3567,23 +3563,16 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------- 版本与更新 ----------
-// data.update：当前版本、运行模式、最新版本、正在下载的更新（每次轮询都有）；更新说明列表点进「版本」页时再读
-let versionInfo = null;
-let versionLoading = false;
-async function loadVersion(fresh) {
-  versionLoading = true;
-  if (helper.open && helper.tab === 'version') renderHelper(true);
-  try { versionInfo = await (await fetch(`/api/update${fresh ? '?fresh=1' : ''}`, { cache: 'no-store' })).json(); } catch { versionInfo = { ok: false, error: '无法连接 ateam 服务。' }; }
-  versionLoading = false;
-  if (helper.open && helper.tab === 'version') renderHelper(true);
-}
+// data.update：当前版本、运行模式、最新版本、正在下载的更新（每次轮询都有）
+let updateError = null; // 点「有新版本」后安装请求失败的原因
 async function installVersion(version) {
+  updateError = null;
   try {
     const out = await (await fetch('/api/update/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(version ? { version } : {}) })).json();
-    if (!out.ok) versionInfo = { ...(versionInfo ?? {}), installError: out.message };
-  } catch { versionInfo = { ...(versionInfo ?? {}), installError: '无法连接 ateam 服务。' }; }
+    if (!out.ok) updateError = out.message;
+  } catch { updateError = '无法连接 ateam 服务。'; }
   await poll();
-  renderHelper(true);
+  renderUpdatePill();
 }
 function updateJobLine(job) {
   if (!job) return null;
@@ -3852,61 +3841,20 @@ function usagePage() {
     note,
   ];
 }
-function versionPage() {
-  const u = data.update ?? {};
-  const info = versionInfo ?? {};
-  const installed = u.mode === 'installed';
-  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('zh-CN') : '');
-  const job = updateJobLine(u.job);
-  const busy = u.job?.status === 'downloading';
-  // 看板页面已是新的、服务还是旧代码：取不到版本信息
-  if (!data.update) return [el('p', { class: 'hint' }, '当前服务仍在运行旧版本代码，无法读取版本信息。请重启 ateam 服务后刷新本页。')];
-  const modeText = u.mode === 'installed' ? '安装版' : u.mode === 'dev' ? '开发模式' : '源码运行';
-  const where = u.mode === 'installed' ? null : (u.modeLabel ?? '').replace(/^[^：]*：/, '');
-  return [
-    el('dl', { class: 'wcard version-facts' },
-      el('dt', null, '当前版本'), el('dd', null, u.current ?? '—'),
-      el('dt', null, '运行方式'), el('dd', null, modeText),
-      where ? [el('dt', null, '代码位置'), el('dd', null, el('code', null, where))] : null),
-    installed ? null : el('p', { class: 'hint' }, u.mode === 'dev'
-      ? '开发模式：ateam 命令、skill 和 hook 使用上述源码仓库的代码，修改后重启服务即生效，不检查更新。切回安装版请运行 ateam dev off。'
-      : '当前直接从源码运行，未安装 ateam 安装包，不检查更新。'),
-    installed ? el('div', { class: 'prompt' },
-      el('button', { class: 'btn', type: 'button', disabled: versionLoading || READONLY, onclick: (e) => { e.stopPropagation(); loadVersion(true); } }, versionLoading ? '检查中…' : '检查更新'),
-      el('span', { class: 'hint' }, u.error ? u.error : u.checkedAt ? `上次检查：${fmtTime(u.checkedAt)}，${u.newer ? `有新版本 ${u.latest}` : '已是最新版本'}` : '尚未检查')) : null,
-    job ? el('p', { class: 'hint' }, job) : null,
-    info.installError ? el('p', { class: 'hint' }, info.installError) : null,
-    installed && (info.releases ?? []).length ? [
-      el('div', { class: 'helper-sec' }, el('h4', null, '版本记录')),
-      info.releases.map((r) => {
-        const cmp = r.version === u.current ? 0 : versionNewer(r.version, u.current) ? 1 : -1;
-        const md = el('div', { class: 'md' });
-        md.innerHTML = renderMarkdown(r.notes || '（没有更新说明）'); // renderMarkdown 先转义了 HTML
-        return el('div', { class: 'release' },
-          el('div', { class: 'release-head' },
-            el('b', null, r.version),
-            el('span', { class: 'hint' }, `${fmtDate(r.date)}${cmp === 0 ? ' · 当前版本' : ''}`),
-            cmp === 0 || READONLY ? null : el('button', { class: cmp > 0 ? 'btn primary sm' : 'btn sm', type: 'button', disabled: busy, onclick: (e) => { e.stopPropagation(); installVersion(r.version); } }, cmp > 0 ? '立即更新' : '安装此版本')),
-          md);
-      }),
-      el('p', { class: 'hint' }, '安装旧版本即回退到该版本。安装需要输入管理员密码；安装后正在运行的服务需重启才会使用新代码。'),
-    ] : null,
-  ];
-}
-function versionNewer(a, b) {
-  const x = String(a).split('.').map(Number);
-  const y = String(b).split('.').map(Number);
-  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
-  return false;
-}
 function renderUpdatePill() {
   const btn = document.getElementById('update-pill');
   const u = data?.update;
   const downloading = u?.job?.status === 'downloading';
+  // 页头 ateam 旁的版本号；开发模式、源码运行时悬停说明
+  const ver = document.getElementById('ver');
+  ver.textContent = u?.current ?? '';
+  ver.title = !u ? '' : u.mode === 'dev'
+    ? `开发模式：ateam 命令、skill 和 hook 使用源码仓库的代码（${(u.modeLabel ?? '').replace(/^[^：]*：/, '')}），修改后重启服务即生效，不检查更新。切回安装版请运行 ateam dev off。`
+    : u.mode === 'installed' ? `当前版本 ${u.current}` : '当前直接从源码运行，未安装 ateam 安装包，不检查更新。';
   if (READONLY || !u || (!u.newer && !downloading)) { btn.hidden = true; return; }
-  fill(btn, el('span', null, downloading ? updateJobLine(u.job) : `有新版本 ${u.latest}`));
-  btn.title = '查看更新说明并安装';
-  btn.onclick = (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'version' }; loadVersion(false); renderHelper(true); };
+  fill(btn, el('span', null, updateError ? `更新失败：${updateError}` : u.job ? updateJobLine(u.job) : `有新版本 ${u.latest}`));
+  btn.title = downloading ? '正在下载安装包' : `点击下载并安装 ${u.latest ?? ''}：核对校验后打开系统安装程序，需要输入一次管理员密码；装完后重启服务。`;
+  btn.onclick = (e) => { e.stopPropagation(); if (!downloading && u.newer) installVersion(u.latest); };
   btn.hidden = false;
 }
 
@@ -4934,7 +4882,7 @@ function installGuide() {
       ? el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' }, el('b', null, 'ateam 命令与 skill')),
         done(true, `已通过安装包安装（${data.update.modeLabel}），命令和 skill 已自动配置`),
-        el('p', { class: 'hint' }, '菜单栏的 ateam 图标可启动、停止各项目的服务，新版本在「版本」页更新。skill 链接被删除或平台是后来才安装的，在终端运行 ateam setup 重新配置。'))
+        el('p', { class: 'hint' }, '菜单栏的 ateam 图标可启动、停止各项目的服务，有新版本时点页头的「有新版本」更新。skill 链接被删除或平台是后来才安装的，在终端运行 ateam setup 重新配置。'))
       : step('ateam 命令与 skill',
         '推荐使用安装包：在 GitHub 的 agent-team 发布页（Releases）下载对应芯片的安装包，安装后自动完成以下配置，并提供菜单栏图标和自动更新。从源码运行时，在终端执行一次以下命令：ateam setup 会把 skill 链接到本机已安装的 Claude Code、DeepSeek Harness、WorkBuddy，并安装 hook。提示找不到 ateam 命令时，说明 npm 全局目录不在 PATH 中，需将 $(npm prefix -g)/bin 加入 ~/.zshrc 的 PATH。',
         `cd ${tool}\nnpm link\nateam setup`),

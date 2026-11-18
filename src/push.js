@@ -62,15 +62,30 @@ export function savePush(channel, { on, values = {} } = {}) {
   if (on !== undefined) c.on = !!on;
   if (c.on && !c[def.fields[0]]) throw new Error(`请先填写${def.fields[0] === 'token' ? ' token ' : ' webhook 地址'}再开启。`);
   cfg[channel] = c;
+  writeConfig(cfg);
+  return maskedPush();
+}
+
+function writeConfig(cfg) {
   mkdirSync(join(homedir(), '.config', 'ateam'), { recursive: true });
   writeFileSync(file(), `${JSON.stringify(cfg, null, 2)}\n`, { mode: 0o600 });
   try { chmodSync(file(), 0o600); } catch {}
-  return maskedPush();
+}
+
+// 总开关（看板「推送」页最上面），默认关闭
+export function pushEnabled() {
+  return readPush().enabled === true;
+}
+
+export function setPushEnabled(on) {
+  const cfg = readPush();
+  cfg.enabled = !!on;
+  writeConfig(cfg);
 }
 
 export function anyPushOn() {
   const cfg = readPush();
-  return Object.keys(CHANNELS).some((k) => cfg[k]?.on);
+  return cfg.enabled === true && Object.keys(CHANNELS).some((k) => cfg[k]?.on);
 }
 
 async function post(url, body) {

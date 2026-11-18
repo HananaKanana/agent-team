@@ -368,6 +368,7 @@ select.setting-num { width: auto; text-align: left; }
 .release .md { font-size: 13px; margin-top: 6px; }
 .stale-restart { margin-left: 8px; }
 .stale-tip { display: block; margin-top: 6px; }
+.push-master { border-top: none; }
 .push-channel .wcard-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .push-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .setting-text { width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink); font: inherit; font-size: 13px; }
@@ -2006,6 +2007,7 @@ function egoProfilesSetting() {
 
 // ---------- 推送到手机（服务端 push.js，配置在本机 ~/.config/ateam/push.json）----------
 let pushCfg = null;
+let pushOn = false; // 总开关
 let pushLoading = false;
 const pushDraft = {}; // 渠道 → 正在输入、还没保存的字段
 const pushMsg = {};   // 渠道 → { text, error }
@@ -2018,14 +2020,14 @@ const PUSH_HINT = {
 };
 async function loadPush() {
   pushLoading = true;
-  try { pushCfg = (await (await fetch('/api/push', { cache: 'no-store' })).json()).channels ?? null; } catch {}
+  try { const out = await (await fetch('/api/push', { cache: 'no-store' })).json(); pushCfg = out.channels ?? null; pushOn = !!out.enabled; } catch {}
   pushLoading = false;
-  if (helper.open && helper.tab === 'settings') renderHelper(true);
+  if (helper.open && helper.tab === 'push') renderHelper(true);
 }
 async function savePushChannel(ch, on) {
   try {
     const out = await post('/api/push', { channel: ch, values: pushDraft[ch] ?? {}, ...(on === undefined ? {} : { on }) });
-    if (out.ok) { pushCfg = out.channels; delete pushDraft[ch]; pushMsg[ch] = { text: on === undefined ? '已保存。' : on ? '已开启。' : '已关闭。' }; }
+    if (out.ok) { pushCfg = out.channels; pushOn = !!out.enabled; delete pushDraft[ch]; pushMsg[ch] = { text: on === undefined ? '已保存。' : on ? '已开启。' : '已关闭。' }; }
     else pushMsg[ch] = { text: out.message || '保存失败。', error: true };
   } catch { pushMsg[ch] = { text: '无法连接 ateam 服务。', error: true }; }
   renderHelper(true);
@@ -2040,10 +2042,23 @@ async function testPush(ch) {
   } catch { pushMsg[ch] = { text: '无法连接 ateam 服务。', error: true }; }
   renderHelper(true);
 }
-function pushSettings() {
+async function setPushOn(on) {
+  const out = await post('/api/push', { enabled: on });
+  if (out.ok) { pushCfg = out.channels; pushOn = !!out.enabled; }
+  renderHelper(true);
+}
+function pushPage() {
   if (READONLY) return el('p', { class: 'hint' }, '推送配置仅可在运行 ateam 的电脑上查看和修改。');
   if (!pushCfg) { if (!pushLoading) loadPush(); return el('p', { class: 'hint' }, '读取中…'); }
+  const master = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
+  master.checked = pushOn;
+  master.addEventListener('change', () => setPushOn(master.checked));
+  master.addEventListener('click', (e) => e.stopPropagation());
+  const head = el('label', { class: 'setting push-master' }, master, el('span', null, el('b', null, '推送到手机'),
+    el('span', { class: 'hint' }, '开启后，待你处理的事项通过下方开启的渠道推送到手机或群聊。关闭时所有渠道都不推送，已填写的配置保留。')));
+  if (!pushOn) return [head];
   return [
+    head,
     el('p', { class: 'hint' }, '「待处理」中新出现的事项（需求待验收、缺少 worker、worker 无响应、审卡分歧、leader 未连接等）持续 1 分钟后推送一次，附局域网看板链接（手机连接同一网络时可直接打开）。可同时开启多个渠道。配置保存在本机 ~/.config/ateam/push.json，所有项目共用；推送内容（需求标题、卡号）会经过对应服务商的服务器。'),
     Object.entries(pushCfg).map(([ch, c]) => {
       const sw = el('input', { type: 'checkbox', class: 'switch', role: 'switch', 'aria-label': `开启${c.label}` });
@@ -2104,8 +2119,6 @@ function settingsPage() {
       return it.key === 'testBrowser' && cfg.testBrowser === 'ego' ? [row, egoProfilesSetting()] : row;
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '推送到手机')),
-    pushSettings(),
     el('div', { class: 'helper-sec' }, el('h4', null, '本设备')),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -2431,7 +2444,7 @@ function renderHelper(force = false) {
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
   if (!force && helper.tab === 'rules' && panel.querySelector('.rules-page')) return;
-  if (!force && helper.tab === 'settings' && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('setting-text')) && panel.contains(document.activeElement)) return;
+  if (!force && (helper.tab === 'settings' || helper.tab === 'push') && (document.activeElement?.classList?.contains('setting-num') || document.activeElement?.classList?.contains('setting-text')) && panel.contains(document.activeElement)) return;
   if (!force && document.activeElement?.classList?.contains('msg-input') && panel.contains(document.activeElement)) return;
   // 正在编辑测试报告模板：同项目规则，轮询不重画
   if (!force && helper.tab === 'tests' && panel.querySelector('.tpl-page')) return;
@@ -2459,7 +2472,7 @@ function renderHelper(force = false) {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'version'].includes(helper.tab) ? helper.tab : 'worker';
+  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'push', 'version'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
     onclick: (e) => {
@@ -2470,7 +2483,7 @@ function renderHelper(force = false) {
       if (key === 'tests' && !testTpl.loading) testTpl.loaded = false; // 每次切进来重新读，别处改过也能看到
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
       if (key === 'version') loadVersion(false);
-      if (key === 'settings') pushCfg = null; // 每次切进「设置」重新读推送配置
+      if (key === 'push') pushCfg = null; // 每次切进「推送」重新读配置
       settingsMsg = '';
       renderHelper(true);
     },
@@ -2479,10 +2492,10 @@ function renderHelper(force = false) {
   fill(panel,
     el('div', { class: 'panel-top' },
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('version', '版本'))),
+      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('push', '推送'), tabBtn('version', '版本'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' || tab === 'install' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
-    tab === 'version' ? versionPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
+    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' || tab === 'install' || tab === 'push' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
+    tab === 'version' ? versionPage() : tab === 'push' ? pushPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
     el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
     [...roles.values()].map((role) => {

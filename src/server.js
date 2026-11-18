@@ -14,7 +14,7 @@ import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } fr
 import { runDoctor } from './doctor.js';
 import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
 import { check as checkRelease, install as installRelease } from './update.js';
-import { anyPushOn, maskedPush, savePush, sendPush } from './push.js';
+import { anyPushOn, maskedPush, pushEnabled, savePush, sendPush, setPushEnabled } from './push.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
@@ -884,9 +884,14 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       };
     },
     // 推送到手机：配置（token、密钥只露末几位）、保存一个渠道、发测试消息
-    'GET /api/push': () => ({ channels: maskedPush() }),
+    'GET /api/push': () => ({ enabled: pushEnabled(), channels: maskedPush() }),
+    // 只给 enabled：改总开关；给 channel：保存一个渠道
     'POST /api/push': (b) => {
-      try { return { channels: savePush(String(b.channel ?? ''), { on: b.on, values: b.values ?? {} }) }; } catch (err) { throw new AteamError('INVALID', err.message); }
+      try {
+        if (b.channel === undefined && 'enabled' in b) setPushEnabled(!!b.enabled);
+        else savePush(String(b.channel ?? ''), { on: b.on, values: b.values ?? {} });
+        return { enabled: pushEnabled(), channels: maskedPush() };
+      } catch (err) { throw new AteamError('INVALID', err.message); }
     },
     'POST /api/push/test': async (b) => {
       let results;

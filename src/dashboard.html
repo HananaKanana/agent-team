@@ -3394,14 +3394,15 @@ async function restartServer(btn) {
   };
   document.querySelectorAll('.stale-tip').forEach((n) => n.remove());
   try {
-    const res = await fetch('/api/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const res = await fetch('/api/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(5000) });
     // 旧版本服务没有这个接口
     if (res.status === 404) return tip('当前运行的服务版本较旧，不支持从看板重启。请在运行 ateam 的终端中按 Ctrl+C 后重新运行 ateam，之后即可使用此按钮。');
   } catch {}
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     try {
-      const out = await (await fetch('/api/summary', { cache: 'no-store' })).json();
+      // 每次最多等 2 秒：重启那一刻连到正在关闭的旧服务的请求可能一直不返回
+      const out = await (await fetch('/api/summary', { cache: 'no-store', signal: AbortSignal.timeout(2000) })).json();
       if (out.ok && !out.stale) { location.reload(); return; }
     } catch {}
   }

@@ -3763,7 +3763,7 @@ function usageJobPage() {
           el('td', { class: 'num' }, String(a.tasks)),
           el('td', { class: 'num' }, fmtTokens(a.work)))))),
     ] : null,
-    el('p', { class: 'hint' }, 'worker 的用量按卡的时间线归属：领取到提交算这张卡，打回后接着算。leader 的用量和 worker 不在做卡时的空转无法归到某个需求，只在全部需求的用量里统计。会话记录已删除的已通过卡，按卡上记录的数补入（日期取通过时间）。'),
+    el('p', { class: 'hint' }, 'worker 的用量按卡的时间线归属：领取到提交算这张卡，打回后接着算。leader 的用量和 worker 不在做卡时的空转无法归到某个需求，只在全部需求的用量里统计。卡在提交、交接、通过、作废时记下当时的用量，会话记录被删除后按记下的数计入。'),
   ];
 }
 function usagePage() {
@@ -3772,7 +3772,7 @@ function usagePage() {
   const head = el('div', { class: 'usage-head' },
     el('span', { class: 'hint' }, u?.generatedAt ? `统计时间 ${fmtTime(u.generatedAt)} · 来自本机 ${u.sessions} 个会话${Object.keys(u.platforms || {}).length ? `（${Object.entries(u.platforms).map(([k, v]) => `${k} ${v} 个`).join('，')}）` : ''}` : ''),
     el('button', { class: 'btn sm', type: 'button', disabled: usageLoading, onclick: (e) => { e.stopPropagation(); loadUsage(true); } }, usageLoading ? '统计中…' : '刷新'));
-  const note = el('p', { class: 'hint' }, '数据来自 Claude Code 和 DeepSeek Harness 在本机的会话记录（只读）。会话按其中执行的命令识别：运行 ateam 命令时带 --as 编号的是该 worker，运行 ateam leader 或 ateam watch 的是 leader。worker 的用量按卡的时间线归属：领取到提交算这张卡，打回后接着算；不在做卡时（等待任务、加入、下线前后）记为「空转」；无法识别的会话（如在项目目录中另开的对话）记为「其他会话」。WorkBuddy 的会话保存在云端，本机没有 token 记录，不在统计内。总量 = 输入（含写入缓存）+ 缓存命中 + 输出，缓存命中部分按低价计费。');
+  const note = el('p', { class: 'hint' }, '数据来自 Claude Code 和 DeepSeek Harness 在本机的会话记录（只读）。会话按其中执行的命令识别：运行 ateam 命令时带 --as 编号的是该 worker，运行 ateam leader 或 ateam watch 的是 leader。worker 的用量按卡的时间线归属：领取到提交算这张卡，打回后接着算；不在做卡时（等待任务、加入、下线前后）记为「空转」；无法识别的会话（如在项目目录中另开的对话）记为「其他会话」。WorkBuddy 的会话保存在云端，本机没有 token 记录，不在统计内。总量 = 输入（含写入缓存）+ 缓存命中 + 输出，缓存命中部分按低价计费。已过去的日子按天存档（.ateam/usage-daily.json），卡在提交、交接、通过、作废时记下当时的用量；之后会话记录被删除（DeepSeek Harness 手动删除、Claude Code 默认保留 30 天），历史合计、每天的柱状图和各卡用量不受影响，只有按 worker 的明细会随会话记录消失。');
   if (!u) return [head, el('p', { class: 'hint' }, '统计中…（第一次需要读取全部会话记录，可能要几秒）')];
   if (u.error) return [head, el('p', { class: 'hint' }, u.error === '未知接口：GET /api/usage' ? '当前服务仍在运行旧版本代码，请重启 ateam 服务后刷新本页。' : u.error)];
   if (!u.sessions) return [head, el('p', { class: 'hint' }, '本机没有这个项目的 Claude Code 或 DeepSeek Harness 会话记录。WorkBuddy 的 worker 不提供 token 数据。'), note];

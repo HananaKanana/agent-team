@@ -54,7 +54,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // 演播照「## 操作记录」里录的工具走，不看这个
     testBrowser: { type: 'choice', options: ['platform', 'ego'], def: () => 'platform' },
     // worker 换新会话：上下文（最近一次调用读入的 token，单位万）超过这个数，做完手上的卡后下线，由服务开一个同角色的新 worker 接着领卡。0 表示不换
-    rotateCtx: { type: 'int', min: 0, max: 100, def: () => 20 },
+    rotateCtx: { type: 'int', min: 0, max: 100, def: () => 15 },
   };
 
   function config() {

@@ -274,19 +274,28 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             title.append(NSAttributedString(string: name, attributes: [.font: NSFont.menuFont(ofSize: 0)]))
             title.append(NSAttributedString(string: "    \(detail)", attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.menuFont(ofSize: 0)]))
             it.attributedTitle = title
-            it.toolTip = p
+            // 路径不做悬停提示（会盖住子菜单），放在子菜单第一行
             let sub = NSMenu()
             sub.autoenablesItems = false
+            _ = add((p as NSString).abbreviatingWithTildeInPath, nil, to: sub, enabled: false)
+            sub.addItem(.separator())
             let idle = busy[p] == nil
             if st.running {
                 _ = add("打开看板", #selector(openURL(_:)), st.url()?.absoluteString, to: sub)
                 _ = add("重启服务", #selector(restart(_:)), p, to: sub, enabled: idle)
                 _ = add("停止服务", #selector(stop(_:)), p, to: sub, enabled: idle)
+                // 服务是旧版本（摘要里没有这些字段）：不显示 worker 等信息，免得显示成「没有」
+                let fresh = st.summary?["items"] != nil
+                if !fresh {
+                    sub.addItem(.separator())
+                    _ = add("服务仍在运行旧版本，重启服务后显示 worker 等信息", nil, to: sub, enabled: false)
+                }
                 // 在线 worker 和手上的卡：点了直达那张卡
-                sub.addItem(.separator())
-                if st.agents.isEmpty { _ = add("没有在线的 worker", nil, to: sub, enabled: false) }
-                else { _ = add("在线 worker（\(st.agents.count)）", nil, to: sub, enabled: false) }
-                for a in st.agents {
+                if fresh {
+                    sub.addItem(.separator())
+                    _ = add(st.agents.isEmpty ? "没有在线的 worker" : "在线 worker（\(st.agents.count)）", nil, to: sub, enabled: false)
+                }
+                for a in (fresh ? st.agents : []) {
                     let id = a["id"] as? String ?? ""
                     let label = (a["name"] as? String).map { "\(id)（\($0)）" } ?? id
                     let task = a["task"] as? [String: Any]
@@ -302,7 +311,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 }
                 // 按角色启动 worker：与看板「worker」页的「启动」按钮相同，在设置里选的平台中新建会话
                 let roles = st.spawn["roles"] as? [[String: Any]] ?? []
-                if !roles.isEmpty {
+                if fresh && !roles.isEmpty {
                     let spawnMenu = NSMenu()
                     spawnMenu.autoenablesItems = false
                     for r in roles {
@@ -319,8 +328,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     sub.addItem(si)
                 }
                 // 局域网只读地址：复制给同事看进度
-                sub.addItem(.separator())
-                if st.lan.isEmpty { _ = add("局域网访问未开启（以 --local 启动）", nil, to: sub, enabled: false) }
+                if fresh { sub.addItem(.separator()) }
+                if fresh && st.lan.isEmpty { _ = add("局域网访问未开启（以 --local 启动）", nil, to: sub, enabled: false) }
                 for u in st.lan { _ = add("复制局域网只读地址 \(u.replacingOccurrences(of: "http://", with: ""))", #selector(copyText(_:)), u, to: sub) }
             } else {
                 _ = add("启动并打开看板", #selector(start(_:)), p, to: sub, enabled: idle)

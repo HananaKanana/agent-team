@@ -3,15 +3,17 @@ import { execFile, spawn } from 'node:child_process';
 import http from 'node:http';
 import { homedir, networkInterfaces } from 'node:os';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnWorker } from './spawn.js';
 import { readFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { runDoctor } from './doctor.js';
+import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion } from './install.js';
+import { check as checkRelease, install as installRelease } from './update.js';
 import { loadState, saveState } from './persist.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
@@ -161,7 +163,8 @@ function lanAddresses() {
   return [...new Set(ips)].filter((ip) => !/^198\.1[89]\./.test(ip));
 }
 
-export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, lan = false } = {}) {
+// argv：启动参数（重启时原样带上，端口固定为当前端口）
+export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, lan = false, argv = [] } = {}) {
   const layout = await detectRepos(root);
   const startHash = codeHash();
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
@@ -366,6 +369,61 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (store.config().testBrowser !== 'ego') return [];
     if (Date.now() - egoProfiles.at > EGO_PROFILE_TTL) refreshEgoProfiles().catch(() => {});
     return egoProfiles.list;
+  }
+
+  // ---------- 升级（只有安装版查，见 update.js）----------
+  const UPDATE_EVERY = 6 * 60 * 60 * 1000;
+  const updateInfo = { current: ateamVersion(), latest: null, newer: false, releases: [], checkedAt: 0, error: null };
+  let updateJob = null; // 正在下载安装的版本：{ version, received, total, status: downloading|opened|failed, error }
+  async function checkUpdate() {
+    if (runMode() !== 'installed') return;
+    Object.assign(updateInfo, await checkRelease());
+    pushSoon();
+  }
+  function updateSummary() {
+    const { releases, ...rest } = updateInfo;
+    const m = runMode();
+    return { ...rest, mode: m, modeLabel: modeLabel(m), devRepo: m === 'dev' ? devRepo() : null, job: updateJob };
+  }
+  function startUpdate(wanted) {
+    if (runMode() !== 'installed') throw new AteamError('INVALID', runMode() === 'dev' ? '当前是开发模式，代码来自源码仓库，不通过安装包更新。' : '当前不是安装版，请下载安装包安装。');
+    if (updateJob?.status === 'downloading') throw new AteamError('BAD_STATE', `正在下载 ${updateJob.version}，请稍候。`);
+    updateJob = { version: wanted ?? updateInfo.latest, received: 0, total: 0, status: 'downloading', error: null };
+    let last = 0;
+    installRelease(wanted, ({ received, total }) => {
+      Object.assign(updateJob, { received, total });
+      if (Date.now() - last > 500) { last = Date.now(); pushSoon(); }
+    }).then((r) => { Object.assign(updateJob, { version: r.version, status: 'opened' }); pushSoon(); },
+      (err) => { Object.assign(updateJob, { status: 'failed', error: err.message }); pushSoon(); });
+    pushSoon();
+    return { started: true };
+  }
+
+  // ---------- 停止 / 重启（菜单栏程序和看板「重启」按钮用，只限本机）----------
+  let stopping = false;
+  function stopServer(restart) {
+    if (stopping) return;
+    stopping = true;
+    saveState(dataDir, store.state);
+    server.close(() => {
+      if (restart) {
+        // 原来的启动参数，端口固定为当前端口；输出写到 .ateam/serve.log，在后台运行
+        const args = [];
+        for (let i = 0; i < argv.length; i++) {
+          if (argv[i] === '--port') { i++; continue; }
+          if (String(argv[i]).startsWith('--port=')) continue;
+          args.push(argv[i]);
+        }
+        const log = openSync(join(dataDir, 'serve.log'), 'a');
+        const child = spawn(process.execPath, [process.argv[1], ...args, '--port', String(port)], { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env });
+        child.unref();
+        console.log(`\nateam 服务已在后台重启（进程 ${child.pid}），输出写到 ${join(dataDir, 'serve.log')}。`);
+      } else {
+        console.log('\nateam 服务已停止。');
+      }
+      process.exit(0);
+    });
+    server.closeAllConnections?.();
   }
 
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
@@ -706,6 +764,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     // 「安装」页用：本机 DeepSeek Harness 的 skill 目录和 profile、各项是否已经装好。都是现场读出来的，不写死
     'GET /api/install-info': () => installInfo(),
+    // 菜单栏程序用的简要状态
+    'GET /api/summary': () => ({
+      root, name: basename(root), version: ateamVersion(), mode: runMode(),
+      workers: store.state.agents.filter((a) => a.status === 'online').length,
+      working: store.state.tasks.filter((t) => ['working', 'asking', 'demoing', 'wrapping'].includes(t.status)).length,
+      accept: store.state.jobs.filter((j) => j.status === 'awaiting_acceptance').length,
+      asking: store.state.tasks.filter((t) => t.status === 'asking').length,
+      stale: codeHash() !== startHash,
+      // 版本、运行模式、有没有新版本、正在下载的更新
+      update: updateSummary(),
+      update: updateInfo.newer ? updateInfo.latest : null,
+    }),
+    'POST /api/shutdown': () => { setTimeout(() => stopServer(false), 200); return { stopping: true }; },
+    'POST /api/restart': () => { setTimeout(() => stopServer(true), 200); return { restarting: true }; },
+    // 版本页：带更新说明；fresh=1 立即查一次
+    'GET /api/update': async (_b, url) => {
+      if (url.searchParams.get('fresh') === '1') await checkUpdate();
+      return { ...updateSummary(), releases: runMode() === 'installed' ? updateInfo.releases.slice(0, 10) : [] };
+    },
+    'POST /api/update/install': (b) => startUpdate(b.version ? String(b.version) : undefined),
     // 看板设置页的「刷新」：重新从 ego 读取测试用 profile
     'GET /api/ego-profiles': async (_b, url) => {
       if (url.searchParams.get('fresh') === '1') await refreshEgoProfiles();
@@ -971,5 +1049,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   if (lan) server.ateamLan = lanAddresses().map((ip) => `http://${ip}:${port}`);
   recheck().catch(() => {});
   if (store.config().testBrowser === 'ego') refreshEgoProfiles().catch(() => {});
+  // 菜单栏程序的项目列表
+  rememberProject(root);
+  // 安装版：启动时和之后每 6 小时查一次新版本
+  checkUpdate().catch(() => {});
+  setInterval(() => checkUpdate().catch(() => {}), UPDATE_EVERY).unref();
   return server;
 }

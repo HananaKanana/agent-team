@@ -7,6 +7,7 @@
 - 使用说明：`README.md`
 - 手工核对清单：`docs/manual-checklist.md`，按功能分组。新条目放进对应的 `## 功能` 组并在组内编号，不要追加到文件末尾
 - 工具后 hook：`docs/worker-hook-setup.md`
+- 安装包、菜单栏程序、发布：`agent-installer/`（`mac/build.sh` 打包，`release.sh` 发布到 GitHub Releases，`precheck.mjs` 发布前检查）
 - 各功能的设计和计划：`docs/superpowers/specs/`、`docs/superpowers/plans/`。这些是当时的记录，现状以代码和 README 为准
 
 ## 当前进度

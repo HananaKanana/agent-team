@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# ateam 安装包的 postinstall。以 root 运行。
+# 以当前登录用户的身份运行 ateam setup（链接 skill、清理 npm link 留下的旧命令、安装 hook、设置登录项），
+# 再打开菜单栏程序。永远 exit 0：文件已经装好，这些步骤没做成可以在看板「安装」页或 ateam setup 补做。
+
+set -u
+LOG="/tmp/ateam-install.log"
+log() { echo "[ateam] $*" | tee -a "$LOG" >&2; }
+
+BASE="/Library/Application Support/ateam"
+NODE="$BASE/node/bin/node"
+APP="$BASE/app/bin/ateam.js"
+MENU_APP="/Applications/ateam.app"
+
+chmod 755 /usr/local/bin/ateam 2>/dev/null || true
+
+CONSOLE_USER=$(stat -f %Su /dev/console)
+case "$CONSOLE_USER" in
+    ""|root|loginwindow)
+        log "没有检测到登录用户，跳过 skill 链接。登录后在终端运行 ateam setup。"
+        exit 0
+        ;;
+esac
+CONSOLE_UID=$(id -u "$CONSOLE_USER" 2>/dev/null || echo "")
+HOME_DIR=$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+[ -n "$HOME_DIR" ] || HOME_DIR="/Users/$CONSOLE_USER"
+if [ -z "$CONSOLE_UID" ]; then
+    log "取不到用户 $CONSOLE_USER 的 uid，跳过。登录后在终端运行 ateam setup。"
+    exit 0
+fi
+
+log "以 $CONSOLE_USER 的身份运行 ateam setup"
+launchctl asuser "$CONSOLE_UID" sudo -u "$CONSOLE_USER" \
+    env HOME="$HOME_DIR" USER="$CONSOLE_USER" PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    "$NODE" "$APP" setup --installer >>"$LOG" 2>&1 || log "ateam setup 没有完全成功，细节见上面；可以之后在终端运行 ateam setup 重试"
+
+if [ -d "$MENU_APP" ]; then
+    log "打开菜单栏程序"
+    launchctl asuser "$CONSOLE_UID" sudo -u "$CONSOLE_USER" open "$MENU_APP" >>"$LOG" 2>&1 || log "打开菜单栏程序失败，可以从「应用程序」里打开 ateam"
+fi
+log "完成"
+exit 0

@@ -359,6 +359,14 @@ select.setting-num { width: auto; text-align: left; }
 .ro-pill[hidden] { display: none; }
 .ro-pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
 .ro-pill.flash { animation: ro-flash .9s ease-out; }
+/* 页头「有新版本」：点开「使用说明 → 版本」 */
+.update-pill { --working: var(--approved); }
+.release { padding: 12px 0; border-top: 1px solid var(--line-soft); }
+.release-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.release-head b { font-size: 14px; }
+.release-head .hint { flex: 1; }
+.release .md { font-size: 13px; margin-top: 6px; }
+.stale-restart { margin-left: 8px; }
 @keyframes ro-flash { 0%, 40% { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); } 100% { } }
 @media (prefers-reduced-motion: reduce) { .ro-pill.flash { animation: none; } }
 .linkish { appearance: none; border: 0; background: none; padding: 0; justify-self: start; color: var(--link, var(--working)); font: inherit; font-size: 12.5px; cursor: pointer; }
@@ -1290,6 +1298,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="mode-pill" id="mode-pill" type="button" hidden></button>
   <button class="btn attention" id="attention" type="button" hidden></button>
   <button class="btn" id="notify-btn" type="button" hidden title="开启浏览器通知：需求待验收、任务缺少 worker、leader 离线时发送提醒">开启通知</button>
+  <button class="mode-pill update-pill" id="update-pill" type="button" hidden></button>
   <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
   <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
@@ -1300,7 +1309,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="toasts" id="toasts">
 <div class="banner demo" id="demo-banner" hidden></div>
 <div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 代码已更新，当前服务仍在运行旧版本。请在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve，再刷新本页。数据不会丢失，worker 和 leader 将自动重连。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 代码已更新，当前服务仍在运行旧版本。请点击「重启」，或在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve。数据不会丢失，worker 和 leader 将自动重连。<button class="btn sm stale-restart" id="stale-restart" type="button">重启</button><button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 </div>
 <div class="layout">
   <nav class="jobs" id="jobs" aria-label="需求列表"><h2>需求</h2><div class="sk sk-job"></div><div class="sk sk-job"></div><div class="sk sk-job"></div></nav>
@@ -2374,7 +2383,7 @@ function renderHelper(force = false) {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = ['lead', 'install', 'rules', 'tests', 'settings'].includes(helper.tab) ? helper.tab : 'worker';
+  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'version'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
     onclick: (e) => {
@@ -2384,6 +2393,7 @@ function renderHelper(force = false) {
       if (key === 'rules') loadRules();
       if (key === 'tests' && !testTpl.loading) testTpl.loaded = false; // 每次切进来重新读，别处改过也能看到
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
+      if (key === 'version') loadVersion(false);
       settingsMsg = '';
       renderHelper(true);
     },
@@ -2392,10 +2402,10 @@ function renderHelper(force = false) {
   fill(panel,
     el('div', { class: 'panel-top' },
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'))),
+      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('version', '版本'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
-    tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
+    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
+    tab === 'version' ? versionPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
     el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
     [...roles.values()].map((role) => {
@@ -3285,6 +3295,98 @@ document.addEventListener('click', (e) => {
   toastClosed.add(x.dataset.x);
   document.getElementById(x.dataset.x).hidden = true;
 });
+
+// ---------- 版本与更新 ----------
+// data.update：当前版本、运行模式、最新版本、正在下载的更新（每次轮询都有）；更新说明列表点进「版本」页时再读
+let versionInfo = null;
+let versionLoading = false;
+async function loadVersion(fresh) {
+  versionLoading = true;
+  if (helper.open && helper.tab === 'version') renderHelper(true);
+  try { versionInfo = await (await fetch(`/api/update${fresh ? '?fresh=1' : ''}`, { cache: 'no-store' })).json(); } catch { versionInfo = { ok: false, error: '无法连接 ateam 服务。' }; }
+  versionLoading = false;
+  if (helper.open && helper.tab === 'version') renderHelper(true);
+}
+async function installVersion(version) {
+  try {
+    const out = await (await fetch('/api/update/install', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(version ? { version } : {}) })).json();
+    if (!out.ok) versionInfo = { ...(versionInfo ?? {}), installError: out.message };
+  } catch { versionInfo = { ...(versionInfo ?? {}), installError: '无法连接 ateam 服务。' }; }
+  await poll();
+  renderHelper(true);
+}
+function updateJobLine(job) {
+  if (!job) return null;
+  if (job.status === 'downloading') return `正在下载 ${job.version ?? '新版本'}${job.total ? `：${Math.floor((job.received / job.total) * 100)}%` : '……'}`;
+  if (job.status === 'opened') return `${job.version} 已下载并通过校验，已打开安装程序。请按提示输入管理员密码完成安装，安装后按页面提示重启服务。`;
+  return `更新失败：${job.error}`;
+}
+function versionPage() {
+  const u = data.update ?? {};
+  const info = versionInfo ?? {};
+  const installed = u.mode === 'installed';
+  const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('zh-CN') : '');
+  const job = updateJobLine(u.job);
+  const busy = u.job?.status === 'downloading';
+  return [
+    el('p', { class: 'tab-hint' }, `当前版本 ${u.current ?? '—'} · ${u.modeLabel ?? ''}`),
+    installed ? null : el('p', { class: 'hint' }, u.mode === 'dev'
+      ? '开发模式：ateam 命令、skill 和 hook 使用上述源码仓库的代码，修改后重启服务即生效，不检查更新。切回安装版请运行 ateam dev off。'
+      : '当前直接从源码运行，未安装 ateam 安装包，不检查更新。'),
+    installed ? el('div', { class: 'prompt' },
+      el('button', { class: 'btn', type: 'button', disabled: versionLoading || READONLY, onclick: (e) => { e.stopPropagation(); loadVersion(true); } }, versionLoading ? '检查中…' : '检查更新'),
+      el('span', { class: 'hint' }, u.error ? u.error : u.checkedAt ? `上次检查：${fmtTime(u.checkedAt)}，${u.newer ? `有新版本 ${u.latest}` : '已是最新版本'}` : '尚未检查')) : null,
+    job ? el('p', { class: 'hint' }, job) : null,
+    info.installError ? el('p', { class: 'hint' }, info.installError) : null,
+    installed && (info.releases ?? []).length ? [
+      el('div', { class: 'helper-sec' }, el('h4', null, '版本记录')),
+      info.releases.map((r) => {
+        const cmp = r.version === u.current ? 0 : versionNewer(r.version, u.current) ? 1 : -1;
+        const md = el('div', { class: 'md' });
+        md.innerHTML = renderMarkdown(r.notes || '（没有更新说明）'); // renderMarkdown 先转义了 HTML
+        return el('div', { class: 'release' },
+          el('div', { class: 'release-head' },
+            el('b', null, r.version),
+            el('span', { class: 'hint' }, `${fmtDate(r.date)}${cmp === 0 ? ' · 当前版本' : ''}`),
+            cmp === 0 || READONLY ? null : el('button', { class: cmp > 0 ? 'btn primary sm' : 'btn sm', type: 'button', disabled: busy, onclick: (e) => { e.stopPropagation(); installVersion(r.version); } }, cmp > 0 ? '立即更新' : '安装此版本')),
+          md);
+      }),
+      el('p', { class: 'hint' }, '安装旧版本即回退到该版本。安装需要输入管理员密码；安装后正在运行的服务需重启才会使用新代码。'),
+    ] : null,
+  ];
+}
+function versionNewer(a, b) {
+  const x = String(a).split('.').map(Number);
+  const y = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+function renderUpdatePill() {
+  const btn = document.getElementById('update-pill');
+  const u = data?.update;
+  const downloading = u?.job?.status === 'downloading';
+  if (READONLY || !u || (!u.newer && !downloading)) { btn.hidden = true; return; }
+  fill(btn, el('span', null, downloading ? updateJobLine(u.job) : `有新版本 ${u.latest}`));
+  btn.title = '查看更新说明并安装';
+  btn.onclick = (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'version' }; loadVersion(false); renderHelper(true); };
+  btn.hidden = false;
+}
+
+// 「服务需要重启」的「重启」：服务在后台按原参数重新启动，连上新服务后刷新页面
+async function restartServer(btn) {
+  btn.disabled = true;
+  btn.textContent = '重启中…';
+  try { await fetch('/api/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); } catch {}
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const out = await (await fetch('/api/summary', { cache: 'no-store' })).json();
+      if (out.ok && !out.stale) { location.reload(); return; }
+    } catch {}
+  }
+  btn.disabled = false;
+  btn.textContent = '重启';
+}
 
 function renderModePill() {
   const btn = document.getElementById('mode-pill');
@@ -4247,16 +4349,22 @@ function installGuide() {
     hint ? el('p', { class: 'hint' }, hint) : null,
     cmd ? promptBlock(cmd, renderHelper) : null);
   return [
-    el('p', { class: 'hint' }, '仅需执行一次，以下命令在终端中运行。'),
+    // 装了安装包（安装版或开发模式）：命令和 skill 已由安装包配置，前两步不用做
+    ...(['installed', 'dev'].includes(data.update?.mode) ? [
+      el('p', { class: 'hint' }, `已通过安装包安装（${data.update.modeLabel}）。ateam 命令和 skill 链接已自动配置，菜单栏的 ateam 图标可启动、停止各项目的服务。skill 链接异常时，在终端运行 ateam setup 重新配置。`),
+      step('①② 重新配置 ateam 命令与 skill', '安装包已自动完成。仅在 skill 链接被删除或平台新装后需要运行。', 'ateam setup'),
+    ] : [
+    el('p', { class: 'hint' }, `推荐使用安装包：在 https://github.com/HananaKanana/agent-team/releases 下载对应芯片的安装包（Apple 芯片选 arm64，Intel 芯片选 x64），安装后 ateam 命令、skill 和 hook 自动配置，并提供菜单栏图标和自动更新。从源码运行时按以下步骤手动配置，仅需执行一次，命令在终端中运行。`),
     step('① 注册 ateam 命令', '输出命令列表即表示安装成功。',
       `cd ${tool}\nnpm link\nateam help`),
     step('提示找不到 ateam 命令？', 'npm 全局目录不在 PATH 中。运行以下命令将其加入 ~/.zshrc，然后在新终端中重试。',
       'echo "export PATH=\\"$(npm prefix -g)/bin:\\$PATH\\"" >> ~/.zshrc'),
     step('② 安装 skill', '为 AI 安装 skill：leader 的 skill 安装到 Claude Code，worker 的 skill 安装到 DeepSeek Harness（WorkBuddy 的 worker 另需链接到 ~/.workbuddy/skills）。采用符号链接方式，skill 更新后自动生效。如提示「已存在」，请先删除旧文件夹后重新运行。',
       `mkdir -p ~/.claude/skills ${skillsDir}\nln -s ${tool}/skills/ateam-lead   ~/.claude/skills/ateam-lead\nln -s ${tool}/skills/ateam-worker ${skillsDir}/ateam-worker`),
+    ]),
     hookStep(info),
     el('div', { class: 'helper-sec' }, el('h4', null, '每个项目')),
-    step('④ 在项目根目录启动服务', '项目须为 git 仓库。只输入 ateam 即可启动（与 ateam serve 相同）。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。',
+    step('④ 在项目根目录启动服务', '项目须为 git 仓库。只输入 ateam 即可启动（与 ateam serve 相同）。请保持该终端窗口运行，并确认输出中的「项目目录」为目标项目。装了安装包时，也可在菜单栏的 ateam 图标中「添加项目」后启动，服务在后台运行，无需保持终端。',
       `cd ${project}\nateam`),
     step('同时运行多个项目？', `在另一项目目录中同样运行 ateam 即可：${port} 被占用时自动使用下一个空闲端口（见启动信息），该项目的 leader 和 worker 会自动连接，无需额外配置。看板请访问新端口地址。`, null),
     el('p', { class: 'hint' }, '安装完成后，在「leader」页启动 leader，在「worker」页添加 worker。'),
@@ -4542,6 +4650,7 @@ function render() {
   if (PROMPTER_ONLY) { renderPrompterStrip(); return; }
   renderDemoBanner();
   renderModePill();
+  renderUpdatePill();
   // 演播开始弹窗：卡已经不是待演播（被别处开始了、作废了）就关掉；其余时候不随轮询重画，免得下拉框被收起
   if (showDlg && data.state.tasks.find((x) => x.id === showDlg.id)?.status !== 'ready') renderShowDialog();
   if (!view.job && data.state.jobs.length) view.job = data.state.jobs[data.state.jobs.length - 1].id;
@@ -4744,6 +4853,9 @@ function setBadge(text, color) {
 
 function renderAttention() {
   document.getElementById('stale').hidden = !data?.stale || toastClosed.has('stale');
+  const restartBtn = document.getElementById('stale-restart');
+  restartBtn.hidden = READONLY;
+  restartBtn.onclick ??= (e) => { e.stopPropagation(); restartServer(restartBtn); };
   const items = attentionItems();
   setBadge(items.length ? String(items.length) : '', '#d9534f');
   checkNotify(items);

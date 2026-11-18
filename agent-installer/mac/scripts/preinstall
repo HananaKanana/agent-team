@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# ateam 安装包的 preinstall。以 root 运行，在写入文件之前。
+# 退掉正在运行的菜单栏程序、删掉旧的 /Applications/ateam.app（用户挪过或残留旧内容时，
+# Installer 会去更新别处的副本）。正在运行的 ateam serve 不停：文件换掉后看板会提示重启。
+# 永远 exit 0。
+
+set -u
+LOG="/tmp/ateam-install.log"
+log() { echo "[ateam] $*" | tee -a "$LOG" >&2; }
+: > "$LOG"
+
+MENU_APP="/Applications/ateam.app"
+if pkill -f "$MENU_APP/Contents/MacOS/ateam" >>"$LOG" 2>&1; then
+    log "退出了正在运行的 ateam 菜单栏程序"
+fi
+if [ -e "$MENU_APP" ]; then
+    log "删除旧的 $MENU_APP"
+    rm -rf "$MENU_APP" >>"$LOG" 2>&1 || log "删除失败，继续安装。"
+fi
+exit 0

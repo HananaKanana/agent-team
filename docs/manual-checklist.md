@@ -191,3 +191,19 @@
 6. [ ] 装了 browser-cdp-setup 但 DeepSeek Harness 未配 dsh-cdp 的 dataDir：「待处理」里点「修复」后，`cordis.patch.yml` 里 dsh-cdp 条目带上 `dataDir: <主目录>/.chrome-agent`（已有的 dsh-cdp 条目只补 dataDir，其他设置不变；首次改动留 `.bak.ateam` 备份），底部提示需重启 DeepSeek Harness；「使用说明 → 安装 → 可选：测试浏览器」第 ② 步的「写入配置」按钮效果相同，写入后显示「已配置完成」
 7. [ ] 重启 ateam serve 后 `.ateam/runtime.json` 明显变小、不再缩进成多行；看板上在线 worker、待处理、时间线照常；leader 的 `ateam watch` 收到的新事件文字完整（存进 runtime.json 后已送达事件只留前 300 字）
 
+## 安装包与升级
+
+1. [ ] `bash agent-installer/mac/build-all.sh` 打出 `ateam-<版本>-arm64.pkg` 和 `-x64.pkg`，脚本末尾的核对全部打勾（Node 签名、文件、架构、版本）
+2. [ ] 在一台没装过 ateam 的 Mac 上安装：装完 `ateam help` 可用；`ateam version` 显示「安装版」；`~/.claude/skills/ateam-lead` 等链接指向 `/Library/Application Support/ateam/app/skills/`；已有同名目录被移到 `~/.config/ateam/backup/`；装了 WorkBuddy / DeepSeek Harness 的，hook 已装上；`/tmp/ateam-install.log` 无报错
+3. [ ] 装错芯片的安装包时，安装程序提示「芯片类型不对」并拦下
+4. [ ] 在本机（skill 链接指向 `~/code/agent-team`）安装：自动进入开发模式（`ateam dev` 显示仓库路径），skill 链接保持指向仓库，`npm link` 留下的旧 `ateam` 命令被删掉，`which ateam` 为 `/usr/local/bin/ateam`；改仓库代码后重启服务即生效
+5. [ ] `ateam dev off` 后 skill、hook 改指向安装目录，`ateam version` 显示「安装版」；`ateam dev on ~/code/agent-team` 切回
+6. [ ] 菜单栏图标：安装完自动出现，不在 Dock 里；点开列出运行过 `ateam` 的项目；「添加项目…」能选目录；未运行的项目「启动并打开看板」后服务在后台启动、浏览器打开看板、`.ateam/serve.log` 有输出；运行中的项目显示 worker 数、待验收和待答复数；「停止服务」「重启服务」生效；「查看日志」用控制台打开日志；有待验收或待答复时图标出现小红点；退出菜单栏程序后服务仍在运行
+7. [ ] 「登录时自动打开」默认勾选，注销重新登录后图标自动出现；取消勾选后不再自动打开，重新安装也不会再勾上
+8. [ ] 看板「服务需要重启」提示条上的「重启」按钮：服务按原参数（端口、`--local` 等）在后台重启，页面自动刷新；局域网只读访客看不到这个按钮
+9. [ ] 发布一个新版本后（`agent-installer/release.sh`），安装版的看板页头出现「有新版本 X」，菜单栏也提示；「使用说明 → 版本」列出版本记录和更新说明；点「立即更新」显示下载进度，下载完打开系统安装程序，装完重启服务后版本号更新
+10. [ ] 改坏 Release 里的 `.sha256` 后更新：提示「安装包校验失败」，不打开安装程序，下载的文件被删除
+11. [ ] 回退：版本页对旧版本点「安装此版本」或运行 `ateam update --version <旧版本>`，能装回旧版本
+12. [ ] 开发模式下版本页显示「开发模式」且不检查更新；`ateam update` 提示用 git pull
+13. [ ] `release.sh`：故意在文档里写一个不存在的 `ateam xxx` 命令，发布前检查报错并停止；工作区不干净、不在 main、版本号不比当前新时拒绝
+14. [ ] 卸载：运行「卸载 ateam.command」后，`ateam` 命令、菜单栏程序、安装目录、登录项、指向安装目录的 skill 链接都被删除，各项目 `.ateam/` 保留

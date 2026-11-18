@@ -1,0 +1,13 @@
+#!/bin/sh
+# ateam 命令（安装包装在 /usr/local/bin/ateam）。用安装包自带的官方 Node 运行：
+# 开发模式（ateam dev on <源码仓库>，记在 ~/.config/ateam/dev-repo）运行仓库里的代码，否则运行安装目录里的。
+BASE="/Library/Application Support/ateam"
+APP="$BASE/app/bin/ateam.js"
+DEV_FILE="$HOME/.config/ateam/dev-repo"
+if [ -f "$DEV_FILE" ]; then
+    REPO=$(head -n 1 "$DEV_FILE")
+    if [ -n "$REPO" ] && [ -f "$REPO/bin/ateam.js" ]; then
+        APP="$REPO/bin/ateam.js"
+    fi
+fi
+exec "$BASE/node/bin/node" "$APP" "$@"

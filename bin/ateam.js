@@ -28,7 +28,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local']);
+const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local', 'json', 'check', 'installer', 'remove']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 // 本来就能写多个值（逗号分隔）的参数：写了几遍就合并，不悄悄只留最后一个
 const LIST_FLAGS = new Set(['paths', 'after']);
@@ -38,6 +38,10 @@ const USAGE = `用法：ateam <命令> [参数]
 服务
   ateam [--port 7700] [--lease 15] [--idle 3] [--local]（在项目根目录启动服务，同 ateam serve；默认局域网里的其他电脑也能打开看板，只能看不能改，--local 只让本机访问）
   ateam help（显示本说明）
+  ateam version [--check]（版本和运行模式；--check 同时查有没有新版本）
+  ateam update [--version X.Y.Z] [--check]（安装版：下载新版本安装包并打开安装程序；--version 可装回旧版本）
+  ateam setup（重新链接 skill、安装 hook；安装包装完时会自动运行）
+  ateam dev [on <源码仓库> | off]（开发模式：ateam 命令、skill 和 hook 改用源码仓库的代码 / 切回安装版）
 
 worker
   ateam join --role <角色> [--id <编号>] [--name <名字>]
@@ -241,7 +245,7 @@ async function pickPort(wanted, explicit) {
   for (let port = wanted; port < wanted + 20 && port <= 65535; port++) {
     if (await portFree(port)) return port;
     const root = await ateamRootAt(port);
-    if (root && resolve(root) === here) fail(`这个项目的 ateam 服务已经在运行：http://127.0.0.1:${port}。不用再启动；要重启的话，先在原来的终端里按 Ctrl+C。`);
+    if (root && resolve(root) === here) fail(`这个项目的 ateam 服务已经在运行：http://127.0.0.1:${port}。不用再启动；要重启的话，点看板提示条上的「重启」或菜单栏 ateam 图标里的「重启服务」，或在原来的终端里按 Ctrl+C 后重新运行。`);
     if (explicit) fail(`端口 ${port} 被占用${root ? `（另一个项目 ${root} 的 ateam 服务）` : ''}。换一个端口，或者去掉 --port 让它自动找空闲端口。`);
   }
   fail(`${wanted} 到 ${wanted + 19} 的端口都被占用了。请用 --port 指定一个空闲端口。`);
@@ -402,7 +406,7 @@ const commands = {
       if (flags.host !== undefined && flags.host !== '0.0.0.0' && flags.host !== '127.0.0.1') fail('--host 只支持 0.0.0.0（默认，局域网可只读访问）或 127.0.0.1（同 --local，仅本机）。');
       if (flags.local && (flags.lan || flags.host === '0.0.0.0')) fail('--local 和 --lan / --host 0.0.0.0 不能同时用。');
       const lan = !flags.local && flags.host !== '127.0.0.1';
-      server = await startServer({ root: process.cwd(), port, leaseMin, idleMin, lan });
+      server = await startServer({ root: process.cwd(), port, leaseMin, idleMin, lan, argv: process.argv.slice(2) });
     } catch (err) {
       fail(err.message);
     }
@@ -415,6 +419,63 @@ const commands = {
       ? `\n局域网访问已开启（只读）。同一局域网里的其他电脑用下面的地址打开看板，只能看、不能改；所有操作只能在本机看板或命令行里做（不想开放就加 --local）：\n${server.ateamLan.map((u) => `  ${u}`).join('\n') || '  （没找到局域网 IP）'}`
       : '';
     return `ateam 服务已启动：http://127.0.0.1:${port}（看板同地址）${moved}${lanLines}\n项目目录：${process.cwd()}（任务路径相对于这里，worker 的改动必须在这个目录里）${repos}`;
+  },
+
+  async version({ flags }) {
+    const { version, mode, modeLabel, devRepo } = await import('../src/install.js');
+    const info = { version: version(), mode: mode(), devRepo: mode() === 'dev' ? devRepo() : null };
+    if (flags.check && info.mode === 'installed') {
+      const { check } = await import('../src/update.js');
+      const r = await check();
+      Object.assign(info, { latest: r.latest, newer: r.newer, error: r.error });
+    }
+    if (flags.json) return JSON.stringify(info);
+    const lines = [`ateam ${info.version} · ${modeLabel(info.mode)}`];
+    if (flags.check && info.mode !== 'installed') lines.push(info.mode === 'dev' ? '开发模式不检查更新，用 git pull 更新源码。' : '不是安装版，不检查更新。');
+    if (info.error) lines.push(info.error);
+    else if (info.newer) lines.push(`有新版本 ${info.latest}，运行 ateam update 安装。`);
+    else if (info.latest) lines.push('已是最新版本。');
+    return lines.join('\n');
+  },
+
+  async update({ flags }) {
+    const { mode } = await import('../src/install.js');
+    if (mode() !== 'installed') fail(mode() === 'dev' ? '当前是开发模式，代码来自源码仓库，用 git pull 更新；要改用安装版先运行 ateam dev off。' : '当前不是安装版，请下载安装包安装。');
+    const { check, install } = await import('../src/update.js');
+    if (flags.check) {
+      const r = await check();
+      if (flags.json) return JSON.stringify({ current: r.current, latest: r.latest, newer: r.newer, error: r.error });
+      if (r.error) fail(r.error);
+      return r.newer ? `有新版本 ${r.latest}（当前 ${r.current}）。\n\n${r.releases[0].notes || '（没有更新说明）'}` : `已是最新版本 ${r.current}。`;
+    }
+    let shown = -1;
+    try {
+      const r = await install(flags.version ? String(flags.version) : undefined, ({ received, total }) => {
+        const pct = total ? Math.floor((received / total) * 100) : -1;
+        if (pct >= 0 && pct !== shown && pct % 10 === 0) { shown = pct; process.stderr.write(`下载中 ${pct}%\n`); }
+      });
+      return `已下载 ${r.version} 并通过校验，已打开安装程序：按提示输入管理员密码完成安装，然后重启正在运行的 ateam 服务。`;
+    } catch (err) {
+      fail(err.message);
+    }
+  },
+
+  async setup({ flags }) {
+    const { setup, teardown } = await import('../src/install.js');
+    return flags.remove ? teardown() : setup({ installer: !!flags.installer });
+  },
+
+  async dev({ positional }) {
+    const { devOn, devOff, mode, modeLabel } = await import('../src/install.js');
+    try {
+      if (positional[0] === 'on') return devOn(positional[1]);
+      if (positional[0] === 'off') return devOff();
+      if (positional[0]) fail('用法：ateam dev [on <源码仓库路径> | off]');
+      return `当前：${modeLabel(mode())}`;
+    } catch (err) {
+      if (err instanceof CliError) throw err;
+      fail(err.message);
+    }
   },
 
   async join({ flags }) {

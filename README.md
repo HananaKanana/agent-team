@@ -74,9 +74,32 @@
 
 ## 一、安装（只做一次）
 
+### 方式一：安装包（推荐，仅 macOS）
+
+在 <https://github.com/HananaKanana/agent-team/releases> 下载对应芯片的安装包：Apple 芯片（M 系列）选 `ateam-<版本>-arm64.pkg`，Intel 芯片选 `-x64.pkg`。双击安装，输入一次管理员密码。安装包没有签名，第一次打开被拦时到「系统设置 → 隐私与安全性」点「仍要打开」。
+
+安装包自带 Node，装完自动完成：
+
+- `ateam` 命令（`/usr/local/bin/ateam`），程序在 `/Library/Application Support/ateam/`；
+- skill 链接：`ateam-lead` → `~/.claude/skills/`，`ateam-worker` → DeepSeek Harness 的 skill 目录和 `~/.workbuddy/skills/`，`browser-cdp-setup` → DeepSeek Harness 的 skill 目录（只链本机装了的平台；已有同名目录的先移到 `~/.config/ateam/backup/`）；
+- 本机有 DeepSeek Harness 或 WorkBuddy 的，顺带安装 hook（DeepSeek Harness 需重启后生效）；
+- 菜单栏 ateam 图标（`/Applications/ateam.app`），登录时自动打开（可在菜单里取消）。
+
+安装记录在 `/tmp/ateam-install.log`。平台是后来才装的、或 skill 链接被删了，运行 `ateam setup` 重新配置。
+
+**菜单栏图标**：点开列出用过的项目（运行过 `ateam` 的项目自动加入，也可「添加项目…」），每个项目显示是否在运行、在线 worker 数、待验收和待答复数；子菜单里可以启动并打开看板、重启、停止服务、查看日志。从菜单启动的服务在后台运行，输出写到项目的 `.ateam/serve.log`；在终端里启动的服务也能识别和停止。任一项目有待验收或待答复时，图标右上角出现小红点。退出菜单栏程序不会停止服务。
+
+**升级**：安装版的 `ateam` 服务每 6 小时检查一次 GitHub 上的新版本，有新版本时看板页头和菜单栏会提示。点「立即更新」（或运行 `ateam update`）会下载安装包、核对 sha256，再打开系统安装程序，输入一次密码即可。装完后按看板提示重启服务（提示条上有「重启」按钮），skill 自动是新的，hook 不用重装。新版本有问题时，在看板「使用说明 → 版本」选旧版本「安装此版本」，或运行 `ateam update --version 0.1.9` 回退。
+
+**卸载**：运行 `/Library/Application Support/ateam/卸载 ateam.command`。各项目里的 `.ateam/` 不会删除。
+
+**开发模式**（维护 ateam 源码的人用）：`ateam dev on ~/code/agent-team` 让 `ateam` 命令、skill 和 hook 改用源码仓库的代码，改完代码重启服务即生效，不检查更新；`ateam dev off` 切回安装版；`ateam dev` 查看当前模式。第一次安装时，如果现有 skill 链接指向某个源码仓库（下面方式二的用法），会自动进入开发模式并保持原样，同时删掉 `npm link` 留下的旧命令。
+
+### 方式二：从源码运行
+
 > 服务跑起来以后，看板右上角「使用说明」→「安装」页里也有这些步骤，命令里的路径已经填好，可以直接复制。
 
-### 1. 注册 `ateam` 命令
+#### 1. 注册 `ateam` 命令
 
 ```bash
 cd ~/code/agent-team
@@ -90,7 +113,7 @@ ateam help          # 能打印出命令列表就成功了
 echo "export PATH=\"$(npm prefix -g)/bin:\$PATH\"" >> ~/.zshrc
 ```
 
-### 2. 安装 skill
+#### 2. 安装 skill
 
 | skill | 给谁用 | 放到哪里 |
 |---|---|---|
@@ -110,7 +133,7 @@ ln -s ~/code/agent-team/skills/ateam-worker ~/.agents/skills/ateam-worker
 
 检查：`ls -l ~/.claude/skills/` 里 `ateam-lead -> .../agent-team/skills/ateam-lead` 这样带箭头的就是软链。
 
-### 3. 为 worker 安装 hook
+#### 3. 为 worker 安装 hook
 
 在看板「使用说明 → 安装」第 ③ 步点「安装」，或在终端里运行，只装实际用的平台：
 
@@ -337,6 +360,8 @@ worker 没活时会一直挂着等任务。空闲超过 3 分钟（本角色没�
 
 ### 更新了 agent-team 的代码之后
 
+用安装包的：按上面「升级」操作，下面这些不用管。从源码运行或开发模式下：
+
 - 改了服务端代码（`src/` 下的 `.js` 文件）：重启 `ateam serve`。状态不会丢，worker 和 leader 会在约 60 秒内自动重连。忘了也没关系：服务发现代码比自己新时，看板顶部会出现黄色提示条「服务还在跑旧代码」，`ateam status` 也会提醒 leader。
 - 改了命令行（`bin/ateam.js`、`src/format.js` 的输出文字）：下一条命令就生效；`src/format.js` 有一部分输出由服务生成，稳妥起见也重启一下服务。
 - 只改了看板（`src/dashboard.html`）：刷新浏览器即可。
@@ -380,7 +405,21 @@ ateam rules              # 查看项目规则；ateam rules add "提交前先跑
 ateam jobs --grep 公告    # 翻看已验收的历史需求（--all 包括没验收的）；ateam job show J13 看单个需求的任务、提交和汇报
 ateam task edit T3 --role backend      # 改任务的角色（待领取或已挂起的任务）
 ateam dismiss --all --user-approved   # 活干完了，让 worker 全部下线（也可以 --role frontend 或指定编号；让某个角色一个不剩时要加 --user-approved，表示用户同意）
+ateam version --check   # 版本、运行模式（安装版 / 开发模式 / 源码运行），以及有没有新版本
+ateam update        # 安装版：下载新版本并打开安装程序（--version 0.1.9 装回旧版本）
+ateam setup         # 重新链接 skill、安装 hook（安装包装完时自动运行）
+ateam dev on ~/code/agent-team   # 开发模式：改用源码仓库的代码；ateam dev off 切回安装版
 ateam help          # 全部命令
 ```
+
+## 七、发布新版本（维护者）
+
+在 Mac 上、main 分支、工作区干净时运行（需要 `gh` 已登录，会推送 main 和 tag）：
+
+```bash
+bash agent-installer/release.sh 0.2.0
+```
+
+它会依次：做发布前检查（所有脚本和看板页面的语法、文档里提到的 `ateam` 命令都存在，不通过就停）→ 改 `package.json` 版本并提交 → 打 arm64 和 x64 两个安装包（下载官方 Node 并核对 sha256，打完展开核对 Node 签名未被改动、文件齐全）→ 生成 `.sha256` → 生成更新说明（上个版本以来的提交标题，可先编辑）→ 确认后打 tag、推送、在 GitHub 建 Release 并上传。只打包不发布：`bash agent-installer/mac/build-all.sh`，产物在 `agent-installer/dist/`。GitHub 仓库需公开，未登录的电脑才能检查更新和下载。
 
 设计细节见 [docs/superpowers/specs/2026-10-03-agent-team-design.md](docs/superpowers/specs/2026-10-03-agent-team-design.md)。

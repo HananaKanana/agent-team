@@ -81,7 +81,7 @@
 安装包自带 Node，装完自动完成：
 
 - `ateam` 命令（`/usr/local/bin/ateam`），程序在 `/Library/Application Support/ateam/`；
-- skill 链接：`ateam-lead` → `~/.claude/skills/`，`ateam-worker` → DeepSeek Harness 的 skill 目录和 `~/.workbuddy/skills/`，`browser-cdp-setup` → DeepSeek Harness 的 skill 目录（只链本机装了的平台；已有同名目录的先移到 `~/.config/ateam/backup/`）。自己另外建的 ateam skill 软链（比如把 `ateam-worker` 也链进 `~/.claude/skills/`，让 Claude Code 当 worker）也会被识别，切换开发模式 / 安装版和卸载时一起改；
+- skill 链接：`ateam-lead` → `~/.claude/skills/`，`ateam-worker` → DeepSeek Harness 的 skill 目录和 `~/.workbuddy/skills/`，`browser-cdp-setup` → DeepSeek Harness 的 skill 目录（只链本机装了的平台；已有同名目录的先移到 `~/.config/ateam/backup/`）。自己另外建的、指向 ateam 的 skill 软链（比如把 `ateam-worker` 也链进 `~/.claude/skills/`，让 Claude Code 当 worker）也会被识别，切换开发模式 / 安装版和卸载时一起改；
 - 本机有 DeepSeek Harness 或 WorkBuddy 的，顺带安装 hook（DeepSeek Harness 需重启后生效）；
 - 菜单栏 ateam 图标（`/Applications/ateam.app`），登录时自动打开（可在菜单里取消）。
 

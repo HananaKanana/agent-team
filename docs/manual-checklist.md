@@ -198,7 +198,7 @@
 2. [ ] 在一台没装过 ateam 的 Mac 上安装：装完 `ateam help` 可用；`ateam version` 显示「安装版」；`~/.claude/skills/ateam-lead` 等链接指向 `/Library/Application Support/ateam/app/skills/`；已有同名目录被移到 `~/.config/ateam/backup/`；装了 WorkBuddy / DeepSeek Harness 的，hook 已装上；`/tmp/ateam-install.log` 无报错
 3. [ ] 装错芯片的安装包时，安装程序提示「芯片类型不对」并拦下
 4. [ ] 在本机（skill 链接指向 `~/code/agent-team`）安装：自动进入开发模式（`ateam dev` 显示仓库路径），skill 链接保持指向仓库，`npm link` 留下的旧 `ateam` 命令被删掉，`which ateam` 为 `/usr/local/bin/ateam`；改仓库代码后重启服务即生效
-5. [ ] `ateam dev off` 后 skill、hook 改指向安装目录，`ateam version` 显示「安装版」；`ateam dev on ~/code/agent-team` 切回；自己另建的 ateam skill 软链（如 `~/.claude/skills/ateam-worker`、`~/.agents/skills/ateam-lead`）也跟着改指向，`ateam dev off` 的输出里按目录列出；菜单栏不用重启，切换后再点开菜单，顶部即显示新模式（开发模式显示「· 开发模式」，安装版只显示版本号）
+5. [ ] `ateam dev off` 后 skill、hook 改指向安装目录，`ateam version` 显示「安装版」；`ateam dev on ~/code/agent-team` 切回；自己另建的、指向 ateam 的 skill 软链（如 `~/.claude/skills/ateam-worker`、`~/.agents/skills/ateam-lead`）也跟着改指向，`ateam dev off` 的输出里按目录列出；菜单栏不用重启，切换后再点开菜单，顶部即显示新模式（开发模式显示「· 开发模式」，安装版只显示版本号）
 6. [ ] 菜单栏图标：安装完自动出现，不在 Dock 里；点开列出运行过 `ateam` 的项目；「添加项目…」能选目录；未运行的项目「启动并打开看板」后服务在后台启动、浏览器打开看板、`.ateam/serve.log` 有输出；运行中的项目显示 worker 数、进行中和待处理的数量；「停止服务」「重启服务」生效；「查看日志」用控制台打开日志；有待处理事项时图标出现小红点；退出菜单栏程序后服务仍在运行
 7. [ ] 「登录时自动打开」默认勾选，注销重新登录后图标自动出现；取消勾选后不再自动打开，重新安装也不会再勾上
 8. [ ] 看板「服务需要重启」提示条上的「重启」按钮：服务按原参数（端口、`--local` 等）在后台重启，页面自动刷新；局域网只读访客看不到这个按钮

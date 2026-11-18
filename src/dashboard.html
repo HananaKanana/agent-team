@@ -3521,6 +3521,35 @@ function demoDrawerBody(t) {
 
 // 脚本缓存：演播需求页的步骤大纲、操作记录面板用
 const opsCache = new Map(); // taskId -> { key, html | error }
+// 卡的 token 用量（DeepSeek Harness 会话记录）：打开卡时读，卡状态变了重读，进行中的卡最多 30 秒重读一次
+const tokenCache = new Map(); // taskId -> { key, at, value, loading }
+function loadTokens(t) {
+  const key = `${t.status}:${t.history.length}:${'tokens' in t}`;
+  const hit = tokenCache.get(t.id);
+  const stale = !hit || hit.key !== key || (t.status !== 'approved' && Date.now() - hit.at > 30000);
+  if (stale && !hit?.loading) {
+    tokenCache.set(t.id, { ...(hit || {}), key, at: Date.now(), loading: true });
+    fetch(`/api/task-tokens?id=${encodeURIComponent(t.id)}`, { cache: 'no-store' }).then((r) => r.json())
+      .then((out) => tokenCache.set(t.id, { key, at: Date.now(), value: out.ok ? out.tokens : { error: true } }))
+      .catch(() => tokenCache.set(t.id, { key, at: Date.now(), value: { error: true } }))
+      .then(() => { if (view.task === t.id) renderDrawer(false); });
+  }
+  return hit && 'value' in hit ? hit.value : undefined;
+}
+const fmtTokens = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(2)} 亿` : n >= 1e4 ? `${(n / 1e4).toFixed(1)} 万` : String(n));
+// 详情里的「Token」一行；卡还没人领过时不显示
+function tokenFact(t, fact) {
+  if (!t.history.some((h) => h.type === 'claimed')) return null;
+  const v = loadTokens(t);
+  if (v === undefined) return fact('Token', el('span', { class: 'hint' }, '统计中…'));
+  if (v.none) return null;
+  if (v.error) return fact('Token', el('span', { class: 'hint' }, '读取失败'));
+  if (v.unavailable) return fact('Token', el('span', { class: 'hint', title: 'WorkBuddy 的会话保存在云端，本机没有 token 记录；worker 未启用工具后 hook 时也无法对应到会话。' }, '无数据'));
+  const total = v.input + v.cacheRead + v.output;
+  return fact('Token', el('span', { class: 'tokens', title: `模型调用 ${v.calls} 次。缓存命中的输入按低价计费。${v.missing ? `有 ${v.missing} 个会话在本机找不到记录，未计入。` : ''}` },
+    el('b', null, `共 ${fmtTokens(total)}`),
+    el('span', { class: 'hint' }, ` 输入 ${fmtTokens(v.input)} · 缓存命中 ${fmtTokens(v.cacheRead)} · 输出 ${fmtTokens(v.output)} · 调用 ${v.calls} 次${v.live ? '（进行中，实时统计）' : ''}${v.missing ? '（部分会话无记录）' : ''}`)));
+}
 let lastOutlineStep = null;
 // 操作记录里某一步的那一条（「### 3. ...」到下一个「### 」之前）
 function opsForStep(raw, n) {
@@ -3629,7 +3658,8 @@ function renderDrawer(fresh) {
     fact('脚本', el('code', null, t.script)),
     fact('预演', rehearsalTag(t)),
     fact('运行次数', `${(t.runs || []).length} 次`),
-    fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—')) : el('dl', { class: 'facts' },
+    fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—'),
+    tokenFact(t, fact)) : el('dl', { class: 'facts' },
     fact('状态', el('span', { class: `lozenge c-${lane}` }, LANE_LABEL[lane])),
     fact('角色', el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
     fact('处理人', t.assignee ? el('span', { class: 'who' }, avatar(t.assignee, t.role), agentLabel(t.assignee)) : '未领取'),
@@ -3639,7 +3669,8 @@ function renderDrawer(fresh) {
     fact('打回', `${t.rejectCount} 次`),
     fact('创建', t.history[0] ? fmtTime(t.history[0].ts) : '—'),
     t.status === 'approved' && spent(t) != null ? fact('总耗时', dur(spent(t))) : null,
-    fact('路径', t.paths.length ? t.paths.map((p) => el('code', null, p)) : '无'));
+    fact('路径', t.paths.length ? t.paths.map((p) => el('code', null, p)) : '无'),
+    tokenFact(t, fact));
   fill(drawer,
     el('div', { class: 'drawer-bar' },
       el('span', { class: 'crumbs', title: job ? `${job.id} ${job.title}` : t.jobId }, `需求 ${t.jobId} / `, el('b', null, t.id)),

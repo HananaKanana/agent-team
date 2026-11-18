@@ -16,6 +16,7 @@ import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamV
 import { check as checkRelease, install as installRelease } from './update.js';
 import { anyPushOn, maskedPush, pushEnabled, savePush, sendPush, setPushEnabled } from './push.js';
 import { loadState, saveState } from './persist.js';
+import { taskUsage } from './usage.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -493,6 +494,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   const pushDone = new Set();
   let pushBaselined = false;
   const lanLink = (hash = '') => (lanUrls[0] ? `${lanUrls[0]}/${hash ? `#${hash}` : ''}` : '');
+  // ---------- token 用量（DeepSeek Harness 的会话记录，见 usage.js）----------
+  // 已通过的卡用记在卡上的数；其他卡现算（进行中的卡随 worker 干活增长）。
+  // 返回 { input, cacheRead, output, calls, missing, live }；没人做过 { none }；本机没有会话记录 { unavailable }
+  function tokensOf(task) {
+    if (task.status === 'approved' && 'tokens' in task) return task.tokens ? { ...task.tokens, live: false } : { unavailable: true };
+    const windows = store.taskTokenWindows(task.id);
+    if (!windows.length) return { none: true };
+    const u = taskUsage(windows);
+    return u ? { ...u, live: task.status !== 'approved' } : { unavailable: true };
+  }
+  // 卡通过后把用量记到卡上：之后 worker 下线、编号让给别人、会话记录被删，都不影响查看
+  function snapshotTokens() {
+    for (const t of store.state.tasks) {
+      if (t.status !== 'approved' || 'tokens' in t) continue;
+      const windows = store.taskTokenWindows(t.id);
+      const u = windows.length ? taskUsage(windows) : null;
+      store.setTaskTokens(t.id, u ? { input: u.input, cacheRead: u.cacheRead, output: u.output, calls: u.calls, ...(u.missing ? { missing: u.missing } : {}) } : null);
+    }
+  }
+
   async function checkPush() {
     // 自检问题、服务需要重启是本机的事，不推到手机（自检结果在启动后才出来，会被当成新事项每次重启都推）
     const items = attention().filter((i) => i.key !== 'stale' && !i.key.startsWith('doctor:'));
@@ -670,6 +691,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
       return { task: store.startDemo(id, b.mode ?? 'show', b.steps ?? null, total, b.viewport ?? null) };
     },
+    'GET /api/task-tokens': (_b, url) => ({ tokens: tokensOf(store.getTask(url.searchParams.get('id') ?? '')) }),
     'GET /api/demo/ops': async (_b, url) => {
       await settleOps();
       const task = store.getTask(url.searchParams.get('id') ?? '');
@@ -1186,5 +1208,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // 推送到手机：每 15 秒看一次待处理清单
   setTimeout(() => checkPush().catch(() => {}), 5000).unref();
   setInterval(() => checkPush().catch(() => {}), 15000).unref();
+  // token 用量：每分钟把新通过的卡的用量记到卡上
+  setTimeout(() => { try { snapshotTokens(); } catch {} }, 10000).unref();
+  setInterval(() => { try { snapshotTokens(); } catch {} }, 60000).unref();
   return server;
 }

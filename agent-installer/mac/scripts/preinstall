@@ -10,6 +10,13 @@ LOG="/tmp/ateam-install.log"
 log() { echo "[ateam] $*" | tee -a "$LOG" >&2; }
 : > "$LOG"
 
+# npm link 建的 /usr/local/bin/ateam 是指向源码仓库 bin/ateam.js 的软链：先删掉，
+# 免得写入启动脚本时顺着软链覆盖了仓库里的文件
+if [ -L /usr/local/bin/ateam ]; then
+    log "删除 npm link 留下的 /usr/local/bin/ateam 软链（指向 $(readlink /usr/local/bin/ateam)）"
+    rm -f /usr/local/bin/ateam
+fi
+
 MENU_APP="/Applications/ateam.app"
 if pkill -f "$MENU_APP/Contents/MacOS/ateam" >>"$LOG" 2>&1; then
     log "退出了正在运行的 ateam 菜单栏程序"

@@ -431,6 +431,23 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     server.closeAllConnections?.();
   }
 
+  // 菜单栏「启动 worker」可选的角色：标准角色 + 未完成的卡和在线 worker 用到的角色；缺人的标出来（与看板「worker」页一致）
+  const STANDARD_ROLES = [['product', '产品'], ['frontend', '前端'], ['backend', '后端'], ['test', '测试'], ['critic', '审卡']];
+  function spawnRoles() {
+    const st = store.state;
+    const roles = new Map(STANDARD_ROLES.map(([key, label]) => [key, { role: key, label }]));
+    for (const t of st.tasks) if (t.status !== 'approved' && t.status !== 'cancelled') { const k = t.role.trim().toLowerCase(); if (!roles.has(k)) roles.set(k, { role: t.role, label: null }); }
+    for (const a of st.agents) if (!a.hidden) { const k = a.role.trim().toLowerCase(); if (!roles.has(k)) roles.set(k, { role: a.role, label: null }); }
+    const needs = new Set(store.staffingNeeds().needs.map((n) => n.role.trim().toLowerCase()));
+    const online = st.agents.filter((a) => a.status === 'online');
+    const platform = store.config().spawnPlatform;
+    return {
+      platform: platform === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness',
+      // 缺人的排前面
+      roles: [...roles].map(([k, r]) => ({ ...r, needed: needs.has(k), online: online.filter((a) => a.role.trim().toLowerCase() === k).length })).sort((a, b) => b.needed - a.needed),
+    };
+  }
+
   // 待你处理的事，与看板「待处理」（dashboard.html 的 attentionItems）同一套规则。hash 是看板地址的 #需求/卡号，菜单栏点了直达
   let lanUrls = [];
   function attention() {
@@ -824,6 +841,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
           return { id: a.id, name: a.name || null, role: a.role, stale: !!a.stale, task: t ? { id: t.id, title: t.title, status: t.status, hash: `${t.jobId}/${t.id}`, since } : null };
         }),
         lan: lanUrls,
+        spawn: spawnRoles(),
         stale: codeHash() !== startHash,
         update: updateInfo.newer ? updateInfo.latest : null,
       };

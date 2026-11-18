@@ -21,6 +21,7 @@ struct Status {
     var items: [[String: Any]] { summary?["items"] as? [[String: Any]] ?? [] }
     var agents: [[String: Any]] { summary?["agents"] as? [[String: Any]] ?? [] }
     var lan: [String] { summary?["lan"] as? [String] ?? [] }
+    var spawn: [String: Any] { summary?["spawn"] as? [String: Any] ?? [:] }
     var attention: Bool { !items.isEmpty }
     func url(_ hash: String = "") -> URL? {
         guard let port = port else { return nil }
@@ -30,6 +31,8 @@ struct Status {
 
 // 通知开关，默认开
 let NOTIFY_KEY = "notify"
+// VS Code（找不到就不显示「在 VS Code 中打开」）
+func vscodeURL() -> URL? { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.VSCode") }
 func notifyOn() -> Bool { UserDefaults.standard.object(forKey: NOTIFY_KEY) as? Bool ?? true }
 
 func ago(_ ms: Double?) -> String {
@@ -41,13 +44,13 @@ func ago(_ ms: Double?) -> String {
 }
 
 // 同步请求本机服务（在后台线程调用）
-func httpJSON(_ url: String, post: Bool = false, timeout: TimeInterval = 1.5) -> [String: Any]? {
+func httpJSON(_ url: String, post: Bool = false, body: [String: Any] = [:], timeout: TimeInterval = 1.5) -> [String: Any]? {
     guard let u = URL(string: url) else { return nil }
     var req = URLRequest(url: u, timeoutInterval: timeout)
     if post {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
-        req.httpBody = "{}".data(using: .utf8)
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
     }
     let sem = DispatchSemaphore(value: 0)
     var out: [String: Any]?
@@ -297,6 +300,24 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     w.toolTip = task?["title"] as? String
                     w.indentationLevel = 1
                 }
+                // 按角色启动 worker：与看板「worker」页的「启动」按钮相同，在设置里选的平台中新建会话
+                let roles = st.spawn["roles"] as? [[String: Any]] ?? []
+                if !roles.isEmpty {
+                    let spawnMenu = NSMenu()
+                    spawnMenu.autoenablesItems = false
+                    for r in roles {
+                        let role = r["role"] as? String ?? ""
+                        var text = role
+                        if let label = r["label"] as? String { text += " · \(label)" }
+                        if (r["needed"] as? Bool) == true { text += "（缺少 worker）" }
+                        let n = (r["online"] as? NSNumber)?.intValue ?? 0
+                        if n > 0 { text += " · 在线 \(n) 个" }
+                        _ = add(text, #selector(spawnWorker(_:)), ["path": p, "role": role], to: spawnMenu, enabled: idle)
+                    }
+                    let si = NSMenuItem(title: "启动 worker（\(st.spawn["platform"] as? String ?? "")）", action: nil, keyEquivalent: "")
+                    si.submenu = spawnMenu
+                    sub.addItem(si)
+                }
                 // 局域网只读地址：复制给同事看进度
                 sub.addItem(.separator())
                 if st.lan.isEmpty { _ = add("局域网访问未开启（以 --local 启动）", nil, to: sub, enabled: false) }
@@ -305,6 +326,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                 _ = add("启动并打开看板", #selector(start(_:)), p, to: sub, enabled: idle)
             }
             sub.addItem(.separator())
+            if vscodeURL() != nil { _ = add("在 VS Code 中打开", #selector(openInVSCode(_:)), p, to: sub) }
+            _ = add("在终端中打开", #selector(openInTerminal(_:)), p, to: sub)
             _ = add("查看日志", #selector(showLog(_:)), p, to: sub)
             _ = add("在 Finder 中显示", #selector(reveal(_:)), p, to: sub)
             _ = add("从列表中移除", #selector(remove(_:)), p, to: sub)
@@ -334,6 +357,35 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
     @objc func openURL(_ sender: NSMenuItem) {
         guard let text = sender.representedObject as? String, let url = URL(string: text) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    @objc func spawnWorker(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: String], let p = info["path"], let role = info["role"], let port = port(p) else { return }
+        DispatchQueue.global().async {
+            let out = httpJSON("http://127.0.0.1:\(port)/api/spawn", post: true, body: ["role": role, "by": "user"], timeout: 30)
+            DispatchQueue.main.async {
+                guard let out = out else { self.alert("启动 worker 失败", "无法连接该项目的 ateam 服务。"); return }
+                if (out["ok"] as? Bool) != true { self.alert("启动 worker 失败", out["message"] as? String ?? "未知错误"); return }
+                var lines: [String] = []
+                if let note = out["note"] as? String { lines.append(note) }
+                if (out["over"] as? Bool) == true, let max = (out["max"] as? NSNumber)?.intValue { lines.append("当前在线 worker 已超过设置的上限 \(max) 个。") }
+                if !lines.isEmpty { self.alert("已启动 \(role) worker", lines.joined(separator: "\n\n")) }
+                self.refreshStatuses()
+            }
+        }
+    }
+
+    @objc func openInVSCode(_ sender: NSMenuItem) {
+        guard let p = sender.representedObject as? String, let app = vscodeURL() else { return }
+        NSWorkspace.shared.open([URL(fileURLWithPath: p)], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    @objc func openInTerminal(_ sender: NSMenuItem) {
+        guard let p = sender.representedObject as? String else { return }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        proc.arguments = ["-a", "Terminal", p]
+        try? proc.run()
     }
 
     @objc func copyText(_ sender: NSMenuItem) {

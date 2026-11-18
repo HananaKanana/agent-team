@@ -54,6 +54,14 @@ export function mode() {
   return 'source';
 }
 
+// 切换开发模式 / 安装版后，已经在运行的进程还是原来那份代码（要重启才换）。
+// 返回启动脚本此刻会选的模式（'dev' / 'installed'），和正在运行的代码一致时返回 null；没装安装包时不比较
+export function modeMismatch() {
+  if (!installed()) return null;
+  const dev = devRepo();
+  return real(dev ?? APP_DIR) === real(TOOL_DIR) ? null : dev ? 'dev' : 'installed';
+}
+
 export function modeLabel(m = mode()) {
   return m === 'installed' ? '安装版' : m === 'dev' ? `开发模式：${TOOL_DIR}` : `源码运行：${TOOL_DIR}`;
 }

@@ -1384,7 +1384,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="toasts" id="toasts">
 <div class="banner demo" id="demo-banner" hidden></div>
 <div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
-<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：ateam 代码已更新，当前服务仍在运行旧版本。请点击「重启」，或在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve。数据不会丢失，worker 和 leader 将自动重连。<button class="btn sm stale-restart" id="stale-restart" type="button">重启</button><button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：<span id="stale-why">ateam 代码已更新，当前服务仍在运行旧版本。</span>请点击「重启」，或在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve。数据不会丢失，worker 和 leader 将自动重连。<button class="btn sm stale-restart" id="stale-restart" type="button">重启</button><button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 </div>
 <div class="layout">
   <nav class="jobs" id="jobs" aria-label="需求列表"><h2>需求</h2><div class="sk sk-job"></div><div class="sk sk-job"></div><div class="sk sk-job"></div></nav>
@@ -5283,7 +5283,7 @@ function attentionItems() {
   for (const [role, ts] of (frozenDemo() ? new Map() : rolesNeedingWorkers())) {
     items.push({ key: `needs:${role.toLowerCase()}`, role, tasks: ts.map((t) => t.id + (t.handoff ? ' 待接手' : '')).join('、'), text: `${role} 缺少 worker`, body: `${role} 角色的任务无人处理，需启动一个 ${role} worker` });
   }
-  if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: 'ateam 代码已更新，请重启 ateam serve' });
+  if (data.stale) items.push({ key: 'stale', text: '服务需要重启', body: data.staleWhy === 'dev' || data.staleWhy === 'installed' ? '已切换运行模式，请重启 ateam serve 以使用对应的代码' : 'ateam 代码已更新，请重启 ateam serve' });
   for (const t of data.state.tasks) {
     if ((t.critiques || []).some(awaitingUser)) {
       items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧待决定`, body: `${t.id} ${t.title}：审卡与 leader 存在分歧，待决定` });
@@ -5382,6 +5382,7 @@ function setBadge(text, color) {
 function renderAttention() {
   // 局域网只读访客重启不了服务，不显示这条提示
   document.getElementById('stale').hidden = !data?.stale || toastClosed.has('stale') || READONLY;
+  document.getElementById('stale-why').textContent = data?.staleWhy === 'dev' ? '已切换到开发模式，当前服务仍在运行安装版的代码。' : data?.staleWhy === 'installed' ? '已切换回安装版，当前服务仍在运行源码仓库的代码。' : 'ateam 代码已更新，当前服务仍在运行旧版本。';
   const restartBtn = document.getElementById('stale-restart');
   restartBtn.onclick ??= (e) => { e.stopPropagation(); restartServer(restartBtn); };
   const items = attentionItems();

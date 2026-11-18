@@ -12,7 +12,7 @@ import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { runDoctor } from './doctor.js';
-import { devRepo, mode as runMode, modeLabel, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
+import { devRepo, mode as runMode, modeLabel, modeMismatch, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
 import { check as checkRelease, install as installRelease } from './update.js';
 import { anyPushOn, EVENT_TYPES, eventOn, maskedPush, pushEnabled, readDigest, readPrefs, saveDigest, savePrefs, savePush, sendPush, setPushEnabled } from './push.js';
 import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
@@ -171,6 +171,8 @@ function lanAddresses() {
 export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, lan = false, argv = [] } = {}) {
   const layout = await detectRepos(root);
   const startHash = codeHash();
+  // 服务需要重启的原因：切换了运行模式（dev / installed，启动脚本会改用另一份代码），或代码改过（code）；都没有为 null
+  const staleWhy = () => modeMismatch() ?? (codeHash() !== startHash ? 'code' : null);
   // 单仓库：把 .ateam/ 加进项目的 .gitignore。多仓库：项目目录本身不是仓库，不用加
   if (layout.mode === 'single') ensureGitignore(root);
 
@@ -468,7 +470,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         items.push({ key: `needs:${n.role.toLowerCase()}`, text: `${n.role} 缺少 worker（${n.tasks.join('、')}）`, hash: t ? `${t.jobId}/${t.id}` : '', act: { type: 'spawn', role: n.role } });
       }
     }
-    if (codeHash() !== startHash) items.push({ key: 'stale', text: '服务需要重启', hash: '', act: { type: 'restart' } });
+    if (staleWhy()) items.push({ key: 'stale', text: staleWhy() === 'code' ? '服务需要重启' : '已切换运行模式，服务需要重启', hash: '', act: { type: 'restart' } });
     for (const t of st.tasks) {
       if ((t.critiques || []).some((c) => c.status === 'proposed' || c.status === 'disputed')) items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧待决定`, hash: `${t.jobId}/${t.id}` });
     }
@@ -1028,7 +1030,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         }),
         lan: lanUrls,
         spawn: spawnRoles(),
-        stale: codeHash() !== startHash,
+        stale: !!staleWhy(),
         update: updateInfo.newer ? updateInfo.latest : null,
       };
     },
@@ -1132,8 +1134,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       // 看板不用事件列表（命令行 status 要用它数未读事件），?view=dashboard 时去掉，减小数据量
       state: url.searchParams.get('view') === 'dashboard' ? { ...store.state, events: [] } : store.state,
       pending: store.pendingActions(), root, toolDir: TOOL_DIR, home: homedir(), port, repos: layout.mode === 'multi' ? layout.repos : null,
-      // 代码已更新但服务还没重启
-      stale: codeHash() !== startHash,
+      // 代码已更新、或切换了开发模式 / 安装版，但服务还没重启。staleWhy：code / dev / installed
+      stale: !!staleWhy(),
+      staleWhy: staleWhy(),
       // 版本、运行模式、有没有新版本、正在下载的更新
       update: updateSummary(),
       config: store.config(),

@@ -135,8 +135,10 @@
 6. [ ] 「用量偏高的卡」列出超过同角色中位数 3 倍的卡，点击打开；这些卡的详情「Token」行有「用量偏高 N 倍」红框标记，需求表里该需求标「N 张偏高」
 7. [ ] 需求概览（右侧 KPI 卡）在「打回」和「已用时」之间多一项「Token」，与其他指标对齐，「已用时」完整显示（如「6 小时 50 分」，不出现省略号，放不下时换行）；有偏高的卡时标签为「Token · N 张偏高」并变色；悬停显示调用次数和分项；窗口很窄时指标分两行排列，不溢出
 8. [ ] 加这个功能之前、hook 没记过的旧会话（DeepSeek Harness 会话还在本机）也计入统计；在项目目录里自己开的 DeepSeek Harness 对话（不是 worker）计入「其他会话」，不算到任何卡上
-9. [ ] 只用 WorkBuddy 的项目：用量页提示「本机没有这个项目的 DeepSeek Harness 会话记录」，卡详情显示「无数据」
+9. [ ] 只用 WorkBuddy 的项目（leader 也不在本机的 Claude Code 里）：用量页提示「本机没有这个项目的 Claude Code 或 DeepSeek Harness 会话记录」，卡详情显示「无数据」
 10. [ ] 局域网只读页面也能打开「用量」并查看
+11. [ ] Claude Code 的 worker 做的卡同样有「Token」一行；用量页顶部写明会话数和平台（Claude Code、DeepSeek Harness 各几个）；worker 表里每个 worker 名字后标平台（Claude / DSH）
+12. [ ] leader 的用量单独算：三格合计的小字有「leader 占比」，柱状图和图例有紫色的 leader，worker 表第一行是 leader；leader 的会话不会被算到任何 worker 或卡上（leader 回复里引用了 worker 的命令也不会认错）；需求的 Token 合计不含 leader
 
 ## 自动启动 worker
 

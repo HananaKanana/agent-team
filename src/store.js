@@ -1426,17 +1426,6 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return out;
   }
 
-  // 一张卡的处理时间段：[{ agentId, sessions, from, to }]（server 没有项目级明细时用）
-  function taskTokenWindows(taskId) {
-    getTask(taskId);
-    const bound = boundSessions();
-    const out = [];
-    for (const [agentId, segs] of agentSegments()) {
-      const sessions = [...new Set(bound.filter((x) => x.agentId === agentId).map((x) => x.session))];
-      for (const seg of segs) if (seg.task === taskId) out.push({ agentId, sessions, from: seg.from, to: seg.to });
-    }
-    return out;
-  }
 
   // 卡通过后把用量记在卡上（随 board.json 保存）：worker 下线、会话记录被删后仍能查看
   function setTaskTokens(taskId, tokens) {
@@ -2374,7 +2363,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, taskTokenWindows, agentSegments, boundSessions, setTaskTokens, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, agentSegments, boundSessions, setTaskTokens, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

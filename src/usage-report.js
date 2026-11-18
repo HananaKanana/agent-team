@@ -1,5 +1,6 @@
 // 「用量」页的汇总：把 usage.collect 给的每次调用明细，按天、需求、卡、角色、worker 汇总。
-// 三类：卡上（worker 在做某张卡时）、空转（worker 没在做卡：等活、加入、下线前后）、其他会话（认不出 worker 的会话）。
+// 四类：卡上（worker 在做某张卡时）、空转（worker 没在做卡：等活、加入、下线前后）、leader（leader 的会话）、
+// 其他会话（认不出是谁的会话，比如用户自己在项目里开的对话）。
 // 已通过的卡记在卡上的用量（task.tokens）在会话记录被删后补进来，按通过时间算日期。
 import { addUsage, totalOf, zeroUsage } from './usage.js';
 
@@ -25,26 +26,26 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
     perTask.set(t.id, { ...u });
     records.push({ t: at, ...u, agentId: null, task: t.id, snapshot: true });
   }
-  const kind = (r) => (r.task ? 'work' : r.agentId ? 'idle' : 'other');
+  const kind = (r) => (r.task ? 'work' : r.agentId ? 'idle' : r.leader ? 'leader' : 'other');
 
   // 合计：今天、近 7 天、全部
   const today = dayStart(now);
   const ranges = { today: today, week: today - 6 * DAY, all: 0 };
   const totals = {};
   for (const [key, from] of Object.entries(ranges)) {
-    const sum = { all: zeroUsage(), work: 0, idle: 0, other: 0 };
+    const sum = { all: zeroUsage(), work: 0, idle: 0, leader: 0, other: 0 };
     for (const r of records) {
       if (r.t < from) continue;
       addUsage(sum.all, r);
       sum[kind(r)] += totalOf(r);
     }
-    totals[key] = { ...brief(sum.all), work: sum.work, idle: sum.idle, other: sum.other };
+    totals[key] = { ...brief(sum.all), work: sum.work, idle: sum.idle, leader: sum.leader, other: sum.other };
   }
 
   // 每天：最近 days 天
   const daily = [];
   // 取当天中午再归到零点：跨夏令时的日子不是整 24 小时
-  for (let i = days - 1; i >= 0; i--) { const day = dayStart(today - i * DAY + DAY / 2); daily.push({ day, date: label(day), work: 0, idle: 0, other: 0, calls: 0 }); }
+  for (let i = days - 1; i >= 0; i--) { const day = dayStart(today - i * DAY + DAY / 2); daily.push({ day, date: label(day), work: 0, idle: 0, leader: 0, other: 0, calls: 0 }); }
   const first = daily[0].day;
   for (const r of records) {
     if (r.t < first) continue;
@@ -107,17 +108,19 @@ export function buildReport({ state, collected, now = Date.now(), days = 30 }) {
   const agentMap = new Map();
   for (const r of records) {
     if (!r.agentId) continue;
-    if (!agentMap.has(r.agentId)) agentMap.set(r.agentId, { work: 0, idle: 0, calls: 0, idleCalls: 0 });
+    if (!agentMap.has(r.agentId)) agentMap.set(r.agentId, { work: 0, idle: 0, calls: 0, idleCalls: 0, platforms: new Set() });
     const a = agentMap.get(r.agentId);
+    if (r.platform) a.platforms.add(r.platform);
     if (r.task) a.work += totalOf(r); else { a.idle += totalOf(r); a.idleCalls += r.calls ?? 1; }
     a.calls += r.calls ?? 1;
   }
-  const agentRows = [...agentMap].map(([id, a]) => ({ id, role: roleOf.get(id) ?? id.replace(/-\d+$/, ''), ...a, total: a.work + a.idle }))
+  const agentRows = [...agentMap].map(([id, a]) => ({ id, role: roleOf.get(id) ?? id.replace(/-\d+$/, ''), ...a, platforms: [...a.platforms], total: a.work + a.idle }))
     .sort((a, b) => b.total - a.total);
 
   return {
     generatedAt: now,
     sessions: collected.sessions,
+    platforms: collected.platforms ?? {},
     totals,
     daily: daily.map(({ day, ...d }) => d),
     jobs: jobRows,

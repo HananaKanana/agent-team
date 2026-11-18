@@ -389,6 +389,7 @@ select.setting-num { width: auto; text-align: left; }
 .usage-split i { display: block; height: 100%; }
 .u-work { background: var(--brand); }
 .u-idle { background: var(--asking); }
+.u-leader { background: var(--submitted); }
 .u-other { background: var(--pending); }
 .usage-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11.5px; color: var(--faint); margin: 4px 0 10px; }
 .usage-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
@@ -2892,9 +2893,9 @@ function jobSide(job, tasks, collapsed) {
         kpi(`${st.reviews}`, 'review'),
         kpi(st.rate, '一次通过'),
         kpi(`${st.rejects}`, '打回', st.rejects ? 'warn' : ''),
-        // 整个需求的 token 合计（DeepSeek Harness 会话记录），没有数据时不占位
+        // 整个需求的 token 合计（Claude Code、DeepSeek Harness 的会话记录），没有数据时不占位
         ju ? kpi(fmtTokens(ju.total), heavyN ? `Token · ${heavyN} 张偏高` : 'Token', heavyN ? 'warn' : '',
-          `共 ${ju.total} · 调用 ${ju.calls} 次\n输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}${heavyN ? `\n${heavyN} 张卡用量偏高（超过同角色中位数 3 倍）` : ''}\n详见顶栏「用量」`) : null,
+          `共 ${ju.total} · 调用 ${ju.calls} 次（worker 在本需求各卡上的用量，不含 leader）\n输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}${heavyN ? `\n${heavyN} 张卡用量偏高（超过同角色中位数 3 倍）` : ''}\n详见顶栏「用量」`) : null,
         kpi(took, endAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : job.cancelledAt ? '从建需求到作废' : '从建需求到现在')),
       roles.size ? el('div', { class: 'roles' },
         [...roles].map(([role, r]) => el('div', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` },
@@ -3508,16 +3509,18 @@ function usageForJob(id) {
   return usageData?.jobs?.find((j) => j.id === id) ?? null;
 }
 const pct = (part, all) => (all ? `${Math.round((part / all) * 100)}%` : '0%');
+const USAGE_KINDS = [['work', '卡上', 'brand'], ['idle', '空转', 'asking'], ['leader', 'leader', 'submitted'], ['other', '其他会话', 'pending']];
+const usageAll = (x) => USAGE_KINDS.reduce((s, [k]) => s + (x[k] || 0), 0);
 function usageSplit(x) {
-  const all = x.work + x.idle + x.other;
-  return el('div', { class: 'usage-split', title: `卡上 ${fmtTokens(x.work)}（${pct(x.work, all)}） · 空转 ${fmtTokens(x.idle)}（${pct(x.idle, all)}）${x.other ? ` · 其他会话 ${fmtTokens(x.other)}` : ''}` },
-    el('i', { class: 'u-work', style: `width:${pct(x.work, all)}` }), el('i', { class: 'u-idle', style: `width:${pct(x.idle, all)}` }), el('i', { class: 'u-other', style: `width:${pct(x.other, all)}` }));
+  const all = usageAll(x);
+  return el('div', { class: 'usage-split', title: USAGE_KINDS.filter(([k]) => x[k]).map(([k, name]) => `${name} ${fmtTokens(x[k])}（${pct(x[k], all)}）`).join(' · ') },
+    USAGE_KINDS.map(([k]) => el('i', { class: `u-${k}`, style: `width:${pct(x[k] || 0, all)}` })));
 }
 // 最近 30 天每天的用量：堆叠柱（卡上 / 空转 / 其他会话），悬停看数字
 function usageChart(daily) {
   const ns = 'http://www.w3.org/2000/svg';
   const W = 600; const H = 120; const gap = 3;
-  const max = Math.max(1, ...daily.map((d) => d.work + d.idle + d.other));
+  const max = Math.max(1, ...daily.map(usageAll));
   const bw = (W - gap * (daily.length - 1)) / daily.length;
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -3527,8 +3530,9 @@ function usageChart(daily) {
   svg.setAttribute('aria-label', '最近 30 天每天的 token 用量');
   daily.forEach((d, i) => {
     let y = H;
-    const total = d.work + d.idle + d.other;
-    for (const [key, cls] of [['work', 'u-work'], ['idle', 'u-idle'], ['other', 'u-other']]) {
+    const total = usageAll(d);
+    for (const [key] of USAGE_KINDS) {
+      const cls = `u-${key}`;
       if (!d[key]) continue;
       const h = Math.max(1, (d[key] / max) * (H - 4));
       y -= h;
@@ -3538,9 +3542,9 @@ function usageChart(daily) {
       r.setAttribute('width', String(bw));
       r.setAttribute('height', String(h));
       r.setAttribute('class', `bar ${cls}`);
-      r.style.fill = `var(--${key === 'work' ? 'brand' : key === 'idle' ? 'asking' : 'pending'})`;
+      r.style.fill = `var(--${USAGE_KINDS.find(([k]) => k === key)[2]})`;
       const tip = document.createElementNS(ns, 'title');
-      tip.textContent = `${d.date}：共 ${fmtTokens(total)}，调用 ${d.calls} 次\n卡上 ${fmtTokens(d.work)} · 空转 ${fmtTokens(d.idle)}${d.other ? ` · 其他会话 ${fmtTokens(d.other)}` : ''}`;
+      tip.textContent = `${d.date}：共 ${fmtTokens(total)}，调用 ${d.calls} 次\n${USAGE_KINDS.filter(([k]) => d[k]).map(([k, name]) => `${name} ${fmtTokens(d[k])}`).join(' · ')}`;
       r.appendChild(tip);
       svg.appendChild(r);
     }
@@ -3550,15 +3554,15 @@ function usageChart(daily) {
 function usagePage() {
   const u = usageData;
   const head = el('div', { class: 'usage-head' },
-    el('span', { class: 'hint' }, u?.generatedAt ? `统计时间 ${fmtTime(u.generatedAt)} · 来自本机 ${u.sessions} 个 DeepSeek Harness 会话` : ''),
+    el('span', { class: 'hint' }, u?.generatedAt ? `统计时间 ${fmtTime(u.generatedAt)} · 来自本机 ${u.sessions} 个会话${Object.keys(u.platforms || {}).length ? `（${Object.entries(u.platforms).map(([k, v]) => `${k} ${v} 个`).join('，')}）` : ''}` : ''),
     el('button', { class: 'btn sm', type: 'button', disabled: usageLoading, onclick: (e) => { e.stopPropagation(); loadUsage(true); } }, usageLoading ? '统计中…' : '刷新'));
-  const note = el('p', { class: 'hint' }, '数据来自 DeepSeek Harness 在本机的会话记录（只读）。按卡的时间线归属：领取到提交算这张卡，打回后接着算；worker 不在做卡时（等待任务、加入、下线前后）记为「空转」；认不出 worker 的会话（如在项目目录中另开的对话）记为「其他会话」。WorkBuddy 的会话保存在云端，本机没有 token 记录，不在统计内。总量 = 输入 + 缓存命中 + 输出，缓存命中部分按低价计费。');
+  const note = el('p', { class: 'hint' }, '数据来自 Claude Code 和 DeepSeek Harness 在本机的会话记录（只读）。会话按其中执行的命令识别：运行 ateam 命令时带 --as 编号的是该 worker，运行 ateam leader 或 ateam watch 的是 leader。worker 的用量按卡的时间线归属：领取到提交算这张卡，打回后接着算；不在做卡时（等待任务、加入、下线前后）记为「空转」；无法识别的会话（如在项目目录中另开的对话）记为「其他会话」。WorkBuddy 的会话保存在云端，本机没有 token 记录，不在统计内。总量 = 输入（含写入缓存）+ 缓存命中 + 输出，缓存命中部分按低价计费。');
   if (!u) return [head, el('p', { class: 'hint' }, '统计中…（第一次需要读取全部会话记录，可能要几秒）')];
   if (u.error) return [head, el('p', { class: 'hint' }, u.error === '未知接口：GET /api/usage' ? '当前服务仍在运行旧版本代码，请重启 ateam 服务后刷新本页。' : u.error)];
-  if (!u.sessions) return [head, el('p', { class: 'hint' }, '本机没有这个项目的 DeepSeek Harness 会话记录。WorkBuddy 的 worker 不提供 token 数据。'), note];
+  if (!u.sessions) return [head, el('p', { class: 'hint' }, '本机没有这个项目的 Claude Code 或 DeepSeek Harness 会话记录。WorkBuddy 的 worker 不提供 token 数据。'), note];
   const tile = (name, x) => el('div', { class: 'usage-tile' },
     el('span', null, name), el('b', null, fmtTokens(x.total)),
-    el('small', { title: `输入 ${x.input} · 缓存命中 ${x.cacheRead} · 输出 ${x.output}` }, `调用 ${x.calls} 次 · 空转 ${pct(x.idle, x.total)}`), usageSplit(x));
+    el('small', { title: `输入 ${x.input} · 缓存命中 ${x.cacheRead} · 输出 ${x.output}` }, `调用 ${x.calls} 次 · leader ${pct(x.leader || 0, x.total)} · 空转 ${pct(x.idle, x.total)}`), usageSplit(x));
   const open = (id) => { closeUsage(); jumpToTask(id); };
   const jobs = usageAllJobs ? u.jobs : u.jobs.slice(0, 12);
   const jobRows = jobs.flatMap((j) => {
@@ -3581,7 +3585,7 @@ function usagePage() {
     head,
     el('div', { class: 'usage-tiles' }, tile('今天', u.totals.today), tile('近 7 天', u.totals.week), tile('全部', u.totals.all)),
     el('h2', null, '最近 30 天'),
-    el('div', { class: 'usage-legend' }, el('span', null, el('i', { class: 'u-work' }), '卡上'), el('span', null, el('i', { class: 'u-idle' }), '空转'), u.totals.all.other ? el('span', null, el('i', { class: 'u-other' }), '其他会话') : null),
+    el('div', { class: 'usage-legend' }, USAGE_KINDS.filter(([k]) => k !== 'other' || u.totals.all.other).map(([k, name]) => el('span', null, el('i', { class: `u-${k}` }), name))),
     usageChart(u.daily),
     el('h2', null, '按需求'),
     u.jobs.length ? el('table', { class: 'usage-table' }, cols('', '52px', '78px', '58px'),
@@ -3599,12 +3603,14 @@ function usagePage() {
     el('h2', null, '按 worker'),
     el('table', { class: 'usage-table' }, cols('', '78px', '78px', '64px'),
       el('thead', null, el('tr', null, el('th', null, 'worker'), el('th', { class: 'num' }, '卡上'), el('th', { class: 'num' }, '空转'), el('th', { class: 'num', title: '空转占这个 worker 总用量的比例' }, '空转占比'))),
-      el('tbody', null, u.agents.map((a) => el('tr', null,
-        el('td', { title: a.id }, el('span', { class: 'who' }, avatar(a.id, a.role), agentName(a.id))),
+      el('tbody', null,
+        u.totals.all.leader ? el('tr', null, el('td', { title: 'leader 的会话（运行 ateam leader / ateam watch 的会话）' }, el('b', null, 'leader')), el('td', { class: 'num' }, fmtTokens(u.totals.all.leader)), el('td', { class: 'num' }, '—'), el('td', { class: 'num' }, '—')) : null,
+        u.agents.map((a) => el('tr', null,
+        el('td', { title: `${a.id}${a.platforms?.length ? `\n平台：${a.platforms.join('、')}` : ''}` }, el('span', { class: 'who' }, avatar(a.id, a.role), agentName(a.id)), a.platforms?.length ? el('span', { class: 'hint' }, ` ${a.platforms.map((x) => (x === 'Claude Code' ? 'Claude' : 'DSH')).join(' · ')}`) : null),
         el('td', { class: 'num' }, fmtTokens(a.work)),
         el('td', { class: 'num' }, fmtTokens(a.idle)),
         el('td', { class: 'num' }, pct(a.idle, a.total)))))),
-    u.totals.all.other ? el('p', { class: 'hint' }, `其他会话共 ${fmtTokens(u.totals.all.other)}：项目目录中认不出 worker 编号的 DeepSeek Harness 会话。`) : null,
+    u.totals.all.other ? el('p', { class: 'hint' }, `其他会话共 ${fmtTokens(u.totals.all.other)}：项目目录中既不是 leader、也认不出 worker 编号的会话。`) : null,
     el('h2', null, '用量偏高的卡'),
     u.heavy.length ? el('table', { class: 'usage-table' }, cols('', '78px', '64px'),
       el('thead', null, el('tr', null, el('th', null, '卡'), el('th', { class: 'num' }, 'Token'), el('th', { class: 'num' }, '倍数'))),
@@ -3726,7 +3732,7 @@ function demoDrawerBody(t) {
 
 // 脚本缓存：演播需求页的步骤大纲、操作记录面板用
 const opsCache = new Map(); // taskId -> { key, html | error }
-// 卡的 token 用量（DeepSeek Harness 会话记录）：打开卡时读，卡状态变了重读，进行中的卡最多 30 秒重读一次
+// 卡的 token 用量（Claude Code、DeepSeek Harness 的会话记录）：打开卡时读，卡状态变了重读，进行中的卡最多 30 秒重读一次
 const tokenCache = new Map(); // taskId -> { key, at, value, loading }
 function loadTokens(t) {
   const key = `${t.status}:${t.history.length}:${'tokens' in t}`;
@@ -3749,7 +3755,7 @@ function tokenFact(t, fact) {
   if (v === undefined) return fact('Token', el('span', { class: 'hint' }, '统计中…'));
   if (v.none) return null;
   if (v.error) return fact('Token', el('span', { class: 'hint' }, '读取失败'));
-  if (v.unavailable) return fact('Token', el('span', { class: 'hint', title: 'WorkBuddy 的会话保存在云端，本机没有 token 记录；worker 未启用工具后 hook 时也无法对应到会话。' }, '无数据'));
+  if (v.unavailable) return fact('Token', el('span', { class: 'hint', title: 'WorkBuddy 的会话保存在云端，本机没有 token 记录；本机也找不到这张卡的 Claude Code 或 DeepSeek Harness 会话记录。' }, '无数据'));
   const total = v.input + v.cacheRead + v.output;
   return fact('Token', el('span', { class: 'tokens', title: `模型调用 ${v.calls} 次。缓存命中的输入按低价计费。${v.missing ? `有 ${v.missing} 个会话在本机找不到记录，未计入。` : ''}` },
     el('b', null, `共 ${fmtTokens(total)}`),

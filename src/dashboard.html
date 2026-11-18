@@ -375,6 +375,9 @@ select.setting-num { width: auto; text-align: left; }
 .setting-text:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
 .push-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .push-err { color: var(--rework); }
+.usage-wrap { grid-template-columns: minmax(0, 960px); }
+.usage-sheet h2 { font-size: 15px; margin: 28px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+.usage-sheet .usage-chart { height: 160px; }
 .usage-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .usage-head .hint { flex: 1; min-width: 0; }
 .usage-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
@@ -401,8 +404,6 @@ select.setting-num { width: auto; text-align: left; }
 .usage-table tr.sub td { background: var(--surface); font-size: 12px; }
 .usage-table tr.sub td:first-child { padding-left: 18px; }
 .heavy-tag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; color: var(--rework); border: 1px solid currentColor; white-space: nowrap; }
-.side-tokens { font-size: 12px; color: var(--faint); padding: 8px 14px 0; }
-.side-tokens b { color: var(--ink); font-weight: 650; }
 @media (max-width: 560px) { .usage-tiles { grid-template-columns: 1fr; } }
 .version-facts { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; margin: 0 0 12px; font-size: 13px; }
 .version-facts dt { color: var(--faint); }
@@ -735,6 +736,8 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   padding: 14px 16px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }
 .job-side.bare .inner { position: static; }
 .kpis { flex: none; display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); }
+.kpis.has-tokens { grid-template-columns: repeat(5, auto) minmax(0, 1fr); }
+@media (max-width: 720px) { .kpis.has-tokens { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; } .kpis.has-tokens .kpi:nth-child(4) { padding-left: 0; border-left: none; } }
 .kpi { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--line-soft); min-width: 0; }
 .kpi:first-child { padding-left: 0; border-left: none; }
 .kpi b { font-size: 18px; line-height: 24px; font-weight: 700; color: var(--ink); white-space: nowrap; }
@@ -1061,7 +1064,8 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .card, .job, .job-mini, .demo-row, .cancelled-row, .worker, .accepted-toggle { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .btn.search-btn { gap: 6px; padding: 0 8px 0 10px; }
 .btn.search-btn kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; font: 500 11px/16px inherit; color: var(--faint); background: var(--raised); }
-@media (max-width: 1180px) { .btn.search-btn span, .btn.search-btn kbd { display: none; } }
+@media (max-width: 1180px) { .btn.search-btn span, .btn.search-btn kbd, .btn.usage-btn span { display: none; } }
+.btn.usage-btn { gap: 6px; }
 /* 搜索：苹果聚焦搜索那样，顶部居中一个大输入框，下面是结果 */
 .spot-back { position: fixed; inset: 0; z-index: 45; display: flex; justify-content: center; align-items: flex-start; padding: 14vh 16px 16px; background: color-mix(in srgb, var(--backdrop) 60%, transparent); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 .spot-back[hidden] { display: none; }
@@ -1327,6 +1331,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <symbol id="i-bg-less" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
   <symbol id="i-bg-more" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".55" stroke="currentColor" stroke-width="1.4"/></symbol>
   <symbol id="i-reply" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 16 16"><path d="M2.5 13.5h11M4.5 11V7.5M8 11V4M11.5 11V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
   <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 6.3a1.9 1.9 0 0 1 3.7.5c0 1.3-1.9 1.6-1.9 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".9" fill="currentColor"/></symbol>
   <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13.5 2.5v11M2.5 8h8M7.5 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -1341,6 +1346,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="mode-pill update-pill" id="update-pill" type="button" hidden></button>
   <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
   <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
+  <button class="btn head-btn usage-btn" id="usage-btn" type="button" title="token 用量统计"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg><span>用量</span></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
 </header>
@@ -1360,6 +1366,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <div class="att-pop" id="attention-list" hidden role="dialog" aria-label="待处理事项"></div>
 <div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
 <div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
+<div class="report-page" id="usage-page" hidden role="dialog" aria-label="用量"></div>
 <div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
 <div class="modal-back" id="show-dialog" hidden role="dialog" aria-modal="true" aria-label="开始演播"></div>
 <div class="modal-back" id="confirm-dialog" hidden role="dialog" aria-modal="true" aria-label="确认"></div>
@@ -2501,7 +2508,7 @@ function renderHelper(force = false) {
       },
     }, dismissAllArm ? '确认全部下线' : '全部下线'),
   ] : null;
-  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'push', 'usage', 'version'].includes(helper.tab) ? helper.tab : 'worker';
+  const tab = ['lead', 'install', 'rules', 'tests', 'settings', 'push', 'version'].includes(helper.tab) ? helper.tab : 'worker';
   const tabBtn = (key, label) => el('button', {
     type: 'button', role: 'tab', class: `tab${tab === key ? ' on' : ''}`, 'aria-selected': tab === key ? 'true' : 'false',
     onclick: (e) => {
@@ -2513,7 +2520,6 @@ function renderHelper(force = false) {
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
       if (key === 'version') loadVersion(false);
       if (key === 'push') pushCfg = null; // 每次切进「推送」重新读配置
-      if (key === 'usage') loadUsage(true);
       settingsMsg = '';
       renderHelper(true);
     },
@@ -2522,10 +2528,10 @@ function renderHelper(force = false) {
   fill(panel,
     el('div', { class: 'panel-top' },
       el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
-      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('push', '推送'), tabBtn('usage', '用量'), tabBtn('version', '版本'))),
+      el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('settings', '设置'), tabBtn('push', '推送'), tabBtn('version', '版本'))),
     el('div', { class: 'panel-body' },
-    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' || tab === 'install' || tab === 'push' || tab === 'usage' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
-    tab === 'version' ? versionPage() : tab === 'usage' ? usagePage() : tab === 'push' ? pushPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
+    tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'version' || tab === 'install' || tab === 'push' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
+    tab === 'version' ? versionPage() : tab === 'push' ? pushPage() : tab === 'settings' ? settingsPage() : tab === 'tests' ? testTemplateEditor() : tab === 'rules' ? rulesEditor() : tab === 'install' ? installGuide() : tab === 'worker' ? [
     el('div', { class: 'helper-sec' }, el('h4', null, '① 添加 worker')),
     el('p', { class: 'hint' }, '新建 agent 窗口（可使用其他账号），工作目录选择项目目录，发送对应角色的提示词。如需命名，在第一行末尾添加「，名字 账号B」。'),
     [...roles.values()].map((role) => {
@@ -2864,6 +2870,8 @@ function jobSide(job, tasks, collapsed) {
   // 说明收起时不放动态（卡片只留概览，和收起的说明一样矮）；展开后先多渲染一些，fitActs 按卡片剩下的高度留条数
   const shown = collapsed ? [] : acts.slice(0, 30);
   const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
+  const ju = job.demo ? null : usageForJob(job.id);
+  const heavyN = ju ? ju.tasks.filter((t) => t.heavy).length : 0;
   const kpi = (value, label, cls = '', title) => el('div', { class: `kpi ${cls}`, title }, el('b', null, value), el('span', null, label));
   // 整个需求暂停 / 恢复领取：概览卡右上角，平时鼠标移入卡片才出现，暂停中一直显示
   const holdBtn = job.demo || job.status === 'accepted' || job.status === 'cancelled' ? null : el('button', {
@@ -2875,17 +2883,15 @@ function jobSide(job, tasks, collapsed) {
     el('div', { class: 'inner' },
       // 窄屏：任务进度条放进概览卡底部，不在下面单独占一行（宽屏隐藏，用卡片下面那条）
       tasks.length ? el('div', { class: 'side-strip' }, strip(tasks, true)) : null,
-      el('div', { class: 'kpis' },
+      el('div', { class: `kpis${ju ? ' has-tokens' : ''}` },
         kpi([`${st.approved}`, el('small', null, `/${tasks.length}`)], '已通过'),
         kpi(`${st.reviews}`, 'review'),
         kpi(st.rate, '一次通过'),
         kpi(`${st.rejects}`, '打回', st.rejects ? 'warn' : ''),
+        // 整个需求的 token 合计（DeepSeek Harness 会话记录），没有数据时不占位
+        ju ? kpi(fmtTokens(ju.total), heavyN ? `Token · ${heavyN} 张偏高` : 'Token', heavyN ? 'warn' : '',
+          `共 ${ju.total} · 调用 ${ju.calls} 次\n输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}${heavyN ? `\n${heavyN} 张卡用量偏高（超过同角色中位数 3 倍）` : ''}\n详见顶栏「用量」`) : null,
         kpi(took, endAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : job.cancelledAt ? '从建需求到作废' : '从建需求到现在')),
-      (() => {
-        const ju = job.demo ? null : usageForJob(job.id);
-        return ju ? el('div', { class: 'side-tokens', title: `输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}\n来自 DeepSeek Harness 会话记录，详见「使用说明 → 用量」` },
-          'Token 共 ', el('b', null, fmtTokens(ju.total)), ` · 调用 ${ju.calls} 次`, ju.tasks.some((t) => t.heavy) ? el('span', { class: 'heavy-tag' }, `${ju.tasks.filter((t) => t.heavy).length} 张偏高`) : null) : null;
-      })(),
       roles.size ? el('div', { class: 'roles' },
         [...roles].map(([role, r]) => el('div', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` },
           el('div', { class: 'rl' }, el('span', null, role), el('b', null, `${r.done}/${r.all}`)),
@@ -3451,16 +3457,45 @@ let usageData = null; // /api/usage 的结果
 let usageLoading = false;
 let usageOpenJob = null; // 按需求表里展开的需求
 let usageAllJobs = false;
+let usageOpen = false; // 顶栏「用量」打开的全屏页
+function openUsage() {
+  usageOpen = true;
+  if (helper.open) { helper = { open: false, focus: null }; renderHelper(); }
+  loadUsage(true);
+  renderUsagePage();
+  document.getElementById('usage-page').scrollTop = 0;
+}
+function closeUsage() {
+  usageOpen = false;
+  renderUsagePage();
+}
+function renderUsagePage() {
+  const page = document.getElementById('usage-page');
+  if (!usageOpen) {
+    if (!page.hidden) { page.hidden = true; page.replaceChildren(); if (!view.report) document.body.style.overflow = ''; }
+    return;
+  }
+  const scroll = page.hidden ? 0 : page.scrollTop;
+  fill(page,
+    el('div', { class: 'report-top' },
+      el('button', { class: 'btn ghost', onclick: closeUsage }, icon('back'), '返回看板'),
+      el('span', { class: 'crumb' }, data?.root ? `${data.root.split('/').pop()} / ` : '', el('b', null, '用量'))),
+    el('div', { class: 'report-wrap usage-wrap' },
+      el('article', { class: 'report-sheet usage-sheet' }, el('h1', { class: 'report-title' }, 'Token 用量'), usagePage())));
+  page.hidden = false;
+  page.scrollTop = scroll;
+  document.body.style.overflow = 'hidden';
+}
 async function loadUsage(fresh) {
   if (usageLoading) return;
   usageLoading = true;
-  if (helper.open && helper.tab === 'usage') renderHelper(false);
+  if (usageOpen) renderUsagePage();
   try {
     const out = await (await fetch(`/api/usage${fresh ? '?fresh=1' : ''}`, { cache: 'no-store' })).json();
     usageData = out.ok ? out.usage : { error: out.message || '读取失败', generatedAt: Date.now() };
   } catch { usageData = { error: '无法连接 ateam 服务。', generatedAt: Date.now() }; } // 带上时间：失败后 1 分钟内不再重读
   usageLoading = false;
-  if (helper.open && helper.tab === 'usage') renderHelper(false);
+  if (usageOpen) renderUsagePage();
   renderMain();
 }
 // 需求概览里的合计要用：超过 1 分钟没读过就在后台读一次
@@ -3520,12 +3555,12 @@ function usagePage() {
   const tile = (name, x) => el('div', { class: 'usage-tile' },
     el('span', null, name), el('b', null, fmtTokens(x.total)),
     el('small', { title: `输入 ${x.input} · 缓存命中 ${x.cacheRead} · 输出 ${x.output}` }, `调用 ${x.calls} 次 · 空转 ${pct(x.idle, x.total)}`), usageSplit(x));
-  const open = (id) => { helper = { open: false, focus: null }; renderHelper(); jumpToTask(id); };
+  const open = (id) => { closeUsage(); jumpToTask(id); };
   const jobs = usageAllJobs ? u.jobs : u.jobs.slice(0, 12);
   const jobRows = jobs.flatMap((j) => {
     const expanded = usageOpenJob === j.id;
     const heavyN = j.tasks.filter((t) => t.heavy).length;
-    const row = el('tr', { class: 'click', title: expanded ? '收起' : '展开查看各卡用量', onclick: (e) => { e.stopPropagation(); usageOpenJob = expanded ? null : j.id; renderHelper(false); } },
+    const row = el('tr', { class: 'click', title: expanded ? '收起' : '展开查看各卡用量', onclick: (e) => { e.stopPropagation(); usageOpenJob = expanded ? null : j.id; renderUsagePage(); } },
       el('td', { title: `${j.id} ${j.title}` }, `${expanded ? '▾' : '▸'} ${j.id} ${j.title}`, heavyN ? el('span', { class: 'heavy-tag' }, `${heavyN} 张偏高`) : null),
       el('td', { class: 'num' }, String(j.tasks.length)),
       el('td', { class: 'num' }, fmtTokens(j.total)),
@@ -3541,15 +3576,15 @@ function usagePage() {
   return [
     head,
     el('div', { class: 'usage-tiles' }, tile('今天', u.totals.today), tile('近 7 天', u.totals.week), tile('全部', u.totals.all)),
-    el('div', { class: 'helper-sec' }, el('h4', null, '最近 30 天')),
+    el('h2', null, '最近 30 天'),
     el('div', { class: 'usage-legend' }, el('span', null, el('i', { class: 'u-work' }), '卡上'), el('span', null, el('i', { class: 'u-idle' }), '空转'), u.totals.all.other ? el('span', null, el('i', { class: 'u-other' }), '其他会话') : null),
     usageChart(u.daily),
-    el('div', { class: 'helper-sec' }, el('h4', null, '按需求')),
+    el('h2', null, '按需求'),
     u.jobs.length ? el('table', { class: 'usage-table' }, cols('', '52px', '78px', '58px'),
       el('thead', null, el('tr', null, el('th', null, '需求（点击展开）'), el('th', { class: 'num' }, '卡数'), el('th', { class: 'num' }, 'Token'), el('th', { class: 'num' }, '调用'))),
       el('tbody', null, jobRows)) : el('p', { class: 'hint' }, '暂无卡上的用量。'),
-    u.jobs.length > 12 ? el('button', { class: 'link-btn', type: 'button', onclick: (e) => { e.stopPropagation(); usageAllJobs = !usageAllJobs; renderHelper(false); } }, usageAllJobs ? '只显示前 12 个' : `显示全部 ${u.jobs.length} 个需求`) : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '按角色')),
+    u.jobs.length > 12 ? el('button', { class: 'link-btn', type: 'button', onclick: (e) => { e.stopPropagation(); usageAllJobs = !usageAllJobs; renderUsagePage(); } }, usageAllJobs ? '只显示前 12 个' : `显示全部 ${u.jobs.length} 个需求`) : null,
+    el('h2', null, '按角色'),
     el('table', { class: 'usage-table' }, cols('', '52px', '78px', '96px'),
       el('thead', null, el('tr', null, el('th', null, '角色'), el('th', { class: 'num' }, '卡数'), el('th', { class: 'num' }, 'Token'), el('th', { class: 'num', title: '已通过的卡平均每张的用量' }, '每张卡平均'))),
       el('tbody', null, u.roles.map((r) => el('tr', null,
@@ -3557,7 +3592,7 @@ function usagePage() {
         el('td', { class: 'num' }, String(r.tasks)),
         el('td', { class: 'num' }, fmtTokens(r.total)),
         el('td', { class: 'num' }, r.perTask != null ? fmtTokens(r.perTask) : '—'))))),
-    el('div', { class: 'helper-sec' }, el('h4', null, '按 worker')),
+    el('h2', null, '按 worker'),
     el('table', { class: 'usage-table' }, cols('', '78px', '78px', '64px'),
       el('thead', null, el('tr', null, el('th', null, 'worker'), el('th', { class: 'num' }, '卡上'), el('th', { class: 'num' }, '空转'), el('th', { class: 'num', title: '空转占这个 worker 总用量的比例' }, '空转占比'))),
       el('tbody', null, u.agents.map((a) => el('tr', null,
@@ -3566,7 +3601,7 @@ function usagePage() {
         el('td', { class: 'num' }, fmtTokens(a.idle)),
         el('td', { class: 'num' }, pct(a.idle, a.total)))))),
     u.totals.all.other ? el('p', { class: 'hint' }, `其他会话共 ${fmtTokens(u.totals.all.other)}：项目目录中认不出 worker 编号的 DeepSeek Harness 会话。`) : null,
-    el('div', { class: 'helper-sec' }, el('h4', null, '用量偏高的卡')),
+    el('h2', null, '用量偏高的卡'),
     u.heavy.length ? el('table', { class: 'usage-table' }, cols('', '78px', '64px'),
       el('thead', null, el('tr', null, el('th', null, '卡'), el('th', { class: 'num' }, 'Token'), el('th', { class: 'num' }, '倍数'))),
       el('tbody', null, u.heavy.map((t) => el('tr', { class: 'click', title: `打开 ${t.id}`, onclick: (e) => { e.stopPropagation(); open(t.id); } },
@@ -3714,7 +3749,7 @@ function tokenFact(t, fact) {
   const total = v.input + v.cacheRead + v.output;
   return fact('Token', el('span', { class: 'tokens', title: `模型调用 ${v.calls} 次。缓存命中的输入按低价计费。${v.missing ? `有 ${v.missing} 个会话在本机找不到记录，未计入。` : ''}` },
     el('b', null, `共 ${fmtTokens(total)}`),
-    v.heavy ? el('span', { class: 'heavy-tag', title: '超过同角色已通过卡用量中位数的倍数，详见「使用说明 → 用量」' }, `用量偏高 ${v.heavy} 倍`) : null,
+    v.heavy ? el('span', { class: 'heavy-tag', title: '超过同角色已通过卡用量中位数的倍数，详见顶栏「用量」' }, `用量偏高 ${v.heavy} 倍`) : null,
     el('span', { class: 'hint' }, ` 输入 ${fmtTokens(v.input)} · 缓存命中 ${fmtTokens(v.cacheRead)} · 输出 ${fmtTokens(v.output)} · 调用 ${v.calls} 次${v.live ? '（进行中，实时统计）' : ''}`)));
 }
 let lastOutlineStep = null;
@@ -4959,6 +4994,7 @@ function render() {
   renderMain();
   renderDrawer(false);
   renderReport();
+  renderUsagePage();
   renderStaleDialog();
   renderDecideDialog();
   if (attentionOpen) renderAttentionList(); // 只在数据变化时重画，免得每次轮询都替换掉正在点的勾选框
@@ -5208,6 +5244,7 @@ document.addEventListener('keydown', (e) => {
   if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
   if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
+  if (usageOpen) { closeUsage(); return; }
   if (view.report) closeReport();
   else if (view.task) closeDrawer();
 });
@@ -5376,6 +5413,7 @@ document.getElementById('attention').addEventListener('click', (e) => {
   renderAttentionList();
   if (attentionOpen) recheckDoctor();
 });
+document.getElementById('usage-btn').addEventListener('click', (e) => { e.stopPropagation(); if (usageOpen) closeUsage(); else openUsage(); });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   helper = helper.open ? { open: false, focus: null } : { open: true, focus: null };

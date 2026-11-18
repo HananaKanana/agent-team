@@ -736,7 +736,11 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
   padding: 14px 16px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }
 .job-side.bare .inner { position: static; }
 .kpis { flex: none; display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); }
-.kpis.has-tokens { grid-template-columns: repeat(5, auto) minmax(0, 1fr); }
+.kpis.has-tokens { grid-template-columns: repeat(5, auto) minmax(min-content, 1fr); }
+/* 多了 Token 一项：每项左右留白收窄一点，时长不截断（放不下时换行，不显示省略号） */
+.kpis.has-tokens .kpi { padding: 0 11px; }
+.kpis.has-tokens .kpi:first-child { padding-left: 0; }
+.kpis.has-tokens .kpi.dur b { overflow: visible; text-overflow: clip; white-space: normal; }
 @media (max-width: 720px) { .kpis.has-tokens { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; } .kpis.has-tokens .kpi:nth-child(4) { padding-left: 0; border-left: none; } }
 .kpi { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--line-soft); min-width: 0; }
 .kpi:first-child { padding-left: 0; border-left: none; }

@@ -926,7 +926,11 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
           const t = a.currentTask ? st.tasks.find((x) => x.id === a.currentTask) : null;
           // 这次从什么时候开始做：最近一次领取、接手、开始演播或被打回
           const since = t ? [...t.history].reverse().find((h) => ['claimed', 'handoff', 'demo_started', 'rejected'].includes(h.type))?.ts ?? null : null;
-          return { id: a.id, name: a.name || null, role: a.role, stale: !!a.stale, task: t ? { id: t.id, title: t.title, status: t.status, hash: `${t.jobId}/${t.id}`, since } : null };
+          // 菜单栏的下线选项要用：已安排做完再下线、是不是这个角色唯一在线的（设置里开着「每个角色至少保留一个」时要提醒）
+          const role = a.role.trim().toLowerCase();
+          const last = store.config().keepOnePerRole !== false && !a.dismiss
+            && st.agents.filter((x) => x.status === 'online' && !x.dismiss && x.role.trim().toLowerCase() === role).length === 1;
+          return { id: a.id, name: a.name || null, role: a.role, stale: !!a.stale, dismiss: !!a.dismiss, last, task: t ? { id: t.id, title: t.title, status: t.status, hash: `${t.jobId}/${t.id}`, since } : null };
         }),
         lan: lanUrls,
         spawn: spawnRoles(),

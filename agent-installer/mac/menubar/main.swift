@@ -308,9 +308,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                         if (a["stale"] as? Bool) == true { text += " · 无响应" }
                         else if let since = (t["since"] as? NSNumber)?.doubleValue { text += " · 已做 \(ago(since))" }
                     } else { text += " · 空闲" }
-                    let w = add(text, task == nil ? nil : #selector(openURL(_:)), st.url(task?["hash"] as? String ?? "")?.absoluteString, to: sub, enabled: task != nil)
+                    if (a["dismiss"] as? Bool) == true { text += " · 将下线" }
+                    // 每个 worker 一个子菜单：打开它的卡、发消息、下线（与看板「worker」页的按钮相同）
+                    let w = add(text, nil, to: sub)
+                    w.isEnabled = true
                     w.toolTip = task?["title"] as? String
                     w.indentationLevel = 1
+                    w.submenu = workerMenu(p, a)
                 }
                 // 按角色启动 worker：与看板「worker」页的「启动」按钮相同，在设置里选的平台中新建会话
                 let roles = st.spawn["roles"] as? [[String: Any]] ?? []
@@ -373,6 +377,100 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         let login = add("登录时自动打开", #selector(toggleLogin(_:)))
         login.state = FileManager.default.fileExists(atPath: LOGIN_ITEM.path) ? .on : .off
         _ = add("退出 ateam 菜单", #selector(quit(_:)))
+    }
+
+    // 一个在线 worker 的子菜单
+    func workerMenu(_ p: String, _ a: [String: Any]) -> NSMenu {
+        let m = NSMenu()
+        m.autoenablesItems = false
+        let id = a["id"] as? String ?? ""
+        let task = a["task"] as? [String: Any]
+        let tid = task?["id"] as? String ?? ""
+        let critic = (a["role"] as? String ?? "").trimmingCharacters(in: .whitespaces).lowercased() == "critic"
+        let info: [String: Any] = ["path": p, "id": id, "task": tid, "last": (a["last"] as? Bool) == true, "role": a["role"] as? String ?? ""]
+        if let t = task {
+            _ = add("打开 \(tid)", #selector(openURL(_:)), statuses[p]?.url(t["hash"] as? String ?? "")?.absoluteString, to: m)
+        }
+        _ = add("发消息…", #selector(messageWorker(_:)), info, to: m)
+        m.addItem(.separator())
+        if (a["dismiss"] as? Bool) == true {
+            _ = add(critic ? "已安排审核完成后下线" : "已安排做完当前任务后下线", nil, to: m, enabled: false)
+            _ = add("撤销，继续领取任务", #selector(keepWorker(_:)), info, to: m)
+            _ = add("立即下线", #selector(dismissNow(_:)), info, to: m)
+        } else if critic {
+            _ = add("审核完成后下线", #selector(dismissLater(_:)), info, to: m)
+            _ = add("立即下线", #selector(dismissNow(_:)), info, to: m)
+        } else if task != nil {
+            _ = add("做完 \(tid) 后下线", #selector(dismissLater(_:)), info, to: m)
+            _ = add("立即下线（\(tid) 退回待领取）", #selector(dismissNow(_:)), info, to: m)
+        } else {
+            _ = add("下线", #selector(dismissNow(_:)), info, to: m)
+        }
+        return m
+    }
+
+    func workerPost(_ info: [String: Any], _ path: String, _ body: [String: Any], _ failTitle: String) {
+        guard let p = info["path"] as? String, let port = port(p) else { return }
+        DispatchQueue.global().async {
+            let out = httpJSON("http://127.0.0.1:\(port)\(path)", post: true, body: body, timeout: 5)
+            DispatchQueue.main.async {
+                if out == nil { self.alert(failTitle, "无法连接该项目的 ateam 服务。") }
+                else if (out?["ok"] as? Bool) != true { self.alert(failTitle, out?["message"] as? String ?? "未知错误") }
+                self.refreshStatuses()
+            }
+        }
+    }
+
+    // 确认框：返回是否继续
+    func confirm(_ title: String, _ text: String, _ ok: String) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = title
+        a.informativeText = text
+        a.addButton(withTitle: ok)
+        a.addButton(withTitle: "取消")
+        return a.runModal() == .alertFirstButtonReturn
+    }
+
+    func lastNote(_ info: [String: Any]) -> String {
+        (info["last"] as? Bool) == true ? "\n\n它是 \(info["role"] as? String ?? "") 角色唯一在线的 worker，下线后该角色的新任务将无人领取。" : ""
+    }
+
+    @objc func dismissLater(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any], let id = info["id"] as? String else { return }
+        if (info["last"] as? Bool) == true, !confirm("让 \(id) 完成后下线？", lastNote(info).trimmingCharacters(in: .whitespacesAndNewlines), "完成后下线") { return }
+        workerPost(info, "/api/dismiss", ["ids": [id], "userApproved": true, "afterTask": true], "下线失败")
+    }
+
+    @objc func dismissNow(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any], let id = info["id"] as? String else { return }
+        let tid = info["task"] as? String ?? ""
+        let text = (tid.isEmpty ? "\(id) 将立即下线。" : "\(id) 将立即停止，\(tid) 退回待领取，由其他 worker 接手。") + lastNote(info)
+        if !confirm("让 \(id) 立即下线？", text, "立即下线") { return }
+        workerPost(info, "/api/dismiss", ["ids": [id], "userApproved": true], "下线失败")
+    }
+
+    @objc func keepWorker(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any], let id = info["id"] as? String else { return }
+        workerPost(info, "/api/agents/keep", ["ids": [id]], "撤销失败")
+    }
+
+    @objc func messageWorker(_ sender: NSMenuItem) {
+        guard let info = sender.representedObject as? [String: Any], let id = info["id"] as? String else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        let a = NSAlert()
+        a.messageText = "发消息给 \(id)"
+        a.informativeText = "它会在当前操作结束后（启用了工具后 hook 时）或下一次调用 ateam 时看到。"
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 60))
+        field.placeholderString = "要对它说的话"
+        a.accessoryView = field
+        a.addButton(withTitle: "发送")
+        a.addButton(withTitle: "取消")
+        a.window.initialFirstResponder = field
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return }
+        workerPost(info, "/api/message", ["to": id, "text": text, "by": "user"], "发送失败")
     }
 
     // ---------- 动作 ----------

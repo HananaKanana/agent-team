@@ -748,17 +748,19 @@ nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
 .job-main > * { grid-column: 1 / -1; }
 .job-main > h2.job-title { grid-column: 1; grid-row: 2; }
 .job-main > .head-acts { grid-column: 2; grid-row: 2; align-self: start; }
-.job-side { position: relative; }
+.job-side { position: relative; container-type: inline-size; } /* 宽度由外面的网格决定，按卡片自己的宽度调整指标排列 */
 .job-side.bare { min-height: 0; }
 .job-side .inner { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
   padding: 14px 16px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }
 .job-side.bare .inner { position: static; }
 .kpis { flex: none; display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); }
-.kpis.has-tokens { grid-template-columns: repeat(5, auto) minmax(min-content, 1fr); }
+.kpis.has-tokens { grid-template-columns: repeat(5, auto) minmax(max-content, 1fr); }
 /* 多了 Token 一项：每项左右留白收窄一点，时长不截断（放不下时换行，不显示省略号） */
 .kpis.has-tokens .kpi { padding: 0 11px; }
 .kpis.has-tokens .kpi:first-child { padding-left: 0; }
-.kpis.has-tokens .kpi.dur b { overflow: visible; text-overflow: clip; white-space: normal; }
+.kpis.has-tokens .kpi.dur b { overflow: visible; text-overflow: clip; }
+/* 6 项一行约需 400px：概览卡较窄（或窄屏）时排成两行，每行 3 项，不截断、不溢出 */
+@container (max-width: 430px) { .kpis.has-tokens { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; } .kpis.has-tokens .kpi:nth-child(4) { padding-left: 0; border-left: none; } }
 @media (max-width: 720px) { .kpis.has-tokens { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; } .kpis.has-tokens .kpi:nth-child(4) { padding-left: 0; border-left: none; } }
 .kpi { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--line-soft); min-width: 0; }
 .kpi:first-child { padding-left: 0; border-left: none; }
@@ -3011,7 +3013,8 @@ function jobSide(job, tasks, collapsed) {
         kpi(st.rate, '一次通过'),
         kpi(`${st.rejects}`, '打回', st.rejects ? 'warn' : ''),
         // 整个需求的 token 合计（Claude Code、DeepSeek Harness 的会话记录），没有数据时不占位
-        ju ? kpi(fmtTokens(ju.total), heavyN ? `Token · ${heavyN} 张偏高` : 'Token', heavyN ? 'warn' : '',
+        // 标签只写 Token（标签不换行，太长会把「已用时」挤成两行）；有偏高的卡时数字变色，悬停看说明
+        ju ? kpi(fmtTokens(ju.total), 'Token', heavyN ? 'warn' : '',
           `共 ${ju.total} · 调用 ${ju.calls} 次（worker 在本需求各卡上的用量，不含 leader）\n输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}${heavyN ? `\n${heavyN} 张卡用量偏高（超过同角色中位数 3 倍）` : ''}\n详见顶栏「用量」`) : null,
         kpi(took, endAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : job.cancelledAt ? '从建需求到作废' : '从建需求到现在')),
       roles.size ? el('div', { class: 'roles' },

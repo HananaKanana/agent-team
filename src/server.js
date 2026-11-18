@@ -561,6 +561,43 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     }
   }
 
+  // ---------- worker 换新会话 ----------
+  // 同一个会话连做几张卡，前面的对话一直留在上下文里，后面每次调用都要重读，越做越贵。
+  // 按会话记录看在线 worker 最近一次调用读入了多少（输入 + 缓存命中），超过设置就打标记：手上的卡通过后不再领新卡、下线，
+  // 服务马上开一个同角色的新 worker 接着领（rotateSpawn）。WorkBuddy 没有本机记录，不换
+  async function checkRotate() {
+    const limit = store.config().rotateCtx * 1e4;
+    if (!limit) return;
+    const online = store.state.agents.filter((a) => a.status === 'online' && !a.rotate && !a.dismiss && a.role.trim().toLowerCase() !== 'critic');
+    if (!online.length) return;
+    const r = await usageReport();
+    const latest = new Map();
+    for (const rec of r.collected?.records ?? []) {
+      if (!rec.agentId || rec.snapshot) continue;
+      const cur = latest.get(rec.agentId);
+      if (!cur || rec.t > cur.t) latest.set(rec.agentId, rec);
+    }
+    for (const a of online) {
+      const rec = latest.get(a.id);
+      if (!rec || rec.t < (a.joinedAt ?? 0)) continue; // 编号让给了新会话、新会话还没调用过
+      const ctx = rec.input + rec.cacheRead;
+      if (ctx >= limit) store.markRotate(a.id, Math.round(ctx / 1e4));
+    }
+  }
+  // 换下来的 worker 已下线：这个角色还有能领的卡就开一个新的接着做（和「启动」按钮相同，在设置选的平台里新建会话）；没有就不开，之后缺人照常提醒
+  function rotateSpawn(role, oldId, ctx) {
+    const st = store.state;
+    const approved = new Set(st.tasks.filter((t) => t.status === 'approved').map((t) => t.id));
+    const heldJobs = new Set(st.jobs.filter((j) => j.onHold).map((j) => j.id));
+    const same = (x) => x.trim().toLowerCase() === role.trim().toLowerCase();
+    const waiting = st.tasks.some((t) => t.status === 'pending' && same(t.role) && !t.onHold && !heldJobs.has(t.jobId) && t.dependsOn.every((d) => approved.has(d)));
+    console.log(`${oldId} 上下文约 ${ctx} 万 token，已下线换新会话${waiting ? `，正在启动新的 ${role} worker` : `；${role} 暂时没有能领的卡，不启动新 worker`}`);
+    if (!waiting) return;
+    spawnTimes.push(Date.now());
+    spawnWorker({ root, role, platform: store.config().spawnPlatform })
+      .catch((err) => console.log(`启动新的 ${role} worker 失败：${err?.message ?? err}`));
+  }
+
   async function checkPush() {
     // 自检问题、服务需要重启是本机的事，不推到手机（自检结果在启动后才出来，会被当成新事项每次重启都推）
     const items = attention().filter((i) => i.key !== 'stale' && !i.key.startsWith('doctor:'));
@@ -621,7 +658,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     }
   }
 
-  const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
+  const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange, onRotate: rotateSpawn });
   // 启动时按当前版本的文件布局写一遍（新加的拆分方式马上生效，不用等第一次状态变化；内容没变的文件不会重写）
   saveState(dataDir, store.state);
 
@@ -1325,6 +1362,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // token 用量：每分钟把新通过的卡的用量记到卡上
   // 启动 10 秒后先算一遍（顺带把会话记录解压进缓存，之后打开「用量」页就快了），之后每分钟看一次
   setTimeout(() => { usageReport(true).then(snapshotTokens).catch(() => {}); }, 10000).unref();
-  setInterval(() => { snapshotTokens().catch(() => {}); }, 60000).unref();
+  setInterval(() => { snapshotTokens().catch(() => {}); checkRotate().catch(() => {}); }, 60000).unref();
   return server;
 }

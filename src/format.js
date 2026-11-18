@@ -381,6 +381,15 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
   if (result.kind === 'demo' || result.kind === 'demo_stopped' || result.kind === 'demo_wrap') {
     return formatDemoWait(result, agentId);
   }
+  if (result.kind === 'dismissed' && result.rotate) {
+    return [
+      '# 已下线（换新会话）',
+      '',
+      `你这个会话的上下文已有约 ${result.rotate} 万 token，继续领卡每次调用都要重读这些内容。手上的卡已经完成，ateam 会开一个新的 worker 接着领卡，不需要你做什么。`,
+      '',
+      '现在请停止：不要再调用 ateam 命令，也不要重新 join。用一两句话告诉用户「已下线，换新会话继续」就可以结束本轮了。',
+    ].join('\n');
+  }
   if (result.kind === 'dismissed') {
     return [
       '# 已下线',

@@ -296,6 +296,8 @@ ateam report --job J1 --file report.md
 - 用户说通过（比如「J3 验收通过」「这几个都通过了」）：`ateam job accept J3 [J4 ...]`。
 - 用户说有问题：在**同一个需求**下 `ateam task add --job J3 ...` 加修复任务，需求自动回到进行中；修完再 `ateam report` 一次。
 
+**换新会话**：worker 上下文超过用户设置的阈值时，ateam 会在它手上的卡通过后让它下线、自动开一个同角色的新 worker 接着领卡，你不用管；看到新编号的 worker 加入、旧的下线是正常的。
+
 **让 worker 下线**：所有需求都做完、近期也没有新任务时，让 worker 收工，免得它们一直空转等待：
 
 ```

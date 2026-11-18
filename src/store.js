@@ -24,7 +24,7 @@ export const QUIET_EVENTS = new Set([
 // leaseMs：多久没动静算「可能停了」。手上有进行中任务的 worker 只标记、提醒用户，任务不动，
 // 用户确认窗口没了（看板上点「换人接手」，或 leader 问过用户后 ateam reclaim）才转手；
 // 空闲（手上没有进行中任务）的 worker 到时直接判掉线，没有任务要转手。
-export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, idleMs = 3 * 60 * 1000, onChange = () => {} } = {}) {
+export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, idleMs = 3 * 60 * 1000, onChange = () => {}, onRotate = () => {} } = {}) {
   // 启动参数（--lease / --idle）是默认值；用户在看板「设置」里改过的以设置为准
   const defaultLeaseMs = leaseMs;
   const defaultIdleMs = idleMs;
@@ -53,6 +53,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     // test worker 测试和预演用哪个浏览器：platform = 平台自带（DSH 用 dsh-cdp，WorkBuddy 用自带 Chrome 插件），ego = ego-browser。
     // 演播照「## 操作记录」里录的工具走，不看这个
     testBrowser: { type: 'choice', options: ['platform', 'ego'], def: () => 'platform' },
+    // worker 换新会话：上下文（最近一次调用读入的 token，单位万）超过这个数，做完手上的卡后下线，由服务开一个同角色的新 worker 接着领卡。0 表示不换
+    rotateCtx: { type: 'int', min: 0, max: 100, def: () => 20 },
   };
 
   function config() {
@@ -408,6 +410,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       revive.status = 'online';
       revive.currentTask = null;
       revive.lastSeenAt = ts;
+      revive.joinedAt = ts; // 编号可能让给了新会话：换新会话按加入以后的调用算上下文
+      delete revive.rotate;
       delete revive.hidden;
       delete revive.idleSince;
       delete revive.leaveAsked;
@@ -699,6 +703,16 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         const note = takeNote(task);
         return note ? { kind: 'resume', task, delivery: { kind: 'note', text: note } } : { kind: 'resume', task };
       }
+    }
+
+    // 上下文太大、该换新会话的 worker：不再领新卡，下线，由服务开一个同角色的新 worker（见 markRotate）
+    if (agent.rotate && !isCritic(agent)) {
+      const role = agent.role;
+      const ctx = agent.rotate;
+      delete agent.rotate;
+      finishDismiss(agent);
+      onRotate(role, agent.id, ctx);
+      return { kind: 'dismissed', rotate: ctx };
     }
 
     // 规则 3：领取新任务，派发顺序见 dispatchOrder
@@ -1447,6 +1461,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function markDigest(kind, ts) { (state.digestSent ??= {})[kind] = ts; changed(); }
 
   // 卡通过后把用量记在卡上（随 board.json 保存）：worker 下线、会话记录被删后仍能查看
+  // 服务按会话记录算出某个 worker 的上下文已超过设置：打上标记，它下次要领新卡时换新会话。ctx 是万 token
+  function markRotate(agentId, ctx) {
+    const agent = findAgent(agentId);
+    if (!agent || agent.status !== 'online' || isCritic(agent) || agent.dismiss || agent.rotate) return false;
+    agent.rotate = ctx;
+    changed();
+    return true;
+  }
+
   function setTaskTokens(taskId, tokens) {
     const task = getTask(taskId);
     if (JSON.stringify(task.tokens) === JSON.stringify(tokens)) return;
@@ -2382,7 +2405,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     createJob, editJob, addTask, editTask,
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
-    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, agentSegments, digestSent, markDigest, boundSessions, setTaskTokens, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
+    pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, agentSegments, digestSent, markDigest, boundSessions, setTaskTokens, markRotate, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };

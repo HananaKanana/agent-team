@@ -420,6 +420,13 @@ select.setting-num { width: auto; text-align: left; }
 .usage-table tr.click { cursor: pointer; }
 .usage-table tr.click:hover td { background: var(--raised-hover); }
 .usage-table tr.sub td { background: var(--surface); font-size: 12px; }
+.usage-table tr.flash td { animation: usage-flash 1.6s ease-out; }
+@keyframes usage-flash { 0%, 30% { background: var(--brand-soft); } 100% { } }
+@media (prefers-reduced-motion: reduce) { .usage-table tr.flash td { animation: none; } }
+.kpi.link { cursor: pointer; border-radius: 4px; }
+.kpi.link:hover b, .kpi.link:focus-visible b { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
+.kpi.link.warn:hover b { color: var(--rework); }
+.kpi.link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .usage-table tr.sub td:first-child { padding-left: 18px; }
 .heavy-tag { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; color: var(--rework); border: 1px solid currentColor; white-space: nowrap; }
 @media (max-width: 560px) { .usage-tiles { grid-template-columns: 1fr; } }
@@ -2996,6 +3003,14 @@ function jobSide(job, tasks, collapsed) {
   const open = (id) => { view.task = id; saveView(); renderDrawer(true); };
   const ju = job.demo ? null : usageForJob(job.id);
   const heavyN = ju ? ju.tasks.filter((t) => t.heavy).length : 0;
+  // 可点的指标：鼠标和键盘都能打开
+  const clickKpi = (node, fn) => {
+    node.setAttribute('role', 'button');
+    node.setAttribute('tabindex', '0');
+    node.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+    node.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } });
+    return node;
+  };
   const kpi = (value, label, cls = '', title) => el('div', { class: `kpi ${cls}`, title }, el('b', null, value), el('span', null, label));
   // 整个需求暂停 / 恢复领取：概览卡右上角，平时鼠标移入卡片才出现，暂停中一直显示
   const holdBtn = job.demo || job.status === 'accepted' || job.status === 'cancelled' ? null : el('button', {
@@ -3014,8 +3029,8 @@ function jobSide(job, tasks, collapsed) {
         kpi(`${st.rejects}`, '打回', st.rejects ? 'warn' : ''),
         // 整个需求的 token 合计（Claude Code、DeepSeek Harness 的会话记录），没有数据时不占位
         // 标签只写 Token（标签不换行，太长会把「已用时」挤成两行）；有偏高的卡时数字变色，悬停看说明
-        ju ? kpi(fmtTokens(ju.total), 'Token', heavyN ? 'warn' : '',
-          `共 ${ju.total} · 调用 ${ju.calls} 次（worker 在本需求各卡上的用量，不含 leader）\n输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}${heavyN ? `\n${heavyN} 张卡用量偏高（超过同角色中位数 3 倍）` : ''}\n详见顶栏「用量」`) : null,
+        ju ? clickKpi(kpi(fmtTokens(ju.total), 'Token', `link${heavyN ? ' warn' : ''}`,
+          `共 ${ju.total} · 调用 ${ju.calls} 次（worker 在本需求各卡上的用量，不含 leader）\n输入 ${fmtTokens(ju.input)} · 缓存命中 ${fmtTokens(ju.cacheRead)} · 输出 ${fmtTokens(ju.output)}${heavyN ? `\n${heavyN} 张卡用量偏高（超过同角色中位数 3 倍）` : ''}\n点击查看各卡明细`), () => openUsage(job.id)) : null,
         kpi(took, endAt ? '耗时' : '已用时', 'dur', job.acceptedAt ? '从建需求到验收' : job.cancelledAt ? '从建需求到作废' : '从建需求到现在')),
       roles.size ? el('div', { class: 'roles' },
         [...roles].map(([role, r]) => el('div', { class: `role${r.done === r.all ? ' full' : ''}`, title: `${role}：${r.done}/${r.all} 已通过` },
@@ -3590,8 +3605,10 @@ function usageSpan(from, to) {
   return d(from) === d(to) ? `${d(from)} ${hm(from)}–${hm(to)}` : `${d(from)} – ${d(to)}`;
 }
 let usageOpen = false; // 顶栏「用量」打开的全屏页
-function openUsage() {
+let usageFocusJob = null; // 打开用量页后要定位到的需求（从需求概览的 Token 点进来）
+function openUsage(jobId = null) {
   usageOpen = true;
+  if (jobId) { usageOpenJob = jobId; usageFocusJob = jobId; usageAllJobs = true; }
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); }
   loadUsage(true);
   renderUsagePage();
@@ -3599,6 +3616,7 @@ function openUsage() {
 }
 function closeUsage() {
   usageOpen = false;
+  usageFocusJob = null;
   renderUsagePage();
 }
 function renderUsagePage() {
@@ -3617,6 +3635,12 @@ function renderUsagePage() {
   page.hidden = false;
   page.scrollTop = scroll;
   document.body.style.overflow = 'hidden';
+  // 定位到指定需求：数据读到后找到那一行，滚过去并闪一下
+  const row = usageFocusJob && page.querySelector(`tr[data-job="${usageFocusJob}"]`);
+  if (row) {
+    usageFocusJob = null;
+    requestAnimationFrame(() => { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.classList.add('flash'); });
+  }
 }
 async function loadUsage(fresh) {
   if (usageLoading) return;
@@ -3695,7 +3719,7 @@ function usagePage() {
   const jobRows = jobs.flatMap((j) => {
     const expanded = usageOpenJob === j.id;
     const heavyN = j.tasks.filter((t) => t.heavy).length;
-    const row = el('tr', { class: 'click', title: expanded ? '收起' : '展开查看各卡用量', onclick: (e) => { e.stopPropagation(); usageOpenJob = expanded ? null : j.id; renderUsagePage(); } },
+    const row = el('tr', { class: 'click', 'data-job': j.id, title: expanded ? '收起' : '展开查看各卡用量', onclick: (e) => { e.stopPropagation(); usageOpenJob = expanded ? null : j.id; renderUsagePage(); } },
       el('td', { title: `${j.id} ${j.title}` }, `${expanded ? '▾' : '▸'} ${j.id} ${j.title}`, heavyN ? el('span', { class: 'heavy-tag' }, `${heavyN} 张偏高`) : null),
       el('td', { class: 'num' }, String(j.tasks.length)),
       el('td', { class: 'num' }, fmtTokens(j.total)),

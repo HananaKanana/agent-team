@@ -34,7 +34,7 @@ case "$NODE_ARCH" in
     *) printf 'build.sh: NODE_ARCH 只能是 arm64 或 x64，收到 %s\n' "$NODE_ARCH" >&2; exit 1 ;;
 esac
 
-# 中间产物放在仓库外（node 解压后八千多个文件）。两种架构共用 $WORK，子目录带架构后缀
+# 中间产物放在仓库外（node 解压后八千多个文件）。两种架构共用 ${WORK}，子目录带架构后缀
 WORK="${ATEAM_BUILD_WORK:-/tmp/ateam-build}"
 DIST="$REPO/agent-installer/dist"
 

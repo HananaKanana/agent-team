@@ -73,13 +73,13 @@ PREV="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
     if [ -n "$PREV" ]; then
         git log --no-merges --pretty='- %s' "$PREV..HEAD" | grep -v "^- release v" || true
     else
-        echo "- 第一个安装包版本"
+        echo "- 首个正式版本：Mac 安装包（自带 Node，装完自动链接 skill、安装 hook）、菜单栏图标（启动 / 停止 / 重启各项目的服务）、看板与菜单栏提示新版本并一键更新、开发模式"
     fi
 } > "$NOTES"
 cat "$NOTES"
 echo
-echo "更新说明在 $NOTES，会显示在看板「使用说明 → 版本」和 GitHub 发布页。"
-read -r -p "需要先编辑就去改这个文件，改好后回到这里。确认发布 v$NEW？（y/N）" ok
+echo "更新说明在 ${NOTES}，会显示在看板「使用说明 → 版本」和 GitHub 发布页。"
+read -r -p "需要先编辑就去改这个文件，改好后回到这里。确认发布 v${NEW}？（y/N）" ok
 [ "$ok" = "y" ] || [ "$ok" = "Y" ] || die "已取消（版本号提交留在本地，没有推送）"
 
 log "打 tag、推送、建 Release"

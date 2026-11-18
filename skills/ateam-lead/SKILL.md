@@ -105,16 +105,15 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 
 ## 3. 事件处理
 
+只是通知、你不用做什么的事不会推给你：worker 加入、领卡、下线、恢复动静，需求已验收，演播卡的进展。这些在看板和 `ateam status` 里都看得到；由此引起的缺人会以 `staffing_needed` 通知你。每推一条事件你都要处理一轮，这样能省下不少 token。
+
 | 事件 | 处理 |
 |---|---|
 | `submitted` | review（第 4 节） |
 | `question` | `ateam answer T3 "<答复>"`。答不了就问用户。test worker 问「用例已写好，请审核：<路径>」的，按第 4 节「测试用例审核」处理 |
 | `worker_stale` | worker 手上有任务，但 15 分钟没动静：可能在跑很长的命令，也可能窗口停了。**任务不会自动转手，你也不要自己收回。** 问用户那个窗口还在不在（看板上也会弹框问用户）。还在就不用管；停住了就请用户发叫醒话 |
-| `worker_back` | 它又有动静了，或用户确认窗口还在，了解即可 |
 | （用户确认某个 worker 窗口没了） | `ateam reclaim T3`：收回任务交给同角色的其他 worker 接手；原 worker 会被标记掉线。**只在用户确认后做** |
-| `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有能领的任务：没有待领取的卡，或剩下的都在等依赖、暂停领取），申请下线。事件里列出了在等依赖的卡：依赖马上要通过（已在 review）就留着它，还要很久就让它下线，依赖通过后缺人时会收到 `staffing_needed`。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。事件里写着「最后一个」的（用户在看板设置里开了「每个角色至少保留一个 worker」），要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved`；没写的（包括它是这个角色唯一的 worker、但用户关掉了这个设置）由你自己决定，**不要问用户、不要请用户确认**，决定了就直接 dismiss，事后在汇报里提一句即可 |
-| `worker_auto_leave` | 你不在（未监听、近几分钟没操作）时，某个 worker 空闲超过设定时长，已自动下线。了解即可；这个角色再缺人时看 `ateam status` 的「缺人」 |
-| `worker_offline` | `ateam status` 确认任务已退回待领取；没有同角色 worker 在线时，提醒用户开新窗口（换账号也可以），新 worker 会自动接手 |
+| `leave_request` | worker 空闲太久（默认 3 分钟，本角色没有能领的任务：没有待领取的卡，或剩下的都在等依赖、暂停领取）。一般情况服务直接安排它下线、不通知你；只有这个角色还有卡在等依赖、有需求还在拆卡，或它是要保留的最后一个时，才向你申请下线。事件里列出了在等依赖的卡：依赖马上要通过（已在 review）就留着它，还要很久就让它下线，依赖通过后缺人时会收到 `staffing_needed`。近期不会再有这个角色的任务，就 `ateam dismiss <编号>`；还会有，就不用管，它继续等待。事件里写着「最后一个」的（用户在看板设置里开了「每个角色至少保留一个 worker」），要先问用户，用户同意后才 `ateam dismiss <编号> --user-approved`；没写的（包括它是这个角色唯一的 worker、但用户关掉了这个设置）由你自己决定，**不要问用户、不要请用户确认**，决定了就直接 dismiss，事后在汇报里提一句即可 |
 | `task_hold` / `job_hold` | 用户（或你自己）暂停 / 恢复了一张卡或整个需求的领取。用户暂停的：这些卡不派发，依赖它们的卡也会等着，汇报和排进度时算上；要改顺序或作废，先问用户。恢复的：照常推进 |
 | `task_held` | 任务被打回到上限次数（默认 3 次，用户可在看板设置里改）已挂起：改写任务 `ateam task edit T3 --desc-file t3.md --accept "..."` 后 `ateam release T3`；或者自己改代码后 `ateam approve T3` |
 | `staffing_needed` | 某个角色有能领的卡（依赖已满足、没暂停），却持续 1 分钟没有在线 worker，比如这个角色的 worker 下线或掉线了。允许你自动启动时 `ateam spawn --role <角色>` 开一个；不允许时请用户开窗口或在看板上点「启动」。这些卡暂时不做的话，暂停领取或作废，别让它一直缺人 |
@@ -125,8 +124,6 @@ description: 作为 agent-team leader：把用户需求拆成任务派给 worker
 | `critique_ruling` | 用户决定了审卡意见怎么改：照做后 `ateam critique done T5 "<改了什么>"` |
 | `no_leader` | 用户在看板上点了 leader 卡片的「下线」，或者（用户开了自动开关时）你超过设定时间既没挂着监听、也没执行命令，被判定掉线（通常是 token 用完了），进入**无 leader 模式**：worker 先放下等答复、待 review 的卡，转做没有依赖、不改同一批文件的卡；依赖待 review 卡的卡继续等。你执行任何命令就自动退出（自动进入的，重新挂上监听也会退出） |
 | `leader_back` | 你回来了，退出无 leader 模式。事件里列着积压：**先逐个答复，再逐个 review**（`ateam status` 看全部）。照常 `answer` / `approve` / `reject` 就行：被答复或打回的放下的卡会自动交回原 worker，它正在做别的卡就做完再接；原 worker 不在线就换人接手。卡上标「转做 T?」「留给 xx」是正常的 |
-| `worker_joined` `claimed` `job_accepted` | 了解即可 |
-| `demo_queued` `demo_started` `demo_ended` `demo_stopped` `demo_saved` `demo_unclaimed` `demo_interrupted` | 演播卡的事件（预演和演播都用这些），了解即可：不用 review、不用汇报。预演、演播期间派发暂停，worker 领不到普通任务是正常的 |
 
 ## 审卡意见
 
@@ -295,7 +292,7 @@ ateam report --job J1 --file report.md
 
 然后在对话里把汇报内容告诉用户，请用户测试验收。
 
-**用户验收**：用户可以在看板上点「验收通过」（你会收到 `job_accepted` 事件），也可能直接在对话里说。
+**用户验收**：用户可以在看板上点「验收通过」（看板上直接生效，不会通知你），也可能直接在对话里说。
 - 用户说通过（比如「J3 验收通过」「这几个都通过了」）：`ateam job accept J3 [J4 ...]`。
 - 用户说有问题：在**同一个需求**下 `ateam task add --job J3 ...` 加修复任务，需求自动回到进行中；修完再 `ateam report` 一次。
 

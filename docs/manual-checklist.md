@@ -90,10 +90,11 @@
 3. [ ] leader 对进行中的卡 `ateam task edit T? --desc-file ... --accept ...`：成功，输出写明已通知 worker；worker 下一次 progress / wait / submit 收到「leader 修改了这张卡的描述、验收标准，以卡片最新内容为准」及新内容；看板卡片显示新描述，时间线「修改 · 已通知」；改进行中卡的 --role 或 --after 被拒
 4. [ ] `ateam task add ... --paths a --paths b --after T1 --after T2`：路径是 a、b，依赖是 T1、T2；`--title x --title y` 报错「写了两遍」
 5. [ ] 新卡和一个暂停领取的需求里的卡路径重叠：「⚠ 路径重叠」里那张卡标「暂停领取中」，建议给暂停的卡加 --after 新卡，而不是反过来
-6. [ ] 某角色只剩暂停领取的卡时，该角色的 worker 计为空闲；超过「空闲申请下线时长」后：leader 在线时向 leader 申请下线，leader 未连接时直接下线（开启「每个角色至少保留一个 worker」时最后一个不下线），leader 回来后收到 worker_auto_leave 事件
-7. [ ] 设置里关掉「每个角色至少保留一个 worker」：某角色唯一的 worker 空闲申请下线时，leader 收到的 leave_request 不提「最后一个」，直接 dismiss，不问用户；看板上点它的「下线」直接下线，没有「确认下线」；打开该设置时行为照旧
+6. [ ] 某角色只剩暂停领取的卡时，该角色的 worker 计为空闲；超过「空闲申请下线时长」后直接下线，不叫 leader（开启「每个角色至少保留一个 worker」时，最后一个照旧向 leader 申请，leader 先问用户）；有需求还在拆卡（规划中）时照旧向 leader 申请
+7. [ ] 设置里关掉「每个角色至少保留一个 worker」：某角色唯一的 worker 空闲且没有在等依赖的卡时直接下线，不叫 leader；有在等依赖的卡时 leader 收到的 leave_request 不提「最后一个」，由 leader 自己决定，不问用户；看板上点它的「下线」直接下线，没有「确认下线」；打开该设置时行为照旧
 8. [ ] 装了 hook 的 worker 正在干活时被「立即下线」或任务被收回：它下一次工具调用后就看到「# ateam：立即停手」，停止修改该卡的文件、不提交、不还原；下线的告诉用户已下线后结束，被收回的重新 join；接手的 worker 在原改动上继续
 9. [ ] 某角色剩下的待领取卡都在等依赖（依赖还没通过）时，该角色空闲的 worker 计为空闲；超过「空闲申请下线时长」后申请下线，leave_request 里列出在等依赖的卡号；leader 依据依赖是否马上通过决定留下或让它下线；leader 未连接时直接下线，依赖通过后缺人由 staffing_needed 提醒
+10. [ ] leader 的监听（`ateam watch --follow`）不再收到 worker 加入、领卡、下线、恢复、自动下线、需求已验收和演播卡的事件；提交、提问、无响应、申请下线、缺人、用户回复等需要 leader 处理的事件照常收到；这些通知类的事在看板和 `ateam status` 里照常可见；worker 掉线后卡退回待领取、又没有同角色 worker 时，约 1 分钟后 leader 收到 staffing_needed
 
 
 ## 无 leader 模式

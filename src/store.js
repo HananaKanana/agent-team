@@ -14,6 +14,12 @@ export function emptyState() {
 }
 
 const READ_BY_EVENT = new Set(['user_reply', 'user_message', 'question']);
+// 只是通知、leader 不用做什么的事件：记下但不推给 leader 的监听。每推一条，leader 就要带着整段对话处理一轮，
+// 很费 token；这些事看板和 ateam status 里都看得到，需要 leader 处理的后果（比如缺人）另有事件
+export const QUIET_EVENTS = new Set([
+  'claimed', 'worker_joined', 'worker_back', 'worker_offline', 'worker_leaving', 'worker_auto_leave', 'job_accepted',
+  'demo_queued', 'demo_started', 'demo_ended', 'demo_stopped', 'demo_saved', 'demo_unclaimed', 'demo_interrupted',
+]);
 
 // leaseMs：多久没动静算「可能停了」。手上有进行中任务的 worker 只标记、提醒用户，任务不动，
 // 用户确认窗口没了（看板上点「换人接手」，或 leader 问过用户后 ateam reclaim）才转手；
@@ -105,7 +111,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   function emit(type, fields = {}) {
     state.seq.event += 1;
-    state.events.push({ id: state.seq.event, ts: now(), type, text: '', ...fields, delivered: false });
+    state.events.push({ id: state.seq.event, ts: now(), type, text: '', ...fields, delivered: QUIET_EVENTS.has(type) });
   }
 
   // agent 在 shell 里用普通引号传多行文字时，换行常变成字面的 \n（两个字符）。整段没有真换行、
@@ -1039,6 +1045,15 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
         const who = agent.name ? `${agent.name}（${agent.id}）` : agent.id;
         const min = Math.round((now() - agent.idleSince) / 60000);
         const blocked = state.tasks.filter((t) => t.status === 'pending' && !t.onHold && !heldJobs.has(t.jobId) && sameRole(t.role, agent.role)).map((t) => t.id);
+        // 不是最后一个、也没有在等依赖的卡、没有正在拆卡的需求：这个角色近期没活，直接下线，不用叫 leader。
+        // 之后又有这个角色的卡时，缺人会触发 staffing_needed 再开
+        const planning = state.jobs.some((j) => !j.demo && j.status === 'planning');
+        if (!last && !blocked.length && !planning && !agent.dismiss) {
+          agent.dismiss = true;
+          emit('worker_auto_leave', { agentId: agent.id, text: `${who} 空闲 ${min} 分钟，${agent.role} 角色没有待做的卡，已自动下线` });
+          dirty = true;
+          continue;
+        }
         emit('leave_request', {
           agentId: agent.id, role: agent.role, last,
           text: `${who} 已空闲 ${min} 分钟，${agent.role} 角色没有能领的任务${blocked.length ? `（${blocked.join('、')} 还在等依赖）` : ''}，申请下线${last ? `（它是 ${agent.role} 角色最后一个在线 worker）` : ''}`,

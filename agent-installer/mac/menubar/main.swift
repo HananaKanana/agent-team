@@ -121,6 +121,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         loadProjects()
         rebuild()
         refreshStatuses()
+        refreshVersion(check: false, report: false)  // 切换开发模式 / 安装版后，打开菜单即显示新的模式
     }
     func menuDidClose(_ menu: NSMenu) { menuOpen = false }
 
@@ -200,7 +201,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
             let (code, out) = runAteam(check ? ["version", "--check", "--json"] : ["version", "--json"])
             let json = (try? JSONSerialization.jsonObject(with: Data(out.utf8))) as? [String: Any]
             DispatchQueue.main.async {
-                if code == 0, let j = json { self.info = j }
+                // 不查更新时只合并版本和模式，保留上次查到的新版本信息
+                if code == 0, let j = json { if check { self.info = j } else { self.info.merge(j) { _, new in new } } }
                 if self.menuOpen { self.rebuild() }
                 if report {
                     if let err = json?["error"] as? String { self.alert("检查更新失败", err.replacingOccurrences(of: "检查更新失败：", with: "")) }

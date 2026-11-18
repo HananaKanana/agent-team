@@ -1,7 +1,9 @@
 // ateam 菜单栏程序：屏幕右上角的图标，点开列出项目、启动 / 停止 / 重启服务、打开看板、检查更新。
 // 没有窗口、不出现在 Dock（Info.plist 的 LSUIElement）。服务在后台运行，输出写到 <项目>/.ateam/serve.log；
 // 退出菜单栏程序不停服务。项目列表在 ~/.config/ateam/projects.json（ateam serve 启动时也会写进去）。
+// 菜单顶部列出各项目待你处理的事（与看板「待处理」一致），点了在浏览器里直达；新出现的事发系统通知。
 import AppKit
+import UserNotifications
 
 let WRAPPER = "/usr/local/bin/ateam"
 let HOME = FileManager.default.homeDirectoryForCurrentUser
@@ -15,7 +17,27 @@ struct Status {
     var summary: [String: Any]?
     var running: Bool { summary != nil }
     func int(_ key: String) -> Int { (summary?[key] as? NSNumber)?.intValue ?? 0 }
-    var attention: Bool { int("accept") > 0 || int("asking") > 0 }
+    // 待你处理的事：[{ key, text, hash }]
+    var items: [[String: Any]] { summary?["items"] as? [[String: Any]] ?? [] }
+    var agents: [[String: Any]] { summary?["agents"] as? [[String: Any]] ?? [] }
+    var lan: [String] { summary?["lan"] as? [String] ?? [] }
+    var attention: Bool { !items.isEmpty }
+    func url(_ hash: String = "") -> URL? {
+        guard let port = port else { return nil }
+        return URL(string: "http://127.0.0.1:\(port)/" + (hash.isEmpty ? "" : "#" + hash))
+    }
+}
+
+// 通知开关，默认开
+let NOTIFY_KEY = "notify"
+func notifyOn() -> Bool { UserDefaults.standard.object(forKey: NOTIFY_KEY) as? Bool ?? true }
+
+func ago(_ ms: Double?) -> String {
+    guard let ms = ms else { return "" }
+    let min = Int((Date().timeIntervalSince1970 * 1000 - ms) / 60000)
+    if min < 1 { return "刚开始" }
+    if min < 60 { return "\(min) 分钟" }
+    return "\(min / 60) 小时 \(min % 60) 分钟"
 }
 
 // 同步请求本机服务（在后台线程调用）
@@ -56,7 +78,7 @@ func samePath(_ a: String, _ b: String) -> Bool {
     URL(fileURLWithPath: a).resolvingSymlinksInPath().path == URL(fileURLWithPath: b).resolvingSymlinksInPath().path
 }
 
-final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     var item: NSStatusItem!
     let menu = NSMenu()
     var menuOpen = false
@@ -65,6 +87,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var busy: [String: String] = [:]          // 项目 → 「启动中…」「停止中…」
     var info: [String: Any] = [:]             // ateam version --check --json
     var updating = false
+    // 通知：一件事持续 1 分钟才通知（掉线马上重连之类的不打扰），同一件事只通知一次；程序启动时已经存在的不通知
+    var firstSeen: [String: Date] = [:]
+    var notified: Set<String> = []
+    var baselined = false
 
     func applicationDidFinishLaunching(_ note: Notification) {
         // 只开一个
@@ -77,6 +103,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.autoenablesItems = false
         item.menu = menu
         setIcon(attention: false)
+        UNUserNotificationCenter.current().delegate = self
+        if notifyOn() { requestNotify() }
         loadProjects()
         rebuild()
         refreshVersion(check: true, report: false)
@@ -158,6 +186,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async {
                 self.statuses = next
                 self.setIcon(attention: next.values.contains { $0.attention })
+                self.notifyNew()
                 if self.menuOpen { self.rebuild() }
             }
         }
@@ -206,6 +235,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let modeText = mode == "dev" ? " · 开发模式" : mode == "source" ? " · 源码运行" : ""
         _ = add("ateam \(version)\(modeText)", nil, enabled: false)
         menu.addItem(.separator())
+        // 待处理：各项目待你处理的事，点了直达看板上的那个需求或那张卡
+        let pending = projects.flatMap { p -> [(String, [String: Any])] in (statuses[p]?.items ?? []).map { (p, $0) } }
+        if !pending.isEmpty {
+            _ = add("待处理（\(pending.count)）", nil, enabled: false)
+            for (p, item) in pending.prefix(12) {
+                let name = URL(fileURLWithPath: p).lastPathComponent
+                let text = item["text"] as? String ?? ""
+                let short = text.count > 40 ? String(text.prefix(40)) + "…" : text
+                let it = add("\(projects.count > 1 ? name + " · " : "")\(short)", #selector(openURL(_:)), statuses[p]?.url(item["hash"] as? String ?? "")?.absoluteString)
+                it.toolTip = text
+                it.indentationLevel = 1
+            }
+            if pending.count > 12 { _ = add("还有 \(pending.count - 12) 项，请在看板中查看", nil, enabled: false) }
+            menu.addItem(.separator())
+        }
         if projects.isEmpty {
             _ = add("还没有项目：点「添加项目…」，或在项目目录运行 ateam", nil, enabled: false)
         }
@@ -216,27 +260,53 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let b = busy[p] { detail = b }
             else if st.running {
                 var parts = ["运行中", "\(st.int("workers")) 个 worker"]
-                if st.int("accept") > 0 { parts.append("\(st.int("accept")) 个待验收") }
-                if st.int("asking") > 0 { parts.append("\(st.int("asking")) 个待答复") }
-                if (st.summary?["stale"] as? Bool) == true { parts.append("需要重启") }
+                if st.int("working") > 0 { parts.append("\(st.int("working")) 张进行中") }
+                if !st.items.isEmpty { parts.append("\(st.items.count) 项待处理") }
                 detail = parts.joined(separator: " · ")
             }
+            // 用带颜色的圆点字符：菜单项的图片在部分系统版本上不显示
             let it = NSMenuItem(title: "\(name)    \(detail)", action: nil, keyEquivalent: "")
-            it.image = dot(st.running ? (st.attention ? .systemOrange : .systemGreen) : .tertiaryLabelColor)
+            let color: NSColor = st.running ? (st.attention ? .systemOrange : .systemGreen) : .tertiaryLabelColor
+            let title = NSMutableAttributedString(string: "● ", attributes: [.foregroundColor: color, .font: NSFont.menuFont(ofSize: 0)])
+            title.append(NSAttributedString(string: name, attributes: [.font: NSFont.menuFont(ofSize: 0)]))
+            title.append(NSAttributedString(string: "    \(detail)", attributes: [.foregroundColor: NSColor.secondaryLabelColor, .font: NSFont.menuFont(ofSize: 0)]))
+            it.attributedTitle = title
             it.toolTip = p
             let sub = NSMenu()
             sub.autoenablesItems = false
             let idle = busy[p] == nil
             if st.running {
-                _ = add("打开看板", #selector(openDashboard(_:)), p, to: sub)
+                _ = add("打开看板", #selector(openURL(_:)), st.url()?.absoluteString, to: sub)
                 _ = add("重启服务", #selector(restart(_:)), p, to: sub, enabled: idle)
                 _ = add("停止服务", #selector(stop(_:)), p, to: sub, enabled: idle)
+                // 在线 worker 和手上的卡：点了直达那张卡
+                sub.addItem(.separator())
+                if st.agents.isEmpty { _ = add("没有在线的 worker", nil, to: sub, enabled: false) }
+                else { _ = add("在线 worker（\(st.agents.count)）", nil, to: sub, enabled: false) }
+                for a in st.agents {
+                    let id = a["id"] as? String ?? ""
+                    let label = (a["name"] as? String).map { "\(id)（\($0)）" } ?? id
+                    let task = a["task"] as? [String: Any]
+                    var text = label
+                    if let t = task {
+                        text += " · \(t["id"] as? String ?? "")"
+                        if (a["stale"] as? Bool) == true { text += " · 无响应" }
+                        else if let since = (t["since"] as? NSNumber)?.doubleValue { text += " · 已做 \(ago(since))" }
+                    } else { text += " · 空闲" }
+                    let w = add(text, task == nil ? nil : #selector(openURL(_:)), st.url(task?["hash"] as? String ?? "")?.absoluteString, to: sub, enabled: task != nil)
+                    w.toolTip = task?["title"] as? String
+                    w.indentationLevel = 1
+                }
+                // 局域网只读地址：复制给同事看进度
+                sub.addItem(.separator())
+                if st.lan.isEmpty { _ = add("局域网访问未开启（以 --local 启动）", nil, to: sub, enabled: false) }
+                for u in st.lan { _ = add("复制局域网只读地址 \(u.replacingOccurrences(of: "http://", with: ""))", #selector(copyText(_:)), u, to: sub) }
             } else {
                 _ = add("启动并打开看板", #selector(start(_:)), p, to: sub, enabled: idle)
             }
+            sub.addItem(.separator())
             _ = add("查看日志", #selector(showLog(_:)), p, to: sub)
             _ = add("在 Finder 中显示", #selector(reveal(_:)), p, to: sub)
-            sub.addItem(.separator())
             _ = add("从列表中移除", #selector(remove(_:)), p, to: sub)
             it.submenu = sub
             menu.addItem(it)
@@ -251,6 +321,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             _ = add("检查更新", #selector(checkUpdate(_:)), enabled: !updating)
             menu.addItem(.separator())
         }
+        let notify = add("新的待处理事项发送系统通知", #selector(toggleNotify(_:)))
+        notify.state = notifyOn() ? .on : .off
         let login = add("登录时自动打开", #selector(toggleLogin(_:)))
         login.state = FileManager.default.fileExists(atPath: LOGIN_ITEM.path) ? .on : .off
         _ = add("退出 ateam 菜单", #selector(quit(_:)))
@@ -259,9 +331,69 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // ---------- 动作 ----------
     func port(_ p: String) -> Int? { statuses[p]?.port }
 
-    @objc func openDashboard(_ sender: NSMenuItem) {
-        guard let p = sender.representedObject as? String, let port = port(p), let url = URL(string: "http://127.0.0.1:\(port)/") else { return }
+    @objc func openURL(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String, let url = URL(string: text) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    @objc func copyText(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    // ---------- 系统通知 ----------
+    func requestNotify() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func notifyNew() {
+        var current: [String: (String, String, URL?)] = [:]   // key → (项目名, 文字, 直达地址)
+        for p in projects {
+            guard let st = statuses[p], st.running else { continue }
+            for item in st.items {
+                guard let key = item["key"] as? String else { continue }
+                current["\(p)|\(key)"] = (URL(fileURLWithPath: p).lastPathComponent, item["text"] as? String ?? "", st.url(item["hash"] as? String ?? ""))
+            }
+        }
+        // 程序刚启动时已经存在的事不通知
+        if !baselined {
+            baselined = true
+            notified = Set(current.keys)
+        }
+        let now = Date()
+        for k in Array(firstSeen.keys) where current[k] == nil { firstSeen[k] = nil; notified.remove(k) }
+        for k in Array(notified) where current[k] == nil { notified.remove(k) }
+        for (k, v) in current where !notified.contains(k) {
+            let first = firstSeen[k] ?? now
+            firstSeen[k] = first
+            guard now.timeIntervalSince(first) >= 60 else { continue }
+            notified.insert(k)
+            guard notifyOn() else { continue }
+            let content = UNMutableNotificationContent()
+            content.title = "ateam · \(v.0)"
+            content.body = v.1
+            content.sound = .default
+            if let u = v.2 { content.userInfo = ["url": u.absoluteString] }
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: k, content: content, trigger: nil))
+        }
+    }
+
+    // 点通知：在浏览器里直达
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler done: @escaping () -> Void) {
+        if let text = response.notification.request.content.userInfo["url"] as? String, let url = URL(string: text) { NSWorkspace.shared.open(url) }
+        done()
+    }
+    // 程序在前台时也显示
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+        done([.banner, .sound])
+    }
+
+    @objc func toggleNotify(_ sender: NSMenuItem) {
+        let on = !notifyOn()
+        UserDefaults.standard.set(on, forKey: NOTIFY_KEY)
+        if on { requestNotify() }
+        rebuild()
     }
 
     // 后台启动：用登录 shell（带上用户的 PATH，git 等命令才找得到），输出追加到 .ateam/serve.log

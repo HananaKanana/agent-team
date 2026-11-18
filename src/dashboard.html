@@ -5098,6 +5098,12 @@ document.getElementById('helper-btn').addEventListener('click', (e) => {
   renderHelper();
 });
 loadView();
+// 地址栏的 #需求/卡号 被外部改了（菜单栏、通知点进来）：跳到对应需求并打开那张卡
+addEventListener('hashchange', () => {
+  const before = JSON.stringify(view);
+  loadView();
+  if (JSON.stringify(view) !== before) { render(); renderDrawer(true); }
+});
 poll();
 setInterval(poll, 3000);
 // 卡片上的时间每秒走一次，不等数据变化

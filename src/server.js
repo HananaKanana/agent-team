@@ -431,6 +431,43 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     server.closeAllConnections?.();
   }
 
+  // 待你处理的事，与看板「待处理」（dashboard.html 的 attentionItems）同一套规则。hash 是看板地址的 #需求/卡号，菜单栏点了直达
+  let lanUrls = [];
+  function attention() {
+    const st = store.state;
+    const taskOf = (id) => st.tasks.find((t) => t.id === id);
+    const items = [];
+    for (const j of st.jobs.slice().reverse()) {
+      if (j.status === 'awaiting_acceptance') items.push({ key: `accept:${j.id}`, text: `${j.id} 待验收：${j.title}`, hash: j.id });
+    }
+    if (!store.demoFrozen()) {
+      for (const n of store.staffingNeeds().needs) {
+        const t = taskOf(n.tasks[0]);
+        items.push({ key: `needs:${n.role.toLowerCase()}`, text: `${n.role} 缺少 worker（${n.tasks.join('、')}）`, hash: t ? `${t.jobId}/${t.id}` : '' });
+      }
+    }
+    if (codeHash() !== startHash) items.push({ key: 'stale', text: '服务需要重启', hash: '' });
+    for (const t of st.tasks) {
+      if ((t.critiques || []).some((c) => c.status === 'proposed' || c.status === 'disputed')) items.push({ key: `dispute:${t.id}`, text: `${t.id} 审卡分歧待决定`, hash: `${t.jobId}/${t.id}` });
+    }
+    for (const t of st.tasks) {
+      if (!t.assignTo || (t.status !== 'pending' && t.status !== 'held')) continue;
+      const a = st.agents.find((x) => x.id === t.assignTo);
+      if (!a || a.status !== 'online') items.push({ key: `assign:${t.id}`, text: `${t.id} 指派的 ${t.assignTo} 不在线`, hash: `${t.jobId}/${t.id}` });
+    }
+    for (const a of st.agents) {
+      if (a.status !== 'online') continue;
+      const cancelled = a.cancelNotice?.wasWorking ? taskOf(a.cancelNotice.taskId) : null;
+      if (cancelled) items.push({ key: `cancel:${a.id}:${cancelled.id}`, text: `${a.id} 仍在处理已作废的 ${cancelled.id}`, hash: `${cancelled.jobId}/${cancelled.id}` });
+      const t = a.stale && a.currentTask ? taskOf(a.currentTask) : null;
+      if (t) items.push({ key: `quiet:${a.id}`, text: `${a.id} 无响应（${t.id}）`, hash: `${t.jobId}/${t.id}` });
+    }
+    for (const c of (doctor ?? []).filter((x) => !x.ok)) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, hash: '' });
+    const busy = st.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
+    if (busy && (st.noLeader || !leaderOnline())) items.push({ key: 'leader', text: st.noLeader ? '无 leader 模式' : 'leader 未连接', hash: '' });
+    return items;
+  }
+
   const store = createStore({ state: loadState(dataDir) ?? undefined, leaseMs, idleMs: idleMin * 60 * 1000, onChange });
   // 启动时按当前版本的文件布局写一遍（新加的拆分方式马上生效，不用等第一次状态变化；内容没变的文件不会重写）
   saveState(dataDir, store.state);
@@ -769,18 +806,28 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     // 「安装」页用：本机 DeepSeek Harness 的 skill 目录和 profile、各项是否已经装好。都是现场读出来的，不写死
     'GET /api/install-info': () => installInfo(),
-    // 菜单栏程序用的简要状态
-    'GET /api/summary': () => ({
-      root, name: basename(root), version: ateamVersion(), mode: runMode(),
-      workers: store.state.agents.filter((a) => a.status === 'online').length,
-      working: store.state.tasks.filter((t) => ['working', 'asking', 'demoing', 'wrapping'].includes(t.status)).length,
-      accept: store.state.jobs.filter((j) => j.status === 'awaiting_acceptance').length,
-      asking: store.state.tasks.filter((t) => t.status === 'asking').length,
-      stale: codeHash() !== startHash,
-      // 版本、运行模式、有没有新版本、正在下载的更新
-      update: updateSummary(),
-      update: updateInfo.newer ? updateInfo.latest : null,
-    }),
+    // 菜单栏程序用的简要状态：待你处理的事（与看板的「待处理」一致）、在线 worker 和手上的卡、局域网只读地址
+    'GET /api/summary': () => {
+      const st = store.state;
+      const items = attention();
+      return {
+        root, name: basename(root), version: ateamVersion(), mode: runMode(),
+        workers: st.agents.filter((a) => a.status === 'online').length,
+        working: st.tasks.filter((t) => ['working', 'asking', 'demoing', 'wrapping'].includes(t.status)).length,
+        accept: st.jobs.filter((j) => j.status === 'awaiting_acceptance').length,
+        attention: items.length,
+        items,
+        agents: st.agents.filter((a) => a.status === 'online').map((a) => {
+          const t = a.currentTask ? st.tasks.find((x) => x.id === a.currentTask) : null;
+          // 这次从什么时候开始做：最近一次领取、接手、开始演播或被打回
+          const since = t ? [...t.history].reverse().find((h) => ['claimed', 'handoff', 'demo_started', 'rejected'].includes(h.type))?.ts ?? null : null;
+          return { id: a.id, name: a.name || null, role: a.role, stale: !!a.stale, task: t ? { id: t.id, title: t.title, status: t.status, hash: `${t.jobId}/${t.id}`, since } : null };
+        }),
+        lan: lanUrls,
+        stale: codeHash() !== startHash,
+        update: updateInfo.newer ? updateInfo.latest : null,
+      };
+    },
     'POST /api/shutdown': () => { setTimeout(() => stopServer(false), 200); return { stopping: true }; },
     'POST /api/restart': () => { setTimeout(() => stopServer(true), 200); return { restarting: true }; },
     // 版本页：带更新说明；fresh=1 立即查一次
@@ -840,6 +887,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       pending: store.pendingActions(), root, toolDir: TOOL_DIR, home: homedir(), port, repos: layout.mode === 'multi' ? layout.repos : null,
       // 代码已更新但服务还没重启
       stale: codeHash() !== startHash,
+      // 版本、运行模式、有没有新版本、正在下载的更新
+      update: updateSummary(),
       config: store.config(),
       // ego-browser 测试用 profile（只在选了 ego-browser 时有）
       egoProfiles: store.config().testBrowser === 'ego' ? egoProfiles : null,
@@ -1052,6 +1101,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   writeFileSync(join(dataDir, 'port'), `${port}\n`);
   server.ateamLayout = layout;
   if (lan) server.ateamLan = lanAddresses().map((ip) => `http://${ip}:${port}`);
+  lanUrls = server.ateamLan ?? [];
   recheck().catch(() => {});
   if (store.config().testBrowser === 'ego') refreshEgoProfiles().catch(() => {});
   // 菜单栏程序的项目列表

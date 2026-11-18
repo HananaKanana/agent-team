@@ -327,10 +327,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
                     si.submenu = spawnMenu
                     sub.addItem(si)
                 }
-                // 局域网只读地址：复制给同事看进度
-                if fresh { sub.addItem(.separator()) }
-                if fresh && st.lan.isEmpty { _ = add("局域网访问未开启（以 --local 启动）", nil, to: sub, enabled: false) }
-                for u in st.lan { _ = add("复制局域网只读地址 \(u.replacingOccurrences(of: "http://", with: ""))", #selector(copyText(_:)), u, to: sub) }
+                // 局域网访问状态
+                if fresh {
+                    sub.addItem(.separator())
+                    _ = add(st.lan.isEmpty ? "局域网访问：未开启" : "局域网访问：已开启（只读）", nil, to: sub, enabled: false)
+                }
             } else {
                 _ = add("启动并打开看板", #selector(start(_:)), p, to: sub, enabled: idle)
             }
@@ -397,11 +398,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         try? proc.run()
     }
 
-    @objc func copyText(_ sender: NSMenuItem) {
-        guard let text = sender.representedObject as? String else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-    }
 
     // ---------- 系统通知 ----------
     func requestNotify() {

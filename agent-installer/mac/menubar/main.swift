@@ -409,15 +409,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         hsub.addItem(.separator())
         _ = add("GitHub 主页", #selector(openURL(_:)), GITHUB, to: hsub)
         help.submenu = hsub
-        menu.addItem(help)
-        menu.addItem(.separator())
-        let awake = add("有进行中的任务时阻止休眠", #selector(toggleAwake(_:)))
+        // 设置：几个开关收在一个子菜单里
+        let settings = NSMenuItem(title: "设置", action: nil, keyEquivalent: "")
+        let ssub = NSMenu()
+        ssub.autoenablesItems = false
+        let awake = add("有进行中的任务时阻止休眠", #selector(toggleAwake(_:)), to: ssub)
         awake.state = awakeOn() ? .on : .off
         awake.toolTip = "任一项目有进行中的任务时，系统不会因空闲而休眠（屏幕照常熄灭、锁屏）；任务全部完成后自动恢复。合上笔记本盖子时仍会休眠。"
-        let notify = add("新的待处理事项发送系统通知", #selector(toggleNotify(_:)))
+        let notify = add("新的待处理事项发送系统通知", #selector(toggleNotify(_:)), to: ssub)
         notify.state = notifyOn() ? .on : .off
-        let login = add("登录时自动打开", #selector(toggleLogin(_:)))
+        let login = add("登录时自动打开", #selector(toggleLogin(_:)), to: ssub)
         login.state = FileManager.default.fileExists(atPath: LOGIN_ITEM.path) ? .on : .off
+        settings.submenu = ssub
+        menu.addItem(settings)
+        menu.addItem(help)
+        menu.addItem(.separator())
         _ = add("退出 ateam 菜单", #selector(quit(_:)))
     }
 

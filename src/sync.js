@@ -115,12 +115,12 @@ export async function writeSelf({ top, dataDir, meta, heartbeatMs = 10 * 60 * 10
 }
 
 export async function pushSelf({ top, remote, name }) {
-  await git(top, ['push', '--porcelain', remote, `${SELF_REF}:refs/heads/ateam/${name}`]);
+  await git(top, ['push', '--porcelain', remote, `${SELF_REF}:refs/heads/ateam/${name}`], { timeout: 300000 });
 }
 
 // 拉取所有 ateam/* 分支到 refs/ateam/peers/，远程删掉的分支本地也删
 export async function fetchPeers({ top, remote }) {
-  await git(top, ['fetch', '--prune', '--no-tags', '--quiet', remote, `+refs/heads/ateam/*:${PEER_PREFIX}*`]);
+  await git(top, ['fetch', '--prune', '--no-tags', '--quiet', remote, `+refs/heads/ateam/*:${PEER_PREFIX}*`], { timeout: 300000 });
 }
 
 // 读拉下来的同事看板。cache：oid → 解析结果，没变的分支不重读
@@ -168,7 +168,7 @@ export async function claimName({ top, remote, name, project }) {
 // 看板文件（board.json、archive/、demos/）还在仓库里被跟踪吗。rel 是 .ateam 相对仓库根的路径
 export async function trackedBoardFiles({ top, rel }) {
   try {
-    const out = await git(top, ['ls-files', '--', `${rel}/board.json`, `${rel}/archive`, `${rel}/demos`]);
+    const out = await git(top, ['ls-tree', '-r', '--name-only', 'HEAD', '--', `${rel}/board.json`, `${rel}/archive`, `${rel}/demos`]);
     return out.trim().split('\n').filter(Boolean);
   } catch { return []; }
 }
@@ -177,14 +177,19 @@ export async function trackedBoardFiles({ top, rel }) {
 // 用临时暂存区从 HEAD 生成提交：不能用 git commit --only，它会按工作区把还在的看板文件重新加回去；
 // 也不能直接提交真正的暂存区，里面可能有 worker 暂存了一半的改动。提交后真正的暂存区只同步这几个路径
 export async function untrackBoardFiles({ top, rel, dataDir, name }) {
+  const paths = [`${rel}/board.json`, `${rel}/archive`, `${rel}/demos`];
   const files = await trackedBoardFiles({ top, rel });
-  if (!files.length) return { nothing: true };
+  if (!files.length) {
+    // 提交已在上次完成、只差暂存区没同步（例如上次在这一步中断）：补上这一步
+    const staged = (await git(top, ['ls-files', '--', ...paths])).trim();
+    if (staged) await git(top, ['reset', '-q', 'HEAD', '--', ...paths, `${rel}/.gitignore`]);
+    return { nothing: true };
+  }
   const ignore = join(dataDir, '.gitignore');
   const have = existsSync(ignore) ? readFileSync(ignore, 'utf8') : '';
   const lines = have.split(/\r?\n/).map((l) => l.trim());
   const want = ['board.json', 'archive/', 'demos/'].filter((w) => !lines.includes(w));
   if (want.length) writeFileSync(ignore, `${have}${have && !have.endsWith('\n') ? '\n' : ''}# 看板改为通过 ateam/<名字> 分支同步，不随代码提交\n${want.join('\n')}\n`);
-  const paths = [`${rel}/board.json`, `${rel}/archive`, `${rel}/demos`];
   const blob = (await git(top, ['hash-object', '-w', '--no-filters', ignore])).trim();
   const head = (await git(top, ['rev-parse', 'HEAD'])).trim();
   const index = join(tmpdir(), `ateam-untrack-${process.pid}-${Date.now()}.index`);
@@ -201,8 +206,8 @@ export async function untrackBoardFiles({ top, rel, dataDir, name }) {
     rmSync(index, { force: true });
   }
   // 真正的暂存区：只改这几个路径，和新提交一致
-  await git(top, ['rm', '--cached', '-r', '--quiet', '--ignore-unmatch', '--', ...paths]);
-  await git(top, ['update-index', '--add', '--cacheinfo', `100644,${blob},${rel}/.gitignore`]);
+  // 用 reset 而不是 rm --cached：暂存区里的看板文件可能有和工作区、HEAD 都不同的暂存内容，rm 会拒绝
+  await git(top, ['reset', '-q', 'HEAD', '--', ...paths, `${rel}/.gitignore`]);
   const sha = (await git(top, ['rev-parse', '--short', 'HEAD'])).trim();
   return { sha, count: files.length };
 }

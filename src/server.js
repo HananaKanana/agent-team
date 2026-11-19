@@ -621,7 +621,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     const { changed } = await writeSelf({ top, dataDir, meta: { name: syncCfg.name, format: SYNC_FORMAT, ateamVersion: ateamVersion(), host: thisHost(), project: syncProject } });
     if (!changed && !syncState.unpushed) return;
     syncState.unpushed = true;
-    await pushSelf({ top, remote: syncCfg.remote, name: syncCfg.name });
+    await pushSelf({ top, remote: syncCfg.remote, name: syncCfg.name, project: syncProject });
     syncState.unpushed = false;
     syncState.pushedAt = Date.now();
   }

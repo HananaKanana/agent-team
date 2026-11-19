@@ -72,7 +72,7 @@ function gitReason(s) {
 
 export function explainGitError(err) {
   const s = `${err?.stderr ?? ''} ${err?.message ?? ''}`;
-  if (/non-fast-forward|\[rejected\]|fetch first/i.test(s)) return '远程的同名分支被别人推送过，这个同步名字可能被占用了，请换一个名字。';
+  if (/non-fast-forward|\[rejected\]|fetch first|stale info/i.test(s)) return '远程的同名分支被别人推送过，这个同步名字可能被占用了，请换一个名字。';
   if (/protected|pre-receive hook declined|not allowed to (push|create)|permission|403/i.test(s)) return '远程拒绝推送 ateam/* 分支（没有权限，或设了分支保护）。请在 git 仓库的设置里允许创建 ateam/ 开头的分支。';
   if (/Authentication failed|could not read Username|terminal prompts disabled|401/i.test(s)) return '没有可用的 git 凭据。请先在终端里对这个仓库成功执行一次 git push（让系统记住账号），再重试。';
   if (/No route to host|Host is unreachable|Network is unreachable/i.test(s)) return `连不上 git 远程（${gitReason(s)}）。终端里能正常 git push 时，多半是 macOS 未允许 ateam 访问本地网络：打开「系统设置 → 隐私与安全性 → 本地网络」，打开 ateam，再在菜单栏重启该项目的服务。`;
@@ -113,21 +113,35 @@ export async function writeSelf({ top, dataDir, meta, heartbeatMs = 10 * 60 * 10
     lines.push(`100644 ${metaOid}\tsync.json`);
     await git(top, ['update-index', '--index-info'], { input: `${lines.join('\n')}\n`, env });
     const tree = (await git(top, ['write-tree'], { env })).trim();
-    const parent = await refOid(top, SELF_REF);
-    if (parent) {
-      const [ptree, ptime] = (await git(top, ['log', '-1', '--format=%T %ct', parent])).trim().split(' ');
-      if (ptree === tree && Date.now() - Number(ptime) * 1000 < heartbeatMs) return { oid: parent, changed: false };
+    const prev = await refOid(top, SELF_REF);
+    if (prev) {
+      const [ptree, ptime] = (await git(top, ['log', '-1', '--format=%T %ct', prev])).trim().split(' ');
+      if (ptree === tree && Date.now() - Number(ptime) * 1000 < heartbeatMs) return { oid: prev, changed: false };
     }
-    const oid = (await git(top, ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'ateam sync'], { env: BOT })).trim();
-    await git(top, ['update-ref', SELF_REF, oid, ...(parent ? [parent] : [])]);
+    // 不接在上一个提交后面：分支上始终只有最新这一个提交（心跳不会把分支越堆越长），推送时覆盖远程
+    const oid = (await git(top, ['commit-tree', tree, '-m', 'ateam sync'], { env: BOT })).trim();
+    await git(top, ['update-ref', SELF_REF, oid]);
     return { oid, changed: true };
   } finally {
     rmSync(index, { force: true });
   }
 }
 
-export async function pushSelf({ top, remote, name }) {
-  await git(top, ['push', '--porcelain', remote, `${SELF_REF}:refs/heads/ateam/${name}`], { timeout: 300000 });
+// 覆盖远程的 ateam/<名字>，但只在远程还是自己上次推的那份（或还不存在）时才覆盖：
+// 拉下来的那份是别的电脑、别的项目目录推的（名字被占用）就不推；推送期间被别人推过则失败（stale info）
+export async function pushSelf({ top, remote, name, project }) {
+  const peerRef = `${PEER_PREFIX}${name}`;
+  const expect = (await refOid(top, peerRef)) ?? '';
+  if (expect) {
+    let meta = {};
+    try { meta = JSON.parse(await git(top, ['cat-file', '-p', `${expect}:sync.json`])); } catch {}
+    if ((meta.host && meta.host !== hostname()) || (meta.project && project && meta.project !== project)) {
+      throw new Error(`同步名字「${name}」已被${meta.host && meta.host !== hostname() ? `另一台电脑（${meta.host}）` : `这台电脑上的另一个项目目录（${meta.project}）`}使用，已停止推送，请在设置中换一个名字。`);
+    }
+  }
+  const oid = await refOid(top, SELF_REF);
+  await git(top, ['push', '--porcelain', `--force-with-lease=refs/heads/ateam/${name}:${expect}`, remote, `${SELF_REF}:refs/heads/ateam/${name}`], { timeout: 300000 });
+  if (oid) await git(top, ['update-ref', peerRef, oid]); // 记下远程现在是哪一份，下次推送按它核对
 }
 
 // 拉取所有 ateam/* 分支到 refs/ateam/peers/，远程删掉的分支本地也删
@@ -168,12 +182,8 @@ export async function claimName({ top, remote, name, project }) {
   try { meta = JSON.parse(await git(top, ['cat-file', '-p', `${theirs}:sync.json`])); } catch {}
   if (meta.host && meta.host !== hostname()) throw new Error(`同步名字「${name}」已被另一台电脑（${meta.host}）使用，请换一个名字。`);
   if (meta.project && project && meta.project !== project) throw new Error(`同步名字「${name}」已被这台电脑上的另一个项目目录（${meta.project}）使用，请换一个名字。`);
-  const mine = await refOid(top, SELF_REF);
-  if (!mine) await git(top, ['update-ref', SELF_REF, theirs]);
-  else if (mine !== theirs) {
-    // 本地的要能快进到远程那份之后；否则以远程为准接上（只是看板快照，下一次写入会覆盖成当前内容）
-    try { await git(top, ['merge-base', '--is-ancestor', theirs, mine]); } catch { await git(top, ['update-ref', SELF_REF, theirs]); }
-  }
+  // 本地还没有自己的看板提交就从远程那份接上（内容一样时不用重新推）；推送时按远程那份核对后覆盖
+  if (!(await refOid(top, SELF_REF))) await git(top, ['update-ref', SELF_REF, theirs]);
   return { fresh: false };
 }
 

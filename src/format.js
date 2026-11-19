@@ -339,7 +339,9 @@ function waitingLines(waiting) {
   return [
     '你这个角色的任务都在等别的卡：',
     ...waiting.blocked.map((t) => (t.clash
-      ? `- ${t.id} ${t.title}：和 ${t.clash.assignee} 正在做的 ${t.clash.id} 改同一批文件，等它交了再派`
+      ? (t.clash.unpushed
+        ? `- ${t.id} ${t.title}：和同事 ${t.clash.peer} 已通过、但还没推送到远程的 ${t.clash.id} 改同一批文件，等他推送后再派`
+        : `- ${t.id} ${t.title}：和 ${t.clash.assignee} 正在做的 ${t.clash.id} 改同一批文件，等它交了再派`)
       : `- ${t.id} ${t.title}：等依赖 ${t.waitingFor.map((d) => `${d.id}（${STATUS[d.status] ?? d.status}）`).join('、')}`)),
   ];
 }

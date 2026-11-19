@@ -1115,7 +1115,24 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
   display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%;
   color: #fff; font-size: 14px; font-weight: 700; background: hsl(var(--h, 210) 55% 52%);
 }
-.peer-face.away { filter: grayscale(1); opacity: .6; }
+.peer-face { position: relative; }
+.peer-face.dim { filter: grayscale(1); opacity: .6; }
+/* 在线状态点：忙（有 worker 在做卡）绿、空闲蓝、离线 / 已停止灰、超过 2 小时未同步黄 */
+.peer-face[data-state]::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 30%; height: 30%; min-width: 6px; min-height: 6px; border-radius: 50%; box-shadow: 0 0 0 2px var(--rail); background: var(--faint); }
+.peer-face[data-state="busy"]::after { background: var(--approved); }
+.peer-face[data-state="idle"]::after { background: var(--working); }
+.peer-face[data-state="away"]::after { background: var(--asking); }
+.peer-card .peer-face[data-state]::after { box-shadow: 0 0 0 2px var(--raised); }
+.peer-owns { margin: 10px 0 0; color: var(--faint); font-size: 12px; }
+.peer-owns code { font-size: 11.5px; }
+.owners-setting { cursor: default; }
+.owners-setting .owners-edit { margin-top: 6px; }
+.code-line { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.code-line b { color: var(--ink); }
+.code-line .bad { color: var(--rework); font-weight: 600; }
+.owners-edit { width: 100%; min-height: 96px; font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink); resize: vertical; box-sizing: border-box; }
+.team-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin: 4px 0 6px; }
+.team-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 /* 同事页：标题行 + 每个同事一张卡，不再套一整张大纸 */
 .peers-wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
 .peers-top { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
@@ -1132,7 +1149,9 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .peer-head .who span { color: var(--faint); font-size: 12px; }
 .peer-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .peer-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--approved); }
-.peer-state.away::before { background: var(--faint); }
+.peer-state.away::before { background: var(--asking); }
+.peer-state.offline::before, .peer-state.stopped::before { background: var(--faint); }
+.peer-state.idle::before { background: var(--working); }
 .peer-card .hint { margin: 12px 0 0; }
 .peer-jobs { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
 .peer-jobs li { display: grid; grid-template-columns: minmax(0, 1fr) 120px 64px; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; background: var(--surface); font-size: 13px; }
@@ -1642,6 +1661,7 @@ function laneTime(t, lane) {
   if (clash) {
     const c = data.state.tasks.find((x) => x.id === clash);
     // 同事看板里的卡（多人协作）：编号形如 wu·T88
+    if (!c && clash.includes('·') && data.clashPush?.[t.id]) return el('span', { class: 'since', title: `与同事 ${clash.split('·')[0]} 已通过的 ${clash.split('·')[1]} 修改同一批文件，但其提交尚未推送到远程，本机拿不到这些改动。待其推送后再派发（对方超过 2 小时未同步时不再等待）` }, icon('clock'), `待 ${clash} 推送`);
     if (!c && clash.includes('·')) return el('span', { class: 'since', title: `与同事 ${clash.split('·')[0]} 正在处理的 ${clash.split('·')[1]} 修改同一批文件。为避免双方同时修改同一文件，待其提交后再派发（对方超过 2 小时未同步时不再等待）` }, icon('clock'), `待 ${clash} 提交`);
     return el('span', { class: 'since', title: `与 ${c?.assignee ? agentLabel(c.assignee) : ''} 正在处理的 ${clash} 修改同一批文件。为避免提交对方未完成的改动，待其提交后再派发` }, icon('clock'), `待 ${clash} 提交`);
   }
@@ -3672,6 +3692,60 @@ async function postSync(path, body) {
   if (helper.open) renderHelper(true);
   renderPeersBtn();
 }
+// 代码分支：和远程的差距 + 自动推送 / 拉取 / 共享用量的开关（多人协作开启后才显示）
+function codeSettings(s, ro) {
+  const cfg = data.config || {};
+  const c = s.code;
+  const sw = (key, label, hint) => {
+    const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch', disabled: READONLY });
+    input.checked = !!cfg[key];
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('change', () => saveSetting(key, input.checked));
+    return el('label', { class: 'setting' }, input, el('span', null, el('b', null, label), el('span', { class: 'hint' }, hint)));
+  };
+  const line = !c ? '尚未检查。'
+    : c.detached ? '当前不在任何分支上（分离 HEAD），不检查。'
+    : c.noUpstream ? `远程没有 ${c.branch} 分支，不检查。`
+    : null;
+  const status = line ? el('span', { class: 'hint' }, line) : el('span', { class: 'code-line' },
+    el('span', null, '分支 ', el('b', null, c.branch)),
+    el('span', { class: c.ahead ? 'bad' : '' }, c.ahead ? `领先远程 ${c.ahead} 个提交（未推送）` : '无未推送的提交'),
+    el('span', { class: c.behind ? 'bad' : '' }, c.behind ? `落后远程 ${c.behind} 个提交` : '与远程同步'),
+    c.dirty ? el('span', null, '有未提交的改动') : null,
+    c.checkedAt ? el('span', { class: 'hint' }, `${ago(c.checkedAt)}检查`) : null);
+  return [
+    el('div', { class: 'setting' }, el('span', null, el('b', null, '代码分支'),
+      el('span', { class: 'hint' }, '同事拿到你的代码要靠推送，你拿到同事的代码要靠拉取。每分钟检查一次本地分支与远程的差距：有提交超过 30 分钟未推送、落后远程超过 10 分钟时列入「待处理」。同事已通过但尚未推送的任务，与其路径重叠的本机任务会等其推送后再派发。'),
+      status, c?.error ? el('span', { class: 'hint sync-msg' }, c.error) : null)),
+    sw('autoPush', '自动推送', '本地分支领先远程、且未落后时，自动推送到远程同名分支（不强制推送；远程有新提交时改为提醒）。会改动大家共用的分支，请确认团队允许后开启。'),
+    sw('autoPull', '自动拉取', '本地分支落后远程、没有未推送的提交、且已跟踪的文件没有未提交的改动时，自动快进到远程（不合并；worker 正在修改文件时改为提醒）。'),
+    sw('shareUsage', '向同事共享用量摘要', '同步看板时附带每天的 token 合计、已通过的任务数、每张任务的平均用量和打回率，同事可在「用量 → 团队」中查看。不包含会话内容。'),
+  ];
+}
+// 目录归属：.ateam/owners.md
+let ownersText = null;
+let ownersMsg = null;
+async function loadOwners() {
+  try { const out = await (await fetch('/api/owners', { cache: 'no-store' })).json(); if (out.ok) ownersText = out.text; } catch {}
+  if (helper.open && helper.tab === 'settings') renderHelper(true);
+}
+function ownersSettings(ro) {
+  if (ownersText === null) { loadOwners(); return el('p', { class: 'hint' }, '读取中…'); }
+  const area = el('textarea', { class: 'owners-edit', spellcheck: 'false', disabled: READONLY, placeholder: '# 每行一条：路径 同步名称（可写多个）\nserver/  liuxiuqi\nweb/     kana' });
+  area.value = ownersText;
+  area.addEventListener('click', (e) => e.stopPropagation());
+  const save = el('button', { class: 'btn sm', type: 'button', disabled: READONLY, onclick: async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try {
+      const out = await (await fetch('/api/owners', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: area.value }) })).json();
+      if (out.ok) { ownersText = out.text; ownersMsg = `已保存，共 ${out.entries.length} 条。文件为 .ateam/owners.md，提交并推送后同事可见。`; } else ownersMsg = out.message;
+    } catch { ownersMsg = '无法连接 ateam 服务。'; }
+    renderHelper(true);
+  } }, '保存');
+  return el('div', { class: 'setting owners-setting' }, el('span', null, el('b', null, '目录归属'),
+    el('span', { class: 'hint' }, '声明各目录由谁负责，名称使用同步名称。leader 建卡或修改路径时，路径落在他人负责的目录中会收到提醒（仅提醒，不影响派发）；同事页显示各人负责的目录。保存在 .ateam/owners.md，随代码提交，团队共用。'),
+    area, el('span', null, save), ownersMsg ? el('span', { class: 'hint' }, ownersMsg) : null));
+}
 function syncSettings() {
   const s = syncInfo;
   if (Date.now() - syncLoadedAt > 30000) loadSync(); // 打开设置页时刷新一次（命令行开启、同步状态变化）
@@ -3716,6 +3790,8 @@ function syncSettings() {
       el('span', null, el('b', null, '看板文件仍在仓库中被跟踪'),
         el('span', { class: 'hint' }, `当前分支跟踪着 ${s.tracked} 个看板文件，同事拉取代码后会读到你的看板。打开上方「同步看板」开关时，同步成功后会自动完成这一步；也可在同步正常时点击「停止跟踪」：在当前分支提交一次改动，将看板文件（board.json、archive/、demos/）移出版本控制并加入 .ateam/.gitignore，本地文件保留，不推送。同事拉取该提交后，其工作区中的这些文件会被删除，其本人的看板不受影响。`))) : null,
     syncMsg && syncMsg !== status ? el('p', { class: 'hint' }, syncMsg) : null,
+    s.enabled ? codeSettings(s, ro) : null,
+    s.enabled ? ownersSettings(ro) : null,
   ];
 }
 
@@ -3723,10 +3799,25 @@ function syncSettings() {
 let peersOpen = false;
 let peerOpenTask = null; // 展开详情的卡：「名字·编号」
 // 同事名字的头像：首字母 + 按名字算出的固定色相
-function peerFace(name, away) {
-  let h = 0;
-  for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
-  return el('span', { class: `peer-face${away ? ' away' : ''}`, style: `--h:${h}`, 'aria-hidden': 'true' }, [...name][0]?.toUpperCase() ?? '?');
+const peerHue = (name) => { let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
+// 同事的在线状态（服务端 syncStatus 算好的 state）
+const PEER_STATE = {
+  busy: ['工作中', '服务运行中，有 worker 在处理任务'],
+  idle: ['在线', '服务运行中，暂无 worker 在处理任务'],
+  offline: ['离线', '超过 15 分钟未同步，可能已关机或断网'],
+  stopped: ['已停止', '对方已停止 ateam 服务'],
+  away: ['超过 2 小时未同步', '超过 2 小时未同步，其任务不再阻止本机派发'],
+};
+function peerFace(name, state) {
+  return el('span', { class: `peer-face${state === 'offline' || state === 'stopped' || state === 'away' ? ' dim' : ''}`, style: `--h:${peerHue(name)}`, 'data-state': state || null, 'aria-hidden': 'true' }, [...name][0]?.toUpperCase() ?? '?');
+}
+// 「liuxiuqi · 工作中 · 3 个 worker，正在做 T5、T6 · 1 分钟前同步」
+function peerTip(p) {
+  const st = PEER_STATE[p.state]?.[0] ?? '';
+  const ws = p.presence?.workers ?? [];
+  const doing = ws.filter((w) => w.task).map((w) => w.task);
+  const who = p.presence ? `${ws.length} 个 worker${doing.length ? `，正在做 ${doing.join('、')}` : ''}${p.presence.leader ? '' : '，leader 未连接'}` : null;
+  return [p.name, st, who, `${ago(p.at)}同步`].filter(Boolean).join(' · ');
 }
 // 需求栏底部：「用量」一直在，「同事」开启看板同步后显示
 function peersNav() {
@@ -3737,9 +3828,9 @@ function peersNav() {
   if (syncInfo?.enabled) {
     const list = syncInfo.peers ?? [];
     const busy = list.reduce((n, p) => n + (p.tasks?.length ?? 0), 0);
-    const tip = list.length ? `同事的进度：${list.map((p) => p.name).join('、')}，进行中 ${busy} 张卡` : '同事的进度：尚无同事开启看板同步';
+    const tip = list.length ? `同事的进度（进行中 ${busy} 张卡）\n${list.map(peerTip).join('\n')}` : '同事的进度：尚无同事开启看板同步';
     peers = item('users', '同事', tip, peersOpen, () => { if (peersOpen) closePeers(); else { if (usageOpen) closeUsage(); openPeers(); } },
-      list.length ? el('span', { class: 'faces' }, list.slice(0, 4).map((p) => peerFace(p.name, p.away))) : null);
+      list.length ? el('span', { class: 'faces' }, list.slice(0, 4).map((p) => peerFace(p.name, p.state))) : null);
   }
   return el('div', { class: 'peers-nav', id: 'peers-nav' }, usage, peers);
 }
@@ -3790,11 +3881,15 @@ function renderPeersPage() {
     : !s.enabled ? [el('div', { class: 'peers-empty' }, emptyState('users', '未开启看板同步', '在「帮助 → 设置 → 多人协作」中开启后，可在此查看同一项目中其他成员的进度。'))]
     : !peers.length ? [el('div', { class: 'peers-empty' }, emptyState('users', '暂无同事', '同一项目的其他成员开启看板同步后，约一分钟内显示在此处。其成员拉取本项目的代码并启动 ateam 后会自动开启同步。'))]
     : peers.map((p) => {
-      const meta = [`${ago(p.at)}同步`, p.version ? `ateam ${p.version}` : null].filter(Boolean).join(' · ');
-      const head = el('div', { class: 'peer-head' },
-        peerFace(p.name, p.away),
+      const ws = p.presence?.workers ?? [];
+      const meta = [`${ago(p.at)}同步`, p.presence ? `${ws.length} 个 worker${p.presence.leader ? '' : '，leader 未连接'}` : null, p.version ? `ateam ${p.version}` : null].filter(Boolean).join(' · ');
+      const st = PEER_STATE[p.state] ?? PEER_STATE.idle;
+      const owns = (s.owners ?? []).filter((o) => o.names.includes(p.name)).map((o) => o.path);
+      const head = [el('div', { class: 'peer-head' },
+        peerFace(p.name, p.state),
         el('div', { class: 'who' }, el('b', null, p.name), el('span', null, meta)),
-        el('span', { class: `peer-state${p.away ? ' away' : ''}`, title: p.away ? '超过 2 小时未同步，其任务不再阻止本机派发' : '' }, p.away ? '超过 2 小时未同步' : '同步正常'));
+        el('span', { class: `peer-state ${p.state || ''}`, title: st[1] }, st[0])),
+        owns.length ? el('p', { class: 'peer-owns' }, '负责：', owns.map((o, i) => [i ? '、' : '', el('code', null, o)])) : null];
       if (p.newer) return el('section', { class: 'peer-card' }, head, el('p', { class: 'hint' }, '对方使用的 ateam 版本较新，请升级后查看。'));
       if (p.error) return el('section', { class: 'peer-card' }, head, el('p', { class: 'hint' }, `无法读取：${p.error}`));
       const jobs = p.jobs ?? [];
@@ -3805,7 +3900,7 @@ function renderPeersPage() {
         const row = el('tr', { class: 'click', title: open ? '收起' : '展开查看描述和验收标准', onclick: (e) => { e.stopPropagation(); peerOpenTask = open ? null : key; renderPeersPage(); } },
           el('td', { title: `${t.id} ${t.title}` }, `${open ? '▾' : '▸'} ${t.id} ${t.title}`, t.overlap?.length ? el('span', { class: 'heavy-tag', title: `与本机 ${t.overlap.join('、')} 修改同一批文件` }, `与 ${t.overlap.join('、')} 重叠`) : null),
           el('td', null, el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
-          el('td', null, el('span', { class: `lozenge c-${laneOf(t)}` }, LANE_LABEL[laneOf(t)] ?? t.status)),
+          el('td', null, t.unpushed ? el('span', { class: 'lozenge c-asking', title: '已通过，但提交尚未推送到远程，本机拿不到这些改动；与其路径重叠的本机任务待其推送后再派发' }, '未推送') : el('span', { class: `lozenge c-${laneOf(t)}` }, LANE_LABEL[laneOf(t)] ?? t.status)),
           el('td', { class: 'hint' }, t.assignee ?? '—'),
           el('td', { class: 'hint', title: t.paths.join('\n') }, t.paths.join('、')));
         if (!open) return [row];
@@ -3977,6 +4072,68 @@ function usageChart(daily) {
   });
   return el('div', null, svg, el('div', { class: 'usage-axis' }, el('span', null, daily[0]?.date), el('span', null, daily[Math.floor(daily.length / 2)]?.date), el('span', null, '今天')));
 }
+// 团队（多人协作）：自己和各同事共享的用量摘要，最近 30 天。同事关掉共享的显示「未共享」
+function teamUsage(u) {
+  const s = syncInfo;
+  if (!s?.enabled || !s.peers?.length) return null;
+  const dates = u.daily.map((d) => d.date);
+  const today = dates[dates.length - 1];
+  const people = [{ name: `${s.name}（我）`, hue: peerHue(s.name), usage: s.selfUsage }, ...s.peers.map((p) => ({ name: p.name, hue: peerHue(p.name), usage: p.usage }))];
+  const sumDays = (us, list) => list.reduce((n, d) => n + (us?.days?.[d]?.total ?? 0), 0);
+  const rows = people.map((p) => el('tr', null,
+    el('td', null, el('span', { class: 'team-legend' }, el('span', null, el('i', { style: `background:hsl(${p.hue} 55% 52%)` }), p.name))),
+    p.usage ? [
+      el('td', { class: 'num' }, fmtTokens(sumDays(p.usage, [today]))),
+      el('td', { class: 'num' }, fmtTokens(sumDays(p.usage, dates.slice(-7)))),
+      el('td', { class: 'num' }, fmtTokens(sumDays(p.usage, dates))),
+      el('td', { class: 'num' }, String(p.usage.cards ?? 0)),
+      el('td', { class: 'num' }, p.usage.perCard != null ? fmtTokens(p.usage.perCard) : '—'),
+      el('td', { class: 'num' }, p.usage.reworkRate != null ? `${Math.round(p.usage.reworkRate * 100)}%` : '—'),
+    ] : el('td', { class: 'hint', colspan: '6' }, '未共享用量')));
+  // 每天按人叠起来的柱状图
+  const ns = 'http://www.w3.org/2000/svg';
+  const W = 600; const H = 100; const gap = 3;
+  const shared = people.filter((p) => p.usage);
+  const totalOf = (d) => shared.reduce((n, p) => n + (p.usage.days?.[d]?.total ?? 0), 0);
+  const max = Math.max(1, ...dates.map(totalOf));
+  const bw = (W - gap * (dates.length - 1)) / dates.length;
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('class', 'usage-chart');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `最近 ${dates.length} 天每人每天的 token 用量`);
+  dates.forEach((d, i) => {
+    let y = H;
+    for (const p of shared) {
+      const v = p.usage.days?.[d]?.total ?? 0;
+      if (!v) continue;
+      const h = Math.max(1, (v / max) * (H - 4));
+      y -= h;
+      const r = document.createElementNS(ns, 'rect');
+      r.setAttribute('x', String(i * (bw + gap)));
+      r.setAttribute('y', String(y));
+      r.setAttribute('width', String(bw));
+      r.setAttribute('height', String(h));
+      r.setAttribute('class', 'bar');
+      r.style.fill = `hsl(${p.hue} 55% 52%)`;
+      const tip = document.createElementNS(ns, 'title');
+      tip.textContent = `${d}：${shared.map((x) => `${x.name} ${fmtTokens(x.usage.days?.[d]?.total ?? 0)}`).join(' · ')}`;
+      r.appendChild(tip);
+      svg.appendChild(r);
+    }
+  });
+  const cols = (...w) => el('colgroup', null, w.map((x) => el('col', { style: x ? `width:${x}` : '' })));
+  return [
+    el('h2', null, '团队'),
+    el('p', { class: 'hint' }, '来自各人同步的用量摘要（约 10 分钟更新一次），用于对比各人的用量和每张任务的消耗。已通过的任务数、每张任务平均和打回率按最近 30 天通过的任务统计。'),
+    shared.length ? el('div', null, svg, el('div', { class: 'usage-axis' }, el('span', null, dates[0]), el('span', null, dates[Math.floor(dates.length / 2)]), el('span', null, '今天'))) : null,
+    el('table', { class: 'usage-table' }, cols('', '70px', '78px', '78px', '64px', '86px', '58px'),
+      el('thead', null, el('tr', null, el('th', null, '成员'), el('th', { class: 'num' }, '今天'), el('th', { class: 'num' }, '近 7 天'), el('th', { class: 'num' }, '近 30 天'),
+        el('th', { class: 'num', title: '最近 30 天通过的任务数' }, '已通过'), el('th', { class: 'num' }, '每张任务平均'), el('th', { class: 'num', title: '已通过的任务中被打回过的比例' }, '打回率'))),
+      el('tbody', null, rows)),
+  ];
+}
 // 只看一个需求：worker 在这个需求各卡上的用量（不含 leader 和空转）
 function usageJobPage() {
   const u = usageJobData;
@@ -4067,6 +4224,7 @@ function usagePage() {
     el('h2', null, '最近 30 天'),
     el('div', { class: 'usage-legend' }, USAGE_KINDS.filter(([k]) => k !== 'other' || u.totals.all.other).map(([k, name]) => el('span', null, el('i', { class: `u-${k}` }), name))),
     usageChart(u.daily),
+    teamUsage(u),
     el('h2', null, '按需求'),
     u.jobs.length ? el('table', { class: 'usage-table' }, cols('', '52px', '78px', '58px'),
       el('thead', null, el('tr', null, el('th', null, '需求（点击展开）'), el('th', { class: 'num' }, '卡数'), el('th', { class: 'num' }, 'Token'), el('th', { class: 'num' }, '调用'))),
@@ -5568,6 +5726,14 @@ function attentionItems() {
     }
   }
   for (const c of data.doctor ?? []) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, body: c.detail, fix: c.fix });
+  // 多人协作：代码分支（与服务端 codeAttention 同一套规则）
+  const code = data.code;
+  if (code && !code.detached && !code.noUpstream) {
+    const now = Date.now();
+    if (code.error) items.push({ key: 'code:error', text: '代码同步失败', body: code.error });
+    if (code.ahead > 0 && code.aheadSince && now - code.aheadSince >= 30 * 60 * 1000) items.push({ key: 'code:ahead', text: `${code.ahead} 个提交未推送`, body: `本地 ${code.branch} 有 ${code.ahead} 个提交超过 30 分钟未推送，同事拉取不到这些改动；与其路径重叠的同事任务会一直等待。请推送，或在「帮助 → 设置 → 多人协作」中开启自动推送。` });
+    if (code.behind > 0 && code.behindSince && now - code.behindSince >= 10 * 60 * 1000) items.push({ key: 'code:behind', text: `落后远程 ${code.behind} 个提交`, body: `本地 ${code.branch} 落后远程 ${code.behind} 个提交，worker 仍在旧代码上修改，后续合并更易冲突。请拉取，或在「帮助 → 设置 → 多人协作」中开启自动拉取。` });
+  }
   // 演播需求一直是进行中，但不需要 leader 在线
   const busy = data.state.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
   if (busy && data.leader && (data.leader.away || !data.leader.online)) {

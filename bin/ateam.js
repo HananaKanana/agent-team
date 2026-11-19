@@ -229,6 +229,13 @@ function overlapWarning(task, overlaps) {
   return lines.join('\n');
 }
 
+// 卡的路径落在别人负责的目录里（.ateam/owners.md，多人协作）
+function ownerWarning(owners) {
+  if (!owners?.length) return '';
+  return ['', '', '⚠ 目录归属：这张卡改到了同事负责的目录：', ...owners.map((o) => `- ${o.path} 归 ${o.names.join('、')}`),
+    '只是提醒，不影响派卡。改动较大的，请告诉用户先和负责人商量。'].join('\n');
+}
+
 function portFree(port) {
   return new Promise((ok) => {
     const probe = createServer();
@@ -621,10 +628,10 @@ const commands = {
       dependsOn: flags.after ? splitList(flags.after) : [],
       top: !!flags.top,
     };
-    const { task, overlaps } = await request('POST', '/api/tasks', body);
+    const { task, overlaps, owners } = await request('POST', '/api/tasks', body);
     const deps = task.dependsOn.length ? `，依赖 ${task.dependsOn.join('、')}` : '';
     const top = task.priority ? '，优先' : '';
-    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}${top}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}${withStaffing(await staffing())}`;
+    return `已添加任务 ${task.id}：${task.title}（角色 ${task.role}，路径 ${task.paths.join('、')}${deps}${top}，验收标准 ${task.acceptance.length} 条）${overlapWarning(task, overlaps)}${ownerWarning(owners)}${withStaffing(await staffing())}`;
   },
 
   // 设为优先：同角色的 worker 下一个先领它；--off 取消
@@ -662,10 +669,10 @@ const commands = {
     if (flags.accept !== undefined) body.acceptance = flags.accept;
     if (flags.paths !== undefined) body.paths = splitList(flags.paths);
     if (flags.after !== undefined) body.dependsOn = splitList(flags.after);
-    const { task, overlaps } = await request('POST', '/api/tasks/edit', body);
+    const { task, overlaps, owners } = await request('POST', '/api/tasks/edit', body);
     const next = task.status === 'held' ? `\n\n下一步：ateam release ${task.id}` : '';
     const told = ['working', 'asking', 'submitted'].includes(task.status) ? `${task.assignee ?? 'worker'} 正拿着这张卡：改动已作为补充说明发给它（当前操作结束或下一次调用 ateam 时收到，提交前一定会看到），不用再 ateam note。` : '';
-    return `已修改任务 ${task.id}。${told}${overlapWarning(task, overlaps)}${next}`;
+    return `已修改任务 ${task.id}。${told}${overlapWarning(task, overlaps)}${ownerWarning(owners)}${next}`;
   },
 
   async dismiss({ flags, positional }) {
@@ -757,12 +764,16 @@ const commands = {
     const show = (s) => {
       const lines = [s.enabled ? `看板同步：已开启，名字 ${s.name}，远程 ${s.remote}，分支 ateam/${s.name}` : '看板同步：未开启（ateam sync init 开启）'];
       if (s.enabled) lines.push(`上次推送 ${ago(s.pushedAt)}，上次拉取 ${ago(s.fetchedAt)}${s.error ? `\n同步出错：${s.error}` : ''}`);
+      const c = s.code;
+      if (c && !c.detached && !c.noUpstream) lines.push(`代码分支 ${c.branch}：${c.ahead ? `领先远程 ${c.ahead} 个提交（未推送）` : '无未推送的提交'}，${c.behind ? `落后远程 ${c.behind} 个提交` : '与远程同步'}${c.autoPush ? '；自动推送已开' : ''}${c.autoPull ? '；自动拉取已开' : ''}${c.error ? `\n${c.error}` : ''}`);
       if (s.tracked) lines.push(`看板文件仍在 git 仓库中被跟踪（${s.tracked} 个文件），同事拉代码后会读到你的看板。再运行一次 ateam sync init 即可停止跟踪（同步成功时自动完成）。`);
       if (s.peers?.length) {
         lines.push('', '同事：');
         for (const p of s.peers) {
           const busy = (p.tasks ?? []).filter((t) => t.status === 'working' || t.status === 'asking');
-          lines.push(`- ${p.name}：${ago(p.at)}同步${p.away ? '（超过 2 小时未同步，他的卡不再拦派卡）' : ''}${p.newer ? '，对方 ateam 版本较新，请升级后查看' : ''}${busy.length ? `，正在做 ${busy.map((t) => `${t.id}${t.overlap.length ? `（和本机 ${t.overlap.join('、')} 路径重叠）` : ''}`).join('、')}` : ''}`);
+          const unpushed = (p.tasks ?? []).filter((t) => t.unpushed).map((t) => t.id);
+          const state = { busy: '工作中', idle: '在线', offline: '离线', stopped: '已停止' }[p.state];
+          lines.push(`- ${p.name}：${state ? `${state}，` : ''}${ago(p.at)}同步${p.away ? '（超过 2 小时未同步，他的卡不再拦派卡）' : ''}${unpushed.length ? `，${unpushed.join('、')} 已通过但未推送` : ''}${p.newer ? '，对方 ateam 版本较新，请升级后查看' : ''}${busy.length ? `，正在做 ${busy.map((t) => `${t.id}${t.overlap.length ? `（和本机 ${t.overlap.join('、')} 路径重叠）` : ''}`).join('、')}` : ''}`);
         }
       } else if (s.enabled) lines.push('', '还没有同事的看板。');
       return lines.join('\n');

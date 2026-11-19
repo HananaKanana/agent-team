@@ -97,7 +97,42 @@ function boardFiles(dataDir) {
   return out;
 }
 
+// 心跳提交的说明。看板没有实际变化（只是续期、在线状态或用量摘要变了）时用它，并且替换掉上一个心跳提交
+const HEARTBEAT_MSG = 'ateam sync';
+const STATUS_WORD = { pending: '退回待领取', working: '开始', asking: '提问', submitted: '提交', approved: '通过', cancelled: '作废', held: '挂起' };
+const JOB_WORD = { active: '开始', awaiting_acceptance: '待验收', accepted: '验收', cancelled: '作废' };
+// 两份看板之间发生了什么：新需求、新卡、卡和需求的状态变化（打回单独写）。没有可描述的变化返回 []
+export function describeBoardChange(prev, next) {
+  if (!prev) return ['开始同步看板'];
+  const out = [];
+  const pj = new Map((prev.jobs ?? []).map((j) => [j.id, j]));
+  const pt = new Map((prev.tasks ?? []).map((t) => [t.id, t]));
+  for (const j of next.jobs ?? []) {
+    const o = pj.get(j.id);
+    if (!o) out.push(`新需求 ${j.id} ${j.title}`);
+    else if (o.status !== j.status && JOB_WORD[j.status]) out.push(`${j.id} ${JOB_WORD[j.status]}`);
+  }
+  const added = [];
+  for (const t of next.tasks ?? []) {
+    const o = pt.get(t.id);
+    if (!o) { added.push(t.id); continue; }
+    if ((t.rejectCount ?? 0) > (o.rejectCount ?? 0)) out.push(`${t.id} 打回`);
+    else if (o.status !== t.status && STATUS_WORD[t.status]) out.push(`${t.id} ${STATUS_WORD[t.status]}`);
+  }
+  if (added.length) out.push(`新建 ${added.join('、')}`);
+  const nj = new Set((next.jobs ?? []).map((j) => j.id));
+  const gone = [...pj.keys()].filter((id) => !nj.has(id));
+  if (gone.length) out.push(`${gone.join('、')} 归档`);
+  return out;
+}
+const commitMessage = (changes) => {
+  const head = changes.slice(0, 6).join('；');
+  return `ateam: ${head}${changes.length > 6 ? ` 等 ${changes.length} 项` : ''}`;
+};
+
 // 把 .ateam/ 下的看板写成 refs/ateam/self 的一个新提交。内容没变、且上次提交在 heartbeatMs 以内时不写。
+// 看板有可描述的变化（新需求、新卡、状态变化）：接一个新提交，说明写发生了什么，和以前看板随代码提交时一样留下历史；
+// 没有（心跳续期、在线状态或用量摘要变化）：写一个心跳提交，替换掉上一个心跳提交，所以分支末尾最多一个心跳。
 // 返回 { oid, changed }
 export async function writeSelf({ top, dataDir, meta, heartbeatMs = 10 * 60 * 1000 }) {
   const index = join(tmpdir(), `ateam-sync-${process.pid}-${Date.now()}.index`);
@@ -114,12 +149,25 @@ export async function writeSelf({ top, dataDir, meta, heartbeatMs = 10 * 60 * 10
     await git(top, ['update-index', '--index-info'], { input: `${lines.join('\n')}\n`, env });
     const tree = (await git(top, ['write-tree'], { env })).trim();
     const prev = await refOid(top, SELF_REF);
+    let prevParent = null;
+    let prevBeat = false;
     if (prev) {
-      const [ptree, ptime] = (await git(top, ['log', '-1', '--format=%T %ct', prev])).trim().split(' ');
+      const [ptree, ptime, parents, ...subject] = (await git(top, ['log', '-1', '--format=%T%x09%ct%x09%P%x09%s', prev])).trim().split('\t');
       if (ptree === tree && Date.now() - Number(ptime) * 1000 < heartbeatMs) return { oid: prev, changed: false };
+      prevParent = parents.split(' ')[0] || null;
+      prevBeat = subject.join('\t') === HEARTBEAT_MSG;
     }
-    // 不接在上一个提交后面：分支上始终只有最新这一个提交（心跳不会把分支越堆越长），推送时覆盖远程
-    const oid = (await git(top, ['commit-tree', tree, '-m', 'ateam sync'], { env: BOT })).trim();
+    let changes = [];
+    try {
+      const nextBoard = JSON.parse(readFileSync(join(dataDir, 'board.json'), 'utf8'));
+      let prevBoard = null;
+      if (prev) { try { prevBoard = JSON.parse(await git(top, ['cat-file', '-p', `${prev}:board.json`])); } catch { prevBoard = { jobs: [], tasks: [] }; } }
+      changes = describeBoardChange(prevBoard, nextBoard);
+    } catch {}
+    // 上一个是心跳就替换掉它（接在它的上一个提交后面）
+    const base = prev ? (prevBeat ? prevParent : prev) : null;
+    const msg = changes.length ? commitMessage(changes) : HEARTBEAT_MSG;
+    const oid = (await git(top, ['commit-tree', tree, ...(base ? ['-p', base] : []), '-m', msg], { env: BOT })).trim();
     await git(top, ['update-ref', SELF_REF, oid]);
     return { oid, changed: true };
   } finally {
@@ -249,4 +297,39 @@ export async function pickRemote(top, want) {
 // 同步名字的默认值：git 用户名转成小写短名
 export async function defaultName(top) {
   try { return slugName((await git(top, ['config', 'user.name'])).trim()) || slugName(hostname()); } catch { return slugName(hostname()); }
+}
+
+// ---------- 代码分支（多人协作时代码靠推送、拉取在人之间流通）----------
+// 当前分支和远程同名分支的差距。会先 fetch 这一个分支（只更新远程跟踪分支，不碰工作区和当前分支）。
+// 返回 { branch, upstream, ahead, behind, dirty }；分离 HEAD 时 { detached: true }；远程没有同名分支时 { branch, noUpstream: true }
+export async function codeStatus({ top, remote }) {
+  const branch = (await git(top, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
+  if (!branch || branch === 'HEAD') return { detached: true };
+  await git(top, ['fetch', '--quiet', '--no-tags', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`], { timeout: 300000 });
+  const upstream = `refs/remotes/${remote}/${branch}`;
+  if (!(await refOid(top, upstream))) return { branch, noUpstream: true };
+  const [ahead, behind] = (await git(top, ['rev-list', '--left-right', '--count', `HEAD...${upstream}`])).trim().split(/\s+/).map(Number);
+  // 只看已跟踪的文件：worker 正在改、还没提交的文件会让快进拉取不安全
+  const dirty = (await git(top, ['status', '--porcelain', '--untracked-files=no'])).trim() !== '';
+  return { branch, upstream, ahead, behind, dirty };
+}
+
+// 这些提交是不是都已经在 upstream 里（同事的卡通过了，代码推到远程没有）。本地没有的提交（同事还没推）算没到。
+// cache：提交号 → true（到了就一直是到了，不重复查）
+export async function commitsLanded({ top, upstream, shas, cache }) {
+  for (const sha of shas) {
+    if (cache.get(sha)) continue;
+    try { await git(top, ['merge-base', '--is-ancestor', sha, upstream]); cache.set(sha, true); } catch { return false; }
+  }
+  return true;
+}
+
+// 把当前分支推到远程同名分支（不强推：远程有新提交时失败，交给用户处理）
+export async function pushCode({ top, remote, branch }) {
+  await git(top, ['push', '--porcelain', remote, `HEAD:refs/heads/${branch}`], { timeout: 300000 });
+}
+
+// 快进到远程（只在本地没有未推送的提交、已跟踪的文件没有改动时调用；不能快进就失败，不合并）
+export async function fastForward({ top, upstream }) {
+  await git(top, ['merge', '--ff-only', '--quiet', upstream]);
 }

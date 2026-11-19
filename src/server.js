@@ -19,7 +19,7 @@ import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
 import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
-import { checkSyncConfig, claimName, hasSyncConfig, pickRemote, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
+import { checkSyncConfig, claimName, hasSyncConfig, pickRemote, codeStatus, commitsLanded, pushCode, fastForward, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -412,7 +412,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (stopping) return;
     stopping = true;
     saveState(dataDir, store.state);
-    server.close(() => {
+    // 停止（不是重启）时先告诉同事「已停止」，最多等 5 秒
+    (restart ? Promise.resolve() : syncFinal()).finally(() => { server.close(() => {
       if (restart) {
         // 原来的启动参数，端口固定为当前端口；输出写到 .ateam/serve.log，在后台运行
         const args = [];
@@ -436,6 +437,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       process.exit(0);
     });
     server.closeAllConnections?.();
+    });
   }
 
   // 菜单栏「启动 worker」可选的角色：标准角色 + 未完成的卡和在线 worker 用到的角色；缺人的标出来（与看板「worker」页一致）
@@ -488,9 +490,23 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       if (t) items.push({ key: `quiet:${a.id}`, text: `${a.id} 无响应（${t.id}）`, hash: `${t.jobId}/${t.id}`, act: { type: 'reclaim', task: t.id, agent: a.id } });
     }
     for (const c of (doctor ?? []).filter((x) => !x.ok)) items.push({ key: `doctor:${c.key}`, text: `自检：${c.title}有问题`, hash: '' });
+    for (const it of codeAttention()) items.push(it);
     const busy = st.jobs.some((j) => !j.demo && (j.status === 'planning' || j.status === 'active'));
     if (busy && (st.noLeader || !leaderOnline())) items.push({ key: 'leader', text: st.noLeader ? '无 leader 模式' : 'leader 未连接', hash: '' });
     return items;
+  }
+
+  // 多人协作时代码分支的提醒（看板 attentionItems 里有同一套）：
+  // 有提交超过 30 分钟没推送（同事拿不到）、落后远程超过 10 分钟没拉取、自动推送 / 拉取失败
+  function codeAttention() {
+    const c = syncCfg.enabled ? syncState.code : null;
+    if (!c || c.detached || c.noUpstream) return [];
+    const out = [];
+    const now = Date.now();
+    if (c.error) out.push({ key: 'code:error', text: c.error, hash: '' });
+    if (c.ahead > 0 && c.aheadSince && now - c.aheadSince >= 30 * 60 * 1000) out.push({ key: 'code:ahead', text: `本地 ${c.branch} 有 ${c.ahead} 个提交未推送`, hash: '' });
+    if (c.behind > 0 && c.behindSince && now - c.behindSince >= 10 * 60 * 1000) out.push({ key: 'code:behind', text: `本地 ${c.branch} 落后远程 ${c.behind} 个提交`, hash: '' });
+    return out;
   }
 
   // ---------- 推送到手机（push.js）----------
@@ -606,7 +622,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   let syncCfg = readSyncConfig(root);
   const syncProject = (() => { try { return realpathSync(root); } catch { return root; } })(); // 认「是不是同一份看板」用：电脑名 + 项目目录
   const syncCache = new Map();
-  const syncState = { pushedAt: null, fetchedAt: null, error: null, unpushed: false, peers: [] };
+  const syncState = { pushedAt: null, fetchedAt: null, error: null, unpushed: false, peers: [], code: null };
+  const PEER_ONLINE_MS = 15 * 60 * 1000; // 心跳 10 分钟一次：超过 15 分钟没同步算离线
   let syncBusy = false;
   let syncTimer = null;
   const syncTop = (cfg = syncCfg) => (layout.mode === 'single' ? layout.top : join(root, layout.repos.includes(cfg.repo) ? cfg.repo : layout.repos[0]));
@@ -616,28 +633,113 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     syncBusy = true;
     try { await fn(); return true; } finally { syncBusy = false; }
   }
-  async function syncPush() {
+  // 同步数据里附带的状态：服务在不在跑、leader 在不在线、各 worker 在做哪张卡（同事侧栏的在线状态用）
+  function syncPresence(running = true) {
+    if (!running) return { running: false, at: Date.now() };
+    const workers = store.state.agents.filter((a) => a.status === 'online' && a.role !== 'leader')
+      .map((a) => ({ id: a.id, role: a.role, task: a.currentTask ?? null }));
+    return { running: true, leader: leaderOnline(), workers };
+  }
+  // 用量摘要（「用量 → 团队」用）：最近 30 天每天合计、已通过的卡数和每卡平均、打回率。10 分钟更新一次，免得用量一变就推送
+  let usageBrief = null;
+  let usageBriefAt = 0;
+  async function syncUsage(selfView = false) {
+    if (!selfView && !store.config().shareUsage) return null;
+    if (usageBrief && Date.now() - usageBriefAt < 10 * 60 * 1000) return usageBrief;
+    try {
+      const r = await usageReport();
+      const days = {};
+      // 键是日期标签（如 11-19），各人一致；值是当天总量（卡上 + 空转 + leader + 其他）和调用次数
+      for (const d of r.daily ?? []) if (d.date) days[d.date] = { total: (d.work ?? 0) + (d.idle ?? 0) + (d.leader ?? 0) + (d.other ?? 0), calls: d.calls ?? 0 };
+      const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const doneTasks = store.state.tasks.filter((t) => t.status === 'approved' && t.kind !== 'demo'
+        && ([...(t.history ?? [])].reverse().find((h) => h.type === 'approved')?.ts ?? 0) >= since);
+      let cardSum = 0;
+      let cardN = 0;
+      for (const t of doneTasks) {
+        const u = r.perTask?.get(t.id);
+        if (u) { cardSum += (u.input ?? 0) + (u.cacheRead ?? 0) + (u.output ?? 0); cardN++; }
+      }
+      const rejected = doneTasks.filter((t) => (t.rejectCount ?? 0) > 0).length;
+      usageBrief = { days, cards: doneTasks.length, perCard: cardN ? Math.round(cardSum / cardN) : null, reworkRate: doneTasks.length ? rejected / doneTasks.length : null };
+      usageBriefAt = Date.now();
+    } catch {}
+    return usageBrief;
+  }
+  async function syncPush(running = true) {
     const top = syncTop();
-    const { changed } = await writeSelf({ top, dataDir, meta: { name: syncCfg.name, format: SYNC_FORMAT, ateamVersion: ateamVersion(), host: thisHost(), project: syncProject } });
+    const meta = { name: syncCfg.name, format: SYNC_FORMAT, ateamVersion: ateamVersion(), host: thisHost(), project: syncProject, presence: syncPresence(running) };
+    const usage = running ? await syncUsage() : null;
+    if (usage) meta.usage = usage;
+    const { changed } = await writeSelf({ top, dataDir, meta });
     if (!changed && !syncState.unpushed) return;
     syncState.unpushed = true;
     await pushSelf({ top, remote: syncCfg.remote, name: syncCfg.name, project: syncProject });
     syncState.unpushed = false;
     syncState.pushedAt = Date.now();
   }
+  // 代码分支：和远程的差距；开了自动推送 / 拉取就顺手做。看板「待处理」据此提醒
+  const landedCache = new Map();
+  async function syncCode() {
+    const prev = syncState.code ?? {};
+    let c;
+    try {
+      c = await codeStatus({ top: syncTop(), remote: syncCfg.remote });
+    } catch (err) {
+      syncState.code = { ...prev, error: explainGitError(err) };
+      return;
+    }
+    const cfg = store.config();
+    let error = null;
+    let { ahead = 0, behind = 0 } = c;
+    if (!c.detached && !c.noUpstream) {
+      if (cfg.autoPush && ahead > 0 && behind === 0) {
+        try { await pushCode({ top: syncTop(), remote: syncCfg.remote, branch: c.branch }); ahead = 0; syncState.codePushedAt = Date.now(); } catch (err) { error = `自动推送失败：${explainGitError(err)}`; }
+      }
+      if (cfg.autoPull && behind > 0 && ahead === 0 && !c.dirty) {
+        try { await fastForward({ top: syncTop(), upstream: c.upstream }); behind = 0; syncState.codePulledAt = Date.now(); } catch (err) { error = `自动拉取失败：${explainGitError(err)}`; }
+      }
+    }
+    const now = Date.now();
+    syncState.code = {
+      ...c, ahead, behind, error, checkedAt: now,
+      aheadSince: ahead > 0 ? (prev.ahead > 0 ? prev.aheadSince : now) : null,
+      behindSince: behind > 0 ? (prev.behind > 0 ? prev.behindSince : now) : null,
+    };
+  }
+  // 看板和「待处理」看的代码分支状态
+  function codeView() {
+    const c = syncState.code;
+    if (!c) return null;
+    return { branch: c.branch ?? null, detached: !!c.detached, noUpstream: !!c.noUpstream, ahead: c.ahead ?? 0, behind: c.behind ?? 0, dirty: !!c.dirty,
+      aheadSince: c.aheadSince ?? null, behindSince: c.behindSince ?? null, error: c.error ?? null, checkedAt: c.checkedAt ?? null,
+      pushedAt: syncState.codePushedAt ?? null, pulledAt: syncState.codePulledAt ?? null, autoPush: !!store.config().autoPush, autoPull: !!store.config().autoPull };
+  }
   async function syncFetch() {
     const top = syncTop();
     await fetchPeers({ top, remote: syncCfg.remote });
+    await syncCode();
     syncState.peers = await readPeers({ top, self: syncCfg.name, cache: syncCache });
     syncState.fetchedAt = Date.now();
     const now = Date.now();
+    const upstream = syncState.code?.upstream ?? null;
+    const recent = 3 * 24 * 60 * 60 * 1000; // 3 天前通过的卡不再看推没推（多半早推了，或者就是不推）
     const list = [];
     for (const p of syncState.peers) {
       if (!p.board) continue;
       const fresh = now - p.at < PEER_STALE_MS;
+      p.unpushedIds = [];
       for (const t of p.board.tasks ?? []) {
-        if (t.kind === 'demo' || t.status === 'approved' || t.status === 'cancelled') continue;
-        list.push({ peer: p.name, id: t.id, title: t.title, status: t.status, paths: t.paths ?? [], assignee: t.assignee ?? null, fresh });
+        if (t.kind === 'demo' || t.status === 'cancelled') continue;
+        let unpushed = false;
+        if (t.status === 'approved') {
+          const at = [...(t.history ?? [])].reverse().find((h) => h.type === 'approved')?.ts ?? 0;
+          if (!upstream || !t.commits?.length || now - at > recent) continue;
+          unpushed = !(await commitsLanded({ top, upstream, shas: t.commits, cache: landedCache }));
+          if (!unpushed) continue;
+          p.unpushedIds.push(t.id);
+        }
+        list.push({ peer: p.name, id: t.id, title: t.title, status: t.status, paths: t.paths ?? [], assignee: t.assignee ?? null, fresh, unpushed });
       }
     }
     store.setPeerTasks(list);
@@ -653,10 +755,45 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         await syncFetch();
         syncState.error = null;
       } catch (err) {
-        syncState.error = explainGitError(err);
+        syncState.error = err.stderr || err.killed ? explainGitError(err) : err.message;
       }
     });
   }
+  // 服务正常停止前推最后一次「已停止」，同事那边马上显示离线（最多等 5 秒）
+  async function syncFinal() {
+    if (!syncCfg.enabled || !syncCfg.name) return;
+    await Promise.race([syncPush(false).catch(() => {}), new Promise((r) => setTimeout(r, 5000))]);
+  }
+  function syncSoon() {
+    if (!syncCfg.enabled || syncTimer) return;
+    syncTimer = setTimeout(() => { syncTimer = null; syncTick().catch(() => {}); }, 30000);
+    syncTimer.unref?.();
+  }
+  // 目录归属：.ateam/owners.md，一行一条「路径 名字…」（名字是同步名称），# 开头是注释。随代码提交，大家共用。
+  // 建卡、改卡时路径落在别人负责的目录里就提醒 leader（只提醒，不拦）
+  const ownersFile = join(dataDir, 'owners.md');
+  function readOwners() {
+    try { return readFileSync(ownersFile, 'utf8'); } catch { return ''; }
+  }
+  function parseOwners(text) {
+    const out = [];
+    for (const raw of String(text).split(/\r?\n/)) {
+      const line = raw.replace(/#.*$/, '').trim();
+      if (!line) continue;
+      const [path, ...rest] = line.split(/\s+/);
+      const names = rest.join(' ').split(/[\s,，、]+/).map((n) => n.replace(/^@/, '').trim()).filter(Boolean);
+      if (path && names.length) out.push({ path: path.replace(/^\.\//, '') || '.', names });
+    }
+    return out;
+  }
+  const normP = (p) => { const x = String(p).trim().replace(/^\.\//, '').replace(/\/+$/, ''); return x === '.' ? '' : x; };
+  const crosses = (a, b) => { a = normP(a); b = normP(b); return !a || !b || a === b || b.startsWith(`${a}/`) || a.startsWith(`${b}/`); };
+  // 卡的路径落在别人负责的目录里：[{ path: 归属目录, names }]（自己负责的、和自己同时负责的不算）
+  function ownersFor(paths) {
+    const me = syncCfg.name;
+    return parseOwners(readOwners()).filter((o) => !(me && o.names.includes(me)) && (paths ?? []).some((p) => crosses(p, o.path)));
+  }
+
   // 自动开启：这台电脑没对这个项目做过选择（开启、关闭都没有），而仓库里的 .ateam/.gitignore 有迁移提交写的说明行
   // （同事已经让这个项目改用看板同步，拉代码时带过来了），就用 git 用户名开启。名字被占用之类的问题不再重试，到设置里手动处理
   let syncAutoError = null;
@@ -688,11 +825,6 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     await syncTick();
     pushSoon();
   }
-  function syncSoon() {
-    if (!syncCfg.enabled || syncTimer) return;
-    syncTimer = setTimeout(() => { syncTimer = null; syncTick().catch(() => {}); }, 30000);
-    syncTimer.unref?.();
-  }
   // 看板「设置 → 多人协作」和 ateam sync 用的状态。peers 给「同事」页
   async function syncStatus() {
     const top = syncTop();
@@ -703,14 +835,22 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     const norm = (p) => String(p).replace(/^\.\//, '').replace(/\/+$/, '');
     const overlap = (a, b) => a.some((x) => b.some((y) => { x = norm(x); y = norm(y); return !x || !y || x === y || y.startsWith(`${x}/`) || x.startsWith(`${y}/`); }));
     const peers = syncState.peers.map((p) => {
-      const base = { name: p.name, at: p.at, away: now - p.at >= PEER_STALE_MS, version: p.meta?.ateamVersion ?? null, newer: !!p.newer, error: p.error ?? null };
+      // 在线状态：服务停了（正常停止时推过「已停止」）/ 超过 2 小时没同步 / 超过 15 分钟没同步（心跳 10 分钟一次，多半已关机或断网）/ 有 worker 在做卡 / 空闲
+      const pres = p.meta?.presence ?? null;
+      const age = now - p.at;
+      const state = pres && pres.running === false ? 'stopped' : age >= PEER_STALE_MS ? 'away' : age >= PEER_ONLINE_MS ? 'offline'
+        : pres?.workers?.some((w) => w.task) ? 'busy' : 'idle';
+      const base = { name: p.name, at: p.at, away: age >= PEER_STALE_MS, state, presence: pres && pres.running !== false ? { leader: !!pres.leader, workers: pres.workers ?? [] } : null,
+        usage: p.meta?.usage ?? null, version: p.meta?.ateamVersion ?? null, newer: !!p.newer, error: p.error ?? null };
       if (!p.board) return base;
       const tasks = (p.board.tasks ?? []).filter((t) => t.kind !== 'demo');
       const jobs = (p.board.jobs ?? []).filter((j) => !j.demo && !['accepted', 'cancelled'].includes(j.status)).map((j) => {
         const mineT = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
         return { id: j.id, title: j.title, status: j.status, done: mineT.filter((t) => t.status === 'approved').length, total: mineT.length };
       });
-      const open = tasks.filter((t) => !['approved', 'cancelled'].includes(t.status)).map((t) => ({
+      const unpushed = new Set(p.unpushedIds ?? []);
+      const open = tasks.filter((t) => !['approved', 'cancelled'].includes(t.status) || unpushed.has(t.id)).map((t) => ({
+        unpushed: unpushed.has(t.id),
         id: t.id, jobId: t.jobId, title: t.title, role: t.role, status: t.status, assignee: t.assignee ?? null, paths: t.paths ?? [],
         description: t.description ?? '', acceptance: t.acceptance ?? [],
         since: [...(t.history ?? [])].reverse().find((h) => ['claimed', 'rejected', 'submitted', 'asked'].includes(h.type))?.ts ?? null,
@@ -721,7 +861,9 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return {
       ...syncCfg, host: thisHost(), defaultName: syncCfg.name || await defaultName(top),
       repos: layout.mode === 'multi' ? layout.repos : null, tracked, busy: syncBusy,
-      pushedAt: syncState.pushedAt, fetchedAt: syncState.fetchedAt, error: syncState.error, peers, autoError: syncCfg.enabled ? null : syncAutoError,
+      pushedAt: syncState.pushedAt, fetchedAt: syncState.fetchedAt, error: syncState.error, peers, code: syncCfg.enabled ? codeView() : null,
+      // 「用量 → 团队」里自己那一行；目录归属（同事页显示各人负责的目录）
+      selfUsage: syncCfg.enabled ? await syncUsage(true) : null, owners: parseOwners(readOwners()), autoError: syncCfg.enabled ? null : syncAutoError,
     };
   }
   // 开启 / 改名 / 改远程：先确认名字可用（远程同名分支是别的电脑的就报错），再立即同步一次
@@ -904,6 +1046,8 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // 提词悬浮窗进程（osascript）；服务退出时一起关掉
   let prompterProc = null;
   process.on('exit', () => prompterProc?.kill());
+  // Ctrl+C、kill：和「停止」按钮一样正常停止（保存状态，开着看板同步时告诉同事已停止）
+  for (const sig of ['SIGINT', 'SIGTERM']) process.once(sig, () => stopServer(false));
 
   // 普通路由：返回 JSON 对象（自动加 ok:true）
   const routes = {
@@ -1068,7 +1212,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
         jobId: b.jobId, title: b.title, role: b.role, paths: b.paths,
         description: b.description, acceptance: b.acceptance, dependsOn: b.dependsOn, top: !!b.top,
       });
-      return { task, overlaps: store.overlapsFor(task) };
+      return { task, overlaps: store.overlapsFor(task), owners: ownersFor(task.paths) };
     },
     'POST /api/critique': (b) => ({ tasks: store.submitCritique(b.as, b.ids, b.verdict, b.text, b.because, b.basis) }),
     'POST /api/critique/handle': (b) => ({ task: store.handleCritique(requireId(b), b.action, b.text, b.basis) }),
@@ -1097,6 +1241,14 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
     },
     // 迁移：看板文件不再在仓库里跟踪（本地文件保留），只提交这一处改动。要先开启同步
+    'GET /api/owners': () => ({ text: readOwners(), entries: parseOwners(readOwners()) }),
+    'POST /api/owners': (b) => {
+      const text = String(b.text ?? '');
+      const tmp = `${ownersFile}.tmp`;
+      writeFileSync(tmp, text.endsWith('\n') || !text ? text : `${text}\n`);
+      renameSync(tmp, ownersFile);
+      return { text: readOwners(), entries: parseOwners(readOwners()) };
+    },
     'POST /api/sync/untrack': async () => {
       if (!syncCfg.enabled) throw new AteamError('INVALID', '请先开启看板同步（ateam sync init），确认已推送到 ateam 分支后再停止在仓库中跟踪看板文件。');
       if (!syncRel()) throw new AteamError('INVALID', '多仓库模式下 .ateam 不在任何仓库里，不需要这一步。');
@@ -1138,7 +1290,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       const { id, ...patch } = b;
       const task = store.editTask(requireId({ id }), patch);
       // 只在改了路径或依赖时提醒
-      return { task, overlaps: patch.paths !== undefined || patch.dependsOn !== undefined ? store.overlapsFor(task) : [] };
+      return { task, overlaps: patch.paths !== undefined || patch.dependsOn !== undefined ? store.overlapsFor(task) : [], owners: patch.paths !== undefined ? ownersFor(task.paths) : [] };
     },
     'POST /api/approve': (b) => ({ task: store.approve(requireId(b), b.text ?? '') }),
     'POST /api/reject': (b) => ({ task: store.reject(requireId(b), b.text) }),
@@ -1327,6 +1479,10 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       doctor: (doctor ?? []).filter((c) => !c.ok),
       // 被别人正在改的同一批文件挡住、暂时不派的卡：{ 卡号: 挡着它的卡号 }
       clash: store.clashes(),
+      // 其中挡着它的是同事已通过、但还没推送的卡（看板写「待 xx 推送」）
+      clashPush: store.clashes(true),
+      // 多人协作时本地代码分支和远程的差距（未开启同步时为 null）
+      code: syncCfg.enabled ? codeView() : null,
       // 待演播的演播卡现在能不能开始、缺什么
       demoBlockers: Object.fromEntries(store.state.tasks.filter((t) => t.kind === 'demo' && t.status === 'ready').map((t) => [t.id, store.demoBlockers(t.id)])),
       // leader 在线：挂着 watch 监听，或 3 分钟内用命令行操作过

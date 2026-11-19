@@ -55,6 +55,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     testBrowser: { type: 'choice', options: ['platform', 'ego'], def: () => 'platform' },
     // worker 换新会话：上下文（最近一次调用读入的 token，单位万）超过这个数，做完手上的卡后下线，由服务开一个同角色的新 worker 接着领卡。0 表示不换
     rotateCtx: { type: 'int', min: 0, max: 100, def: () => 15 },
+    // 多人协作：本地分支领先远程时自动推送 / 落后时自动快进拉取（只在没有未提交改动时）。会动大家共用的分支，默认关
+    autoPush: { type: 'bool', def: () => false },
+    autoPull: { type: 'bool', def: () => false },
+    // 同步看板时附带用量摘要（每天合计、每卡平均、打回率），同事的「用量 → 团队」能看到
+    shareUsage: { type: 'bool', def: () => true },
   };
 
   function config() {
@@ -249,7 +254,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // 多人协作（sync.js）：同事看板里没结束的卡，服务每分钟拉一次后交进来，只在内存里。
-  // { peer, id, title, status, paths, assignee, fresh }；fresh：同事最近 2 小时内同步过，他手上的卡才拦派卡
+  // { peer, id, title, status, paths, assignee, fresh, unpushed }；fresh：同事最近 2 小时内同步过，他手上的卡才拦派卡。
+  // unpushed：已通过、但提交还没推到远程（代码在他电脑上，本机拿不到），和他正在改的卡一样挡着
   let peerTasks = [];
   function setPeerTasks(list) { peerTasks = Array.isArray(list) ? list : []; }
   const peerId = (p) => `${p.peer}·${p.id}`;
@@ -259,7 +265,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function overlapsFor(task) {
     const before = ancestors(task.dependsOn);
     const peers = peerTasks.filter((p) => pathsOverlap(task.paths, p.paths))
-      .map((p) => ({ id: peerId(p), title: p.title, status: p.status, assignee: p.assignee ? `${p.peer}·${p.assignee}` : null, paths: p.paths, onHold: false, jobOnHold: false, peer: p.peer, stale: !p.fresh }));
+      .map((p) => ({ id: peerId(p), title: p.title, status: p.status, assignee: p.assignee ? `${p.peer}·${p.assignee}` : null, paths: p.paths, onHold: false, jobOnHold: false, peer: p.peer, stale: !p.fresh, unpushed: !!p.unpushed }));
     return [...state.tasks
       .filter((t) => t.id !== task.id && !isDemo(t) && !['approved', 'cancelled'].includes(t.status)
         && !before.has(t.id) && !ancestors(t.dependsOn).has(task.id)
@@ -795,16 +801,17 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     const local = state.tasks.find((o) => o !== task && !isDemo(o) && (o.status === 'working' || o.status === 'asking')
       && o.assignee && o.assignee !== agentId && pathsOverlap(o.paths, task.paths));
     if (local) return local;
-    const p = peerTasks.find((o) => o.fresh && (o.status === 'working' || o.status === 'asking') && pathsOverlap(o.paths, task.paths));
-    return p ? { id: peerId(p), title: p.title, assignee: p.assignee ? `${p.peer}·${p.assignee}` : p.peer, peer: p.peer } : null;
+    const p = peerTasks.find((o) => o.fresh && (o.status === 'working' || o.status === 'asking' || o.unpushed) && pathsOverlap(o.paths, task.paths));
+    return p ? { id: peerId(p), title: p.title, assignee: p.assignee ? `${p.peer}·${p.assignee}` : p.peer, peer: p.peer, unpushed: !!p.unpushed } : null;
   }
-  // 看板用：待领取、依赖已满足、但被别人正在改的卡挡住的卡 → 挡着它的卡
-  function clashes() {
+  // 看板用：待领取、依赖已满足、但被别人正在改的卡挡住的卡 → 挡着它的卡。
+  // unpushedOnly：只列被同事「已通过、未推送」的卡挡住的
+  function clashes(unpushedOnly = false) {
     const out = {};
     for (const t of state.tasks) {
       if (t.status !== 'pending' || !depsMet(t)) continue;
       const c = clashWith(t);
-      if (c) out[t.id] = c.id;
+      if (c && (!unpushedOnly || c.unpushed)) out[t.id] = c.id;
     }
     return out;
   }
@@ -1118,7 +1125,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     for (const t of state.tasks) {
       if (t.status !== 'pending' || !sameRole(t.role, agent.role) || !depsMet(t)) continue;
       const c = clashWith(t, agent.id);
-      if (c) blocked.push({ id: t.id, title: t.title, clash: { id: c.id, assignee: c.assignee } });
+      if (c) blocked.push({ id: t.id, title: t.title, clash: { id: c.id, assignee: c.assignee, unpushed: !!c.unpushed, peer: c.peer ?? null } });
     }
     const f = demoFrozen();
     return { blocked, leaveAsked: !!agent.leaveAsked, critic: isCritic(agent), frozen: f ? { taskId: f.id, title: f.title } : null };

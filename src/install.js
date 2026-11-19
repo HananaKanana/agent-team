@@ -180,7 +180,7 @@ function installHooks(bin) {
   return platforms.map(([p, label]) => {
     const r = spawnSync(process.execPath, [bin, 'hook', 'install', '--platform', p], { encoding: 'utf8', timeout: 60000 });
     const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split('\n')[0] ?? '';
-    return r.status === 0 ? `✓ ${label} hook：${out}` : `✗ ${label} hook 安装失败：${out}（可在看板「使用说明 → 安装」重试）`;
+    return r.status === 0 ? `✓ ${label} hook：${out}` : `✗ ${label} hook 安装失败：${out}（可在看板「帮助 → 安装」重试）`;
   });
 }
 

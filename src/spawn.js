@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { AteamError } from './errors.js';
 
 const TOKEN = /^[A-Za-z0-9_-]{1,40}$/;
-const NOT_INSTALLED = 'DeepSeek Harness 上还没有安装 ateam 的启动插件。请在终端运行 ateam hook install --platform dsh（看板「使用说明 → 安装」第 ③ 步）。';
+const NOT_INSTALLED = 'DeepSeek Harness 上还没有安装 ateam 的启动插件。请在终端运行 ateam hook install --platform dsh（看板「帮助 → 安装」第 ③ 步）。';
 
 function launchKey() {
   try {

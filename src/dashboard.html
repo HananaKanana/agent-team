@@ -194,7 +194,7 @@ input[type="checkbox"]:not(.switch):checked::after {
 .helper-btn + .btn.icon { margin-left: -8px; }
 #notify-btn[hidden] { display: none; }
 /* 提示词面板：顶部右侧弹出 */
-/* 使用说明：右侧整高面板，和任务抽屉同一套样式；顶部标题和标签页固定 */
+/* 帮助：右侧整高面板，和任务抽屉同一套样式；顶部标题和标签页固定 */
 .helper {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 15; width: min(560px, 100vw); overflow-y: auto;
   background: var(--surface); box-shadow: var(--shadow-pop), -16px 0 32px -12px rgba(9, 30, 66, .18);
@@ -621,7 +621,7 @@ html.prompter-only .prompter-strip > .say { flex: 0 1 auto; min-height: 0; displ
 .btn:hover { background: color-mix(in srgb, var(--faint) 34%, transparent); }
 .btn.sm { height: 26px; padding: 0 9px; font-size: 12.5px; }
 .btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
-/* 页头右侧的次要按钮（使用说明、深浅色）：白底细边，和红色的「需要你处理」同高同圆角 */
+/* 页头右侧的次要按钮（帮助、深浅色）：白底细边，和红色的「需要你处理」同高同圆角 */
 .btn.head-btn { height: 32px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); font-weight: 500; }
 .btn.head-btn:hover { color: var(--ink); background: var(--sunken); }
 .btn.head-btn svg { width: 15px; height: 15px; }
@@ -1425,7 +1425,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="mode-pill update-pill" id="update-pill" type="button" hidden></button>
   <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
   <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）" aria-label="搜索"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索卡号或标题</span><kbd>⌘K</kbd></button>
-  <button class="btn head-btn icon helper-btn" id="helper-btn" type="button" title="使用说明（提示词、安装、项目规则、设置等）" aria-label="使用说明"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg></button>
+  <button class="btn head-btn helper-btn" id="helper-btn" type="button" title="提示词、安装、项目规则、设置等"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>帮助</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
 </header>
 <section class="needs pop" id="needs" hidden aria-label="需要 worker" role="dialog"></section>
@@ -1587,7 +1587,7 @@ function modalHead(title, onClose, extra) {
     extra || null,
     onClose ? el('button', { class: 'btn ghost icon', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); onClose(); } }, icon('close')) : null);
 }
-const openGuide = (tab) => el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab }; renderHelper(); } }, tab === 'lead' ? '查看 leader 提示词' : '打开使用说明');
+const openGuide = (tab) => el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab }; renderHelper(); } }, tab === 'lead' ? '查看 leader 提示词' : '打开帮助');
 
 const pad = (n) => String(n).padStart(2, '0');
 function fmtTime(ts) {
@@ -1884,7 +1884,7 @@ function renderWorkers() {
       onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
     }, `${offline.length} 个已离线`));
   }
-  if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '暂无 worker 加入，可在右侧「使用说明」中添加 worker'));
+  if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '暂无 worker 加入，可在右侧「帮助」中添加 worker'));
   box.replaceChildren(...chips);
   fitWorkers();
   renderHelper();
@@ -1922,7 +1922,7 @@ function isLastOfRole(a) {
   return data.state.agents.filter((x) => x.status === 'online' && !x.dismiss && x.role.trim().toLowerCase() === role).length === 1;
 }
 
-// leader 的状态卡（「使用说明 → leader」最上面）：和 worker 卡一样，右边是下线 / 恢复。
+// leader 的状态卡（「帮助 → leader」最上面）：和 worker 卡一样，右边是下线 / 恢复。
 // 下线 = 进入无 leader 模式：token 用完、暂时回不来时用
 async function setLeaderAway(on) {
   try {
@@ -2084,7 +2084,7 @@ const SETTING_ITEMS = [
   { group: 'review' },
   { key: 'rejectLimit', type: 'int', label: '打回次数上限', hint: '同一任务被打回达到该次数后停止自动派发并挂起，转由 leader 处理（改写任务或直接修改）。' },
   { group: 'leader' },
-  { key: 'autoNoLeader', type: 'bool', label: 'leader 离线时自动进入无 leader 模式', hint: '关闭时，仅在「使用说明 → leader」中点击「下线」后进入。开启时，leader 离线（超过下方时长既未监听也未执行命令）也会自动进入，重新监听或执行命令后自动退出。token 用尽后，leader 的后台监听最多仍会保持约半小时，期间视为在线。' },
+  { key: 'autoNoLeader', type: 'bool', label: 'leader 离线时自动进入无 leader 模式', hint: '关闭时，仅在「帮助 → leader」中点击「下线」后进入。开启时，leader 离线（超过下方时长既未监听也未执行命令）也会自动进入，重新监听或执行命令后自动退出。token 用尽后，leader 的后台监听最多仍会保持约半小时，期间视为在线。' },
   { key: 'leaderAwayMin', type: 'int', label: '离线判定时长（分钟）', hint: '仅在上方自动进入开关开启时生效。' },
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
@@ -2711,7 +2711,7 @@ function renderHelper(force = false) {
   const scroll = panel.hidden ? 0 : panel.scrollTop;
   fill(panel,
     el('div', { class: 'panel-top' },
-      el('div', { class: 'helper-head' }, el('b', null, '使用说明'), closeBtn),
+      el('div', { class: 'helper-head' }, el('b', null, '帮助'), closeBtn),
       el('div', { class: 'tabs', role: 'tablist' }, tabBtn('worker', 'worker'), tabBtn('lead', 'leader'), tabBtn('install', '安装'), tabBtn('rules', '项目规则'), tabBtn('tests', '测试用例'), tabBtn('push', '推送'), tabBtn('settings', '设置'))),
     el('div', { class: 'panel-body' },
     tab === 'rules' || tab === 'settings' || tab === 'tests' || tab === 'install' || tab === 'push' ? null : el('p', { class: 'tab-hint' }, data.root ? `请将 agent 窗口的工作目录设为 ${data.root}，再发送对应的提示词。` : '请将各段提示词发送至对应的 agent 窗口。'),
@@ -3786,7 +3786,7 @@ function renderPeersPage() {
   const peers = s?.peers ?? [];
   const cols = (...w) => el('colgroup', null, w.map((x) => el('col', { style: x ? `width:${x}` : '' })));
   const body = !s ? [el('p', { class: 'hint' }, '读取中…')]
-    : !s.enabled ? [el('div', { class: 'peers-empty' }, emptyState('users', '未开启看板同步', '在「使用说明 → 设置 → 多人协作」中开启后，可在此查看同一项目中其他成员的进度。'))]
+    : !s.enabled ? [el('div', { class: 'peers-empty' }, emptyState('users', '未开启看板同步', '在「帮助 → 设置 → 多人协作」中开启后，可在此查看同一项目中其他成员的进度。'))]
     : !peers.length ? [el('div', { class: 'peers-empty' }, emptyState('users', '暂无同事', '同一项目的其他成员开启看板同步后，约一分钟内显示在此处。其成员拉取本项目的代码并启动 ateam 后会自动开启同步。'))]
     : peers.map((p) => {
       const meta = [`${ago(p.at)}同步`, p.version ? `ateam ${p.version}` : null].filter(Boolean).join(' · ');

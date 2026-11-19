@@ -65,12 +65,18 @@ function git(cwd, args, { input, env, timeout = 60000 } = {}) {
 }
 
 // 推送 / 拉取失败的原因，给看板和命令行看
+// git 报错里的具体原因，如 No route to host
+function gitReason(s) {
+  return s.match(/No route to host|Host is unreachable|Network is unreachable|Could not resolve host|Connection refused|Operation timed out|timed out/i)?.[0] ?? '网络不通或服务器不可用';
+}
+
 export function explainGitError(err) {
   const s = `${err?.stderr ?? ''} ${err?.message ?? ''}`;
   if (/non-fast-forward|\[rejected\]|fetch first/i.test(s)) return '远程的同名分支被别人推送过，这个同步名字可能被占用了，请换一个名字。';
   if (/protected|pre-receive hook declined|not allowed to (push|create)|permission|403/i.test(s)) return '远程拒绝推送 ateam/* 分支（没有权限，或设了分支保护）。请在 git 仓库的设置里允许创建 ateam/ 开头的分支。';
   if (/Authentication failed|could not read Username|terminal prompts disabled|401/i.test(s)) return '没有可用的 git 凭据。请先在终端里对这个仓库成功执行一次 git push（让系统记住账号），再重试。';
-  if (/Could not resolve host|Connection refused|timed out|unable to access|Network is unreachable|Operation timed out/i.test(s) || err?.killed) return '连不上 git 远程（网络不通或服务器不可用），恢复后自动重试。';
+  if (/No route to host|Host is unreachable|Network is unreachable/i.test(s)) return `连不上 git 远程（${gitReason(s)}）。终端里能正常 git push 时，多半是 macOS 未允许 ateam 访问本地网络：打开「系统设置 → 隐私与安全性 → 本地网络」，打开 ateam，再在菜单栏重启该项目的服务。`;
+  if (/Could not resolve host|Connection refused|timed out|unable to access|Operation timed out/i.test(s) || err?.killed) return `连不上 git 远程（${err?.killed ? '超时' : gitReason(s)}），恢复后自动重试。`;
   if (/does not appear to be a git repository|No such remote/i.test(s)) return '找不到这个 git 远程，请检查「远程」设置。';
   return (s.trim().split('\n').filter(Boolean).pop() ?? '未知错误').slice(0, 200);
 }

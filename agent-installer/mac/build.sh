@@ -137,6 +137,8 @@ cat > "$MENU_APP/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key><true/>
     <!-- 只连本机的 ateam 服务（http://127.0.0.1） -->
     <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+    <!-- 菜单栏启动的 ateam 服务归在本程序名下：看板同步要连局域网里的 git 服务器（如公司内网的 GitLab），需要「本地网络」权限 -->
+    <key>NSLocalNetworkUsageDescription</key><string>ateam 的看板同步需要访问局域网中的 git 服务器（例如公司内网的 GitLab）。</string>
 </dict>
 </plist>
 PLIST

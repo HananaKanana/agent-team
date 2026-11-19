@@ -221,6 +221,15 @@ export async function untrackBoardFiles({ top, rel, dataDir, name }) {
 
 export const thisHost = () => hostname();
 
+// 用哪个远程：仓库里有 want 就用它；want 是默认的 origin 而仓库没有 origin、只有一个远程时，用那一个；其余情况原样返回（开启时报找不到远程）
+export async function pickRemote(top, want) {
+  let list = [];
+  try { list = (await git(top, ['remote'])).split('\n').map((l) => l.trim()).filter(Boolean); } catch { return want; }
+  if (list.includes(want)) return want;
+  if (want === 'origin' && list.length === 1) return list[0];
+  return want;
+}
+
 // 同步名字的默认值：git 用户名转成小写短名
 export async function defaultName(top) {
   try { return slugName((await git(top, ['config', 'user.name'])).trim()) || slugName(hostname()); } catch { return slugName(hostname()); }

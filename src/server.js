@@ -19,7 +19,7 @@ import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
 import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
-import { checkSyncConfig, claimName, hasSyncConfig, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
+import { checkSyncConfig, claimName, hasSyncConfig, pickRemote, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -668,6 +668,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     if (!text.split(/\r?\n/).some((l) => l.trim() === SYNC_MARK)) return;
     const next = { ...syncCfg, enabled: true, remote: syncCfg.remote || 'origin' };
     next.name = await defaultName(syncTop(next));
+    next.remote = await pickRemote(syncTop(next), next.remote);
     const ok = await syncRun(async () => {
       try {
         checkSyncConfig(next);
@@ -740,6 +741,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     const next = { ...syncCfg, ...patch, enabled: b.enabled === true ? true : syncCfg.enabled };
     if (next.enabled) {
       if (!next.name) next.name = await defaultName(syncTop(next));
+      next.remote = await pickRemote(syncTop(next), next.remote);
       try { checkSyncConfig(next); } catch (err) { throw new AteamError('INVALID', err.message); }
       const ok = await syncRun(async () => {
         try {

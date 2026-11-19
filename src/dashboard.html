@@ -3696,7 +3696,7 @@ function syncSettings() {
     el('label', { class: 'setting' }, name, el('span', null, el('b', null, '同步名称'),
       el('span', { class: 'hint' }, `分支名为 ateam/<同步名称>，同事看到的也是这个名称。只能使用小写字母、数字和连字符；留空则使用 ${s.defaultName || 'git 用户名'}。已被其他电脑使用的名称无法开启。`))),
     el('label', { class: 'setting' }, remote, el('span', null, el('b', null, '远程'),
-      el('span', { class: 'hint' }, '同步使用的 git 远程，默认 origin。远程需允许创建 ateam/ 开头的分支。'))),
+      el('span', { class: 'hint' }, '同步使用的 git 远程，默认 origin；项目没有 origin 且只有一个远程时，开启时自动改用该远程。远程需允许创建 ateam/ 开头的分支。'))),
     s.repos ? (() => {
       const sel = el('select', { class: 'setting-num', disabled: ro }, s.repos.map((r) => el('option', { value: r }, r)));
       sel.value = s.repo && s.repos.includes(s.repo) ? s.repo : s.repos[0];

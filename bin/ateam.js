@@ -28,7 +28,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local', 'json', 'check', 'installer', 'remove']);
+const BOOLEAN_FLAGS = new Set(['yes', 'follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local', 'json', 'check', 'installer', 'remove']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 // 本来就能写多个值（逗号分隔）的参数：写了几遍就合并，不悄悄只留最后一个
 const LIST_FLAGS = new Set(['paths', 'after']);
@@ -88,6 +88,7 @@ leader
   ateam job show J1
   ateam show T3
   ateam report --job J1 --file report.md
+  ateam sync [init [--name <名字>] [--remote origin] [--yes] | off]   多人协作：看板同步到 git 远程的 ateam/<名字> 分支，看到同事的进度
 
 服务地址：ATEAM_URL 优先，否则用项目里 .ateam/port 记下的端口（serve 自动选的），都没有就是 http://127.0.0.1:7700。`;
 
@@ -204,8 +205,17 @@ function holdSeconds(flags) {
 function overlapWarning(task, overlaps) {
   if (!overlaps?.length) return '';
   const lines = ['', '', `⚠ 路径重叠：${task.id} 和下面的任务会改同一批文件，又没有先后依赖，可能被两个 worker 同时改：`];
+  // 同事看板里的卡（多人协作）：不能设依赖，单独说
+  const peers = overlaps.filter((t) => t.peer);
+  overlaps = overlaps.filter((t) => !t.peer);
   // 对方暂停领取（卡或整个需求）：它现在不会派发，让它排到新卡后面才对，不该让新卡等它
   const paused = (t) => !!(t.onHold || t.jobOnHold);
+  if (peers.length) {
+    lines.push(...peers.map((t) => `- 同事 ${t.peer} 的 ${t.id} ${t.title}（${t.status}${t.assignee ? `，${t.assignee} 在做` : ''}${t.stale ? '，对方超过 2 小时未同步' : ''}，路径 ${t.paths.join('、')}）`));
+    lines.push(`同事的卡不能设依赖。派卡时会自动等对方正在改的卡交了再派（对方超过 2 小时未同步时不等）；改动较大的，请告诉用户和 ${[...new Set(peers.map((t) => t.peer))].join('、')} 商量先后。`);
+    if (!overlaps.length) return lines.join('\n');
+    lines.push('本机的：');
+  }
   for (const t of overlaps) {
     const who = t.assignee ? `，${t.assignee} 在做` : '';
     lines.push(`- ${t.id} ${t.title}（${t.status}${who}${paused(t) ? '，暂停领取中' : ''}，路径 ${t.paths.join('、')}）`);
@@ -740,6 +750,44 @@ const commands = {
 
   // 项目规则：每个任务派给 worker 时按角色附上（## ALL 段给所有人，## <角色> 段只给这些角色）。
   // 改规则必须用户同意：先不带 --user-approved 运行，把服务给出的改动说明给用户看
+  // 多人协作：看板同步到 ateam/<名字> 分支（见 src/sync.js）
+  async sync({ flags, positional }) {
+    const sub = positional[0];
+    const ago = (t) => (t ? `${Math.max(0, Math.round((Date.now() - t) / 60000))} 分钟前` : '还没有');
+    const show = (s) => {
+      const lines = [s.enabled ? `看板同步：已开启，名字 ${s.name}，远程 ${s.remote}，分支 ateam/${s.name}` : '看板同步：未开启（ateam sync init 开启）'];
+      if (s.enabled) lines.push(`上次推送 ${ago(s.pushedAt)}，上次拉取 ${ago(s.fetchedAt)}${s.error ? `\n同步出错：${s.error}` : ''}`);
+      if (s.tracked) lines.push(`看板文件仍在 git 仓库中被跟踪（${s.tracked} 个文件），同事拉代码后会读到你的看板。确认同步正常后运行 ateam sync init --yes 停止跟踪。`);
+      if (s.peers?.length) {
+        lines.push('', '同事：');
+        for (const p of s.peers) {
+          const busy = (p.tasks ?? []).filter((t) => t.status === 'working' || t.status === 'asking');
+          lines.push(`- ${p.name}：${ago(p.at)}同步${p.away ? '（超过 2 小时未同步，他的卡不再拦派卡）' : ''}${p.newer ? '，对方 ateam 版本较新，请升级后查看' : ''}${busy.length ? `，正在做 ${busy.map((t) => `${t.id}${t.overlap.length ? `（和本机 ${t.overlap.join('、')} 路径重叠）` : ''}`).join('、')}` : ''}`);
+        }
+      } else if (s.enabled) lines.push('', '还没有同事的看板。');
+      return lines.join('\n');
+    };
+    if (!sub) return show((await request('GET', '/api/sync')).sync);
+    if (sub === 'off') {
+      const s = (await request('POST', '/api/sync', { enabled: false })).sync;
+      return `已停止看板同步。远程的 ateam/${s.name || '<名字>'} 分支保留；不需要了可以运行：git push ${s.remote} --delete ateam/${s.name || '<名字>'}`;
+    }
+    if (sub !== 'init') fail('用法：ateam sync [init [--name <名字>] [--remote origin] [--yes] | off]');
+    const body = { enabled: true };
+    if (typeof flags.name === 'string') body.name = flags.name;
+    if (typeof flags.remote === 'string') body.remote = flags.remote;
+    const s = (await request('POST', '/api/sync', body)).sync;
+    const out = [show(s)];
+    if (s.error) return out.join('\n');
+    if (s.tracked && flags.yes) {
+      const r = await request('POST', '/api/sync/untrack', {});
+      out.push('', r.untrack.nothing ? '看板文件已经不在仓库中跟踪。' : `已提交 ${r.untrack.sha}：看板文件（${r.untrack.count} 个）不再随代码提交，本地文件保留；.ateam/.gitignore 已加上这几项。这个提交还没推送，照常推送即可。`);
+    } else if (s.tracked) {
+      out.push('', '下一步（需要你确认）：运行 ateam sync init --yes，会在当前分支提交一次改动：', '- git rm --cached 看板文件（board.json、archive/、demos/），本地文件保留', '- .ateam/.gitignore 加上这几项', '只提交这几个文件，不推送。同事拉到这个提交后，他工作区里你的看板文件会被删掉，他自己的看板不受影响。');
+    }
+    return out.join('\n');
+  },
+
   async rules({ flags, positional }) {
     const sub = positional[0];
     const approved = !!flags['user-approved'];

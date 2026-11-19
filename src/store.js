@@ -248,15 +248,23 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return seen;
   }
 
+  // 多人协作（sync.js）：同事看板里没结束的卡，服务每分钟拉一次后交进来，只在内存里。
+  // { peer, id, title, status, paths, assignee, fresh }；fresh：同事最近 2 小时内同步过，他手上的卡才拦派卡
+  let peerTasks = [];
+  function setPeerTasks(list) { peerTasks = Array.isArray(list) ? list : []; }
+  const peerId = (p) => `${p.peer}·${p.id}`;
+
   // 和 task 改同一批文件、又可能同时进行的任务：还没通过/作废，且两者之间没有依赖先后（直接或间接）。
-  // 只用来提醒 leader，不拦着。
+  // 同事看板里没结束、路径重叠的卡也列上（标 peer）。只用来提醒 leader，不拦着。
   function overlapsFor(task) {
     const before = ancestors(task.dependsOn);
-    return state.tasks
+    const peers = peerTasks.filter((p) => pathsOverlap(task.paths, p.paths))
+      .map((p) => ({ id: peerId(p), title: p.title, status: p.status, assignee: p.assignee ? `${p.peer}·${p.assignee}` : null, paths: p.paths, onHold: false, jobOnHold: false, peer: p.peer, stale: !p.fresh }));
+    return [...state.tasks
       .filter((t) => t.id !== task.id && !isDemo(t) && !['approved', 'cancelled'].includes(t.status)
         && !before.has(t.id) && !ancestors(t.dependsOn).has(task.id)
         && pathsOverlap(task.paths, t.paths))
-      .map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee, paths: t.paths, onHold: !!t.onHold, jobOnHold: !!state.jobs.find((j) => j.id === t.jobId)?.onHold }));
+      .map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assignee, paths: t.paths, onHold: !!t.onHold, jobOnHold: !!state.jobs.find((j) => j.id === t.jobId)?.onHold })), ...peers];
   }
 
   // ---------- 需求与任务 ----------
@@ -781,10 +789,14 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
 
   // 和别人手上正在改（进行中、等答复）的卡改同一批文件：先不派，等那张交了再派。
   // 两个人同时改同一个文件，一个人提交时会把另一个人改了一半的内容也带进去。返回挡着它的那张卡
+  // 同事手上正在改的卡也算（他最近 2 小时同步过才算，免得一台关掉的电脑把卡一直挡着）
   function clashWith(task, agentId = null) {
     if (isDemo(task)) return null;
-    return state.tasks.find((o) => o !== task && !isDemo(o) && (o.status === 'working' || o.status === 'asking')
-      && o.assignee && o.assignee !== agentId && pathsOverlap(o.paths, task.paths)) ?? null;
+    const local = state.tasks.find((o) => o !== task && !isDemo(o) && (o.status === 'working' || o.status === 'asking')
+      && o.assignee && o.assignee !== agentId && pathsOverlap(o.paths, task.paths));
+    if (local) return local;
+    const p = peerTasks.find((o) => o.fresh && (o.status === 'working' || o.status === 'asking') && pathsOverlap(o.paths, task.paths));
+    return p ? { id: peerId(p), title: p.title, assignee: p.assignee ? `${p.peer}·${p.assignee}` : p.peer, peer: p.peer } : null;
   }
   // 看板用：待领取、依赖已满足、但被别人正在改的卡挡住的卡 → 挡着它的卡
   function clashes() {
@@ -2406,7 +2418,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     join, touch,
     nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
     pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, agentSegments, digestSent, markDigest, boundSessions, setTaskTokens, markRotate, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
-    getJob, getTask, pendingActions, takeEvents, overlapsFor,
+    getJob, getTask, pendingActions, takeEvents, overlapsFor, setPeerTasks,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,
   };
 }

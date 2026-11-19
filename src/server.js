@@ -19,6 +19,7 @@ import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
 import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
+import { checkSyncConfig, claimName, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -600,6 +601,132 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       .catch((err) => console.log(`启动新的 ${role} worker 失败：${err?.message ?? err}`));
   }
 
+  // ---------- 多人协作：看板同步到 git 远程的 ateam/<名字> 分支（sync.js）----------
+  // 看板保存后 30 秒推一次（没变化不推，10 分钟一次心跳），每分钟拉一次同事的看板，同事进行中的卡交给 store 参与派卡冲突检查
+  let syncCfg = readSyncConfig(root);
+  const syncProject = (() => { try { return realpathSync(root); } catch { return root; } })(); // 认「是不是同一份看板」用：电脑名 + 项目目录
+  const syncCache = new Map();
+  const syncState = { pushedAt: null, fetchedAt: null, error: null, unpushed: false, peers: [] };
+  let syncBusy = false;
+  let syncTimer = null;
+  const syncTop = (cfg = syncCfg) => (layout.mode === 'single' ? layout.top : join(root, layout.repos.includes(cfg.repo) ? cfg.repo : layout.repos[0]));
+  const syncRel = () => (layout.mode === 'single' ? relative(layout.top, dataDir).split(sep).join('/') : null);
+  async function syncRun(fn) {
+    if (syncBusy) return false;
+    syncBusy = true;
+    try { await fn(); return true; } finally { syncBusy = false; }
+  }
+  async function syncPush() {
+    const top = syncTop();
+    const { changed } = await writeSelf({ top, dataDir, meta: { name: syncCfg.name, format: SYNC_FORMAT, ateamVersion: ateamVersion(), host: thisHost(), project: syncProject } });
+    if (!changed && !syncState.unpushed) return;
+    syncState.unpushed = true;
+    await pushSelf({ top, remote: syncCfg.remote, name: syncCfg.name });
+    syncState.unpushed = false;
+    syncState.pushedAt = Date.now();
+  }
+  async function syncFetch() {
+    const top = syncTop();
+    await fetchPeers({ top, remote: syncCfg.remote });
+    syncState.peers = await readPeers({ top, self: syncCfg.name, cache: syncCache });
+    syncState.fetchedAt = Date.now();
+    const now = Date.now();
+    const list = [];
+    for (const p of syncState.peers) {
+      if (!p.board) continue;
+      const fresh = now - p.at < PEER_STALE_MS;
+      for (const t of p.board.tasks ?? []) {
+        if (t.kind === 'demo' || t.status === 'approved' || t.status === 'cancelled') continue;
+        list.push({ peer: p.name, id: t.id, title: t.title, status: t.status, paths: t.paths ?? [], assignee: t.assignee ?? null, fresh });
+      }
+    }
+    store.setPeerTasks(list);
+    // 同事的卡交了：被挡住的卡可能能派了，叫醒等着的 worker；看板刷新
+    if (!waking && !wakeScheduled) { wakeScheduled = true; setImmediate(wake); }
+    pushSoon();
+  }
+  async function syncTick() {
+    if (!syncCfg.enabled || !syncCfg.name) return;
+    await syncRun(async () => {
+      try {
+        await syncPush();
+        await syncFetch();
+        syncState.error = null;
+      } catch (err) {
+        syncState.error = explainGitError(err);
+      }
+    });
+  }
+  function syncSoon() {
+    if (!syncCfg.enabled || syncTimer) return;
+    syncTimer = setTimeout(() => { syncTimer = null; syncTick().catch(() => {}); }, 30000);
+    syncTimer.unref?.();
+  }
+  // 看板「设置 → 多人协作」和 ateam sync 用的状态。peers 给「同事」页
+  async function syncStatus() {
+    const top = syncTop();
+    const rel = syncRel();
+    const tracked = rel ? (await trackedBoardFiles({ top, rel })).length : 0;
+    const now = Date.now();
+    const mine = store.state.tasks.filter((t) => t.kind !== 'demo' && !['approved', 'cancelled'].includes(t.status));
+    const norm = (p) => String(p).replace(/^\.\//, '').replace(/\/+$/, '');
+    const overlap = (a, b) => a.some((x) => b.some((y) => { x = norm(x); y = norm(y); return !x || !y || x === y || y.startsWith(`${x}/`) || x.startsWith(`${y}/`); }));
+    const peers = syncState.peers.map((p) => {
+      const base = { name: p.name, at: p.at, away: now - p.at >= PEER_STALE_MS, version: p.meta?.ateamVersion ?? null, newer: !!p.newer, error: p.error ?? null };
+      if (!p.board) return base;
+      const tasks = (p.board.tasks ?? []).filter((t) => t.kind !== 'demo');
+      const jobs = (p.board.jobs ?? []).filter((j) => !j.demo && !['accepted', 'cancelled'].includes(j.status)).map((j) => {
+        const mineT = tasks.filter((t) => t.jobId === j.id && t.status !== 'cancelled');
+        return { id: j.id, title: j.title, status: j.status, done: mineT.filter((t) => t.status === 'approved').length, total: mineT.length };
+      });
+      const open = tasks.filter((t) => !['approved', 'cancelled'].includes(t.status)).map((t) => ({
+        id: t.id, jobId: t.jobId, title: t.title, role: t.role, status: t.status, assignee: t.assignee ?? null, paths: t.paths ?? [],
+        description: t.description ?? '', acceptance: t.acceptance ?? [],
+        since: [...(t.history ?? [])].reverse().find((h) => ['claimed', 'rejected', 'submitted', 'asked'].includes(h.type))?.ts ?? null,
+        overlap: mine.filter((m) => overlap(m.paths ?? [], t.paths ?? [])).map((m) => m.id),
+      }));
+      return { ...base, jobs, tasks: open };
+    });
+    return {
+      ...syncCfg, host: thisHost(), defaultName: syncCfg.name || await defaultName(top),
+      repos: layout.mode === 'multi' ? layout.repos : null, tracked, busy: syncBusy,
+      pushedAt: syncState.pushedAt, fetchedAt: syncState.fetchedAt, error: syncState.error, peers,
+    };
+  }
+  // 开启 / 改名 / 改远程：先确认名字可用（远程同名分支是别的电脑的就报错），再立即同步一次
+  async function syncConfigure(b) {
+    const patch = {};
+    if (b.remote !== undefined) patch.remote = String(b.remote).trim() || 'origin';
+    if (b.repo !== undefined) patch.repo = String(b.repo);
+    if (b.name !== undefined) patch.name = String(b.name).trim();
+    if (b.enabled === false) {
+      saveSyncConfig(root, { ...patch, enabled: false });
+      syncCfg = readSyncConfig(root);
+      syncState.peers = [];
+      store.setPeerTasks([]);
+      pushSoon();
+      return syncStatus();
+    }
+    const next = { ...syncCfg, ...patch, enabled: b.enabled === true ? true : syncCfg.enabled };
+    if (next.enabled) {
+      if (!next.name) next.name = await defaultName(syncTop(next));
+      try { checkSyncConfig(next); } catch (err) { throw new AteamError('INVALID', err.message); }
+      const ok = await syncRun(async () => {
+        try {
+          await claimName({ top: syncTop(next), remote: next.remote, name: next.name, project: syncProject });
+        } catch (err) {
+          throw new AteamError('INVALID', err instanceof AteamError || !err.stderr ? err.message : explainGitError(err));
+        }
+      });
+      if (!ok) throw new AteamError('INVALID', '正在同步，请稍后再试。');
+    }
+    saveSyncConfig(root, next);
+    syncCfg = readSyncConfig(root);
+    if (syncCfg.enabled) await syncTick();
+    pushSoon();
+    return syncStatus();
+  }
+
   async function checkPush() {
     // 自检问题、服务需要重启是本机的事，不推到手机（自检结果在启动后才出来，会被当成新事项每次重启都推）
     const items = attention().filter((i) => i.key !== 'stale' && !i.key.startsWith('doctor:'));
@@ -686,6 +813,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   function onChange() {
     saveState(dataDir, store.state);
     pushSoon();
+    syncSoon();
     if (waking || wakeScheduled) return;
     wakeScheduled = true;
     setImmediate(wake);
@@ -924,6 +1052,17 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
     },
     'GET /api/staffing': () => store.staffingNeeds(),
+    'GET /api/sync': async () => ({ sync: await syncStatus() }),
+    'POST /api/sync': async (b) => ({ sync: await syncConfigure(b) }),
+    // 迁移：看板文件不再在仓库里跟踪（本地文件保留），只提交这一处改动。要先开启同步
+    'POST /api/sync/untrack': async () => {
+      if (!syncCfg.enabled) throw new AteamError('INVALID', '请先开启看板同步（ateam sync init），确认已推送到 ateam 分支后再停止在仓库中跟踪看板文件。');
+      if (!syncRel()) throw new AteamError('INVALID', '多仓库模式下 .ateam 不在任何仓库里，不需要这一步。');
+      await syncTick();
+      if (syncState.error) throw new AteamError('INVALID', `看板还没成功推送到 ateam 分支：${syncState.error}`);
+      const out = await untrackBoardFiles({ top: syncTop(), rel: syncRel(), dataDir, name: syncCfg.name });
+      return { untrack: out, sync: await syncStatus() };
+    },
     'POST /api/spawn': async (b) => {
       const cfg = store.config();
       // 看板上的按钮是用户点的，不受限；leader 的命令要用户在设置里开了才行
@@ -1366,5 +1505,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // 启动 10 秒后先算一遍（顺带把会话记录解压进缓存，之后打开「用量」页就快了），之后每分钟看一次
   setTimeout(() => { usageReport(true).then(snapshotTokens).catch(() => {}); }, 10000).unref();
   setInterval(() => { snapshotTokens().catch(() => {}); checkRotate().catch(() => {}); }, 60000).unref();
+  setInterval(() => { syncTick().catch(() => {}); }, 60000).unref();
+  if (syncCfg.enabled) setTimeout(() => { syncTick().catch(() => {}); }, 5000).unref();
   return server;
 }

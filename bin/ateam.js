@@ -88,7 +88,7 @@ leader
   ateam job show J1
   ateam show T3
   ateam report --job J1 --file report.md
-  ateam sync [init [--name <名字>] [--remote origin] [--yes] | off]   多人协作：看板同步到 git 远程的 ateam/<名字> 分支，看到同事的进度
+  ateam sync [init [--name <名字>] [--remote origin] | off]   多人协作：看板同步到 git 远程的 ateam/<名字> 分支，看到同事的进度
 
 服务地址：ATEAM_URL 优先，否则用项目里 .ateam/port 记下的端口（serve 自动选的），都没有就是 http://127.0.0.1:7700。`;
 
@@ -757,7 +757,7 @@ const commands = {
     const show = (s) => {
       const lines = [s.enabled ? `看板同步：已开启，名字 ${s.name}，远程 ${s.remote}，分支 ateam/${s.name}` : '看板同步：未开启（ateam sync init 开启）'];
       if (s.enabled) lines.push(`上次推送 ${ago(s.pushedAt)}，上次拉取 ${ago(s.fetchedAt)}${s.error ? `\n同步出错：${s.error}` : ''}`);
-      if (s.tracked) lines.push(`看板文件仍在 git 仓库中被跟踪（${s.tracked} 个文件），同事拉代码后会读到你的看板。确认同步正常后运行 ateam sync init --yes 停止跟踪。`);
+      if (s.tracked) lines.push(`看板文件仍在 git 仓库中被跟踪（${s.tracked} 个文件），同事拉代码后会读到你的看板。再运行一次 ateam sync init 即可停止跟踪（同步成功时自动完成）。`);
       if (s.peers?.length) {
         lines.push('', '同事：');
         for (const p of s.peers) {
@@ -772,19 +772,14 @@ const commands = {
       const s = (await request('POST', '/api/sync', { enabled: false })).sync;
       return `已停止看板同步。远程的 ateam/${s.name || '<名字>'} 分支保留；不需要了可以运行：git push ${s.remote} --delete ateam/${s.name || '<名字>'}`;
     }
-    if (sub !== 'init') fail('用法：ateam sync [init [--name <名字>] [--remote origin] [--yes] | off]');
+    if (sub !== 'init') fail('用法：ateam sync [init [--name <名字>] [--remote origin] | off]');
     const body = { enabled: true };
     if (typeof flags.name === 'string') body.name = flags.name;
     if (typeof flags.remote === 'string') body.remote = flags.remote;
-    const s = (await request('POST', '/api/sync', body)).sync;
-    const out = [show(s)];
-    if (s.error) return out.join('\n');
-    if (s.tracked && flags.yes) {
-      const r = await request('POST', '/api/sync/untrack', {});
-      out.push('', r.untrack.nothing ? '看板文件已经不在仓库中跟踪。' : `已提交 ${r.untrack.sha}：看板文件（${r.untrack.count} 个）不再随代码提交，本地文件保留；.ateam/.gitignore 已加上这几项。这个提交还没推送，照常推送即可。`);
-    } else if (s.tracked) {
-      out.push('', '下一步（需要你确认）：运行 ateam sync init --yes，会在当前分支提交一次改动：', '- git rm --cached 看板文件（board.json、archive/、demos/），本地文件保留', '- .ateam/.gitignore 加上这几项', '只提交这几个文件，不推送。同事拉到这个提交后，他工作区里你的看板文件会被删掉，他自己的看板不受影响。');
-    }
+    const r = await request('POST', '/api/sync', body);
+    const out = [show(r.sync)];
+    if (r.untrack && !r.untrack.nothing) out.push('', `已提交 ${r.untrack.sha}：看板文件（${r.untrack.count} 个）不再随代码提交，本地文件保留；.ateam/.gitignore 已加上这几项。这个提交还没推送，照常推送即可；同事拉到后，其 ateam 会自动开启看板同步。`);
+    if (r.untrackError) out.push('', r.untrackError);
     return out.join('\n');
   },
 

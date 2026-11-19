@@ -1085,7 +1085,17 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     },
     'GET /api/staffing': () => store.staffingNeeds(),
     'GET /api/sync': async () => ({ sync: await syncStatus() }),
-    'POST /api/sync': async (b) => ({ sync: await syncConfigure(b) }),
+    // 打开同步（看板开关、ateam sync init）时，同步成功且看板文件还在仓库里被跟踪，就顺带停止跟踪：只在当前分支提交这一处改动，不推送
+    'POST /api/sync': async (b) => {
+      const sync = await syncConfigure(b);
+      if (b.enabled !== true || !sync.enabled || sync.error || !sync.tracked || !syncRel()) return { sync };
+      try {
+        const untrack = await untrackBoardFiles({ top: syncTop(), rel: syncRel(), dataDir, name: syncCfg.name });
+        return { sync: await syncStatus(), untrack };
+      } catch (err) {
+        return { sync, untrackError: `停止在仓库中跟踪看板文件失败：${err.stderr ? explainGitError(err) : err.message}` };
+      }
+    },
     // 迁移：看板文件不再在仓库里跟踪（本地文件保留），只提交这一处改动。要先开启同步
     'POST /api/sync/untrack': async () => {
       if (!syncCfg.enabled) throw new AteamError('INVALID', '请先开启看板同步（ateam sync init），确认已推送到 ateam 分支后再停止在仓库中跟踪看板文件。');

@@ -3642,6 +3642,7 @@ function updateJobLine(job) {
 let syncInfo = null; // /api/sync 的结果
 let syncLoadedAt = 0;
 let syncMsg = null;
+let syncMsgBad = false; // syncMsg 是失败原因（红字）
 let syncBusy = false;
 let untrackArmed = false; // 「停止在仓库中跟踪看板文件」点第一次后变成「确认提交」
 async function loadSync() {
@@ -3662,9 +3663,10 @@ async function postSync(path, body) {
     const out = await (await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
     if (out.ok) {
       syncInfo = out.sync;
-      syncMsg = out.untrack ? (out.untrack.nothing ? '看板文件已不在仓库中跟踪。' : `已提交 ${out.untrack.sha}：看板文件不再随代码提交，本地文件保留。该提交尚未推送，请照常推送。`) : '已保存。';
-    } else syncMsg = out.message;
-  } catch { syncMsg = '无法连接 ateam 服务。'; }
+      syncMsgBad = !!out.untrackError;
+      syncMsg = out.untrackError ? out.untrackError : out.untrack ? (out.untrack.nothing ? '看板文件已不在仓库中跟踪。' : `已提交 ${out.untrack.sha}：看板文件不再随代码提交，本地文件保留。该提交尚未推送，请照常推送；同事拉取后，其 ateam 将自动开启看板同步。`) : '已保存。';
+    } else { syncMsg = out.message; syncMsgBad = true; }
+  } catch { syncMsg = '无法连接 ateam 服务。'; syncMsgBad = true; }
   syncBusy = false;
   untrackArmed = false;
   if (helper.open) renderHelper(true);
@@ -3693,7 +3695,7 @@ function syncSettings() {
   return [
     el('label', { class: 'setting' }, toggle, el('span', null, el('b', null, '同步看板'),
       el('span', { class: 'hint' }, '多人在同一项目中各自使用 ateam 时开启。本机看板（需求、任务、归档）同步到 git 远程的 ateam/<同步名称> 分支，每分钟拉取一次同事的看板：需求栏底部「同事」可查看其进行中的需求和任务；同事正在修改的路径，本机的任务会等其提交后再派发（对方超过 2 小时未同步时不再等待）。同步使用本机已有的 git 凭据，不改动工作区和代码分支。'),
-      el('span', { class: `hint${status === syncMsg ? ' sync-msg' : ''}` }, status))),
+      el('span', { class: `hint${status === syncMsg && syncMsgBad ? ' sync-msg' : ''}` }, status))),
     el('label', { class: 'setting' }, name, el('span', null, el('b', null, '同步名称'),
       el('span', { class: 'hint' }, `分支名为 ateam/<同步名称>，同事看到的也是这个名称。只能使用小写字母、数字和连字符；留空则使用 ${s.defaultName || 'git 用户名'}。已被其他电脑使用的名称无法开启。`))),
     el('label', { class: 'setting' }, remote, el('span', null, el('b', null, '远程'),
@@ -3712,7 +3714,7 @@ function syncSettings() {
         postSync('/api/sync/untrack', {});
       } }, untrackArmed ? '确认提交' : '停止跟踪'),
       el('span', null, el('b', null, '看板文件仍在仓库中被跟踪'),
-        el('span', { class: 'hint' }, `当前分支跟踪着 ${s.tracked} 个看板文件，同事拉取代码后会读到你的看板。开启同步并确认推送成功后，点击「停止跟踪」：在当前分支提交一次改动，将看板文件（board.json、archive/、demos/）移出版本控制并加入 .ateam/.gitignore，本地文件保留，不推送。同事拉取该提交后，其工作区中的这些文件会被删除，其本人的看板不受影响。`))) : null,
+        el('span', { class: 'hint' }, `当前分支跟踪着 ${s.tracked} 个看板文件，同事拉取代码后会读到你的看板。打开上方「同步看板」开关时，同步成功后会自动完成这一步；也可在同步正常时点击「停止跟踪」：在当前分支提交一次改动，将看板文件（board.json、archive/、demos/）移出版本控制并加入 .ateam/.gitignore，本地文件保留，不推送。同事拉取该提交后，其工作区中的这些文件会被删除，其本人的看板不受影响。`))) : null,
     syncMsg && syncMsg !== status ? el('p', { class: 'hint' }, syncMsg) : null,
   ];
 }

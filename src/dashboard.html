@@ -1091,13 +1091,14 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .ctx-menu .ctx-copy button.done { color: var(--approved); border-color: var(--approved); }
 /* 卡片、需求、演播行是点击 / 右键 / 拖动的对象，不让选中文字（双击、长按、拖动时不会出现一片蓝底） */
 .card, .job, .job-mini, .demo-row, .cancelled-row, .worker, .accepted-toggle { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-.btn.search-btn { gap: 6px; padding: 0 8px 0 10px; }
+.btn.search-btn { gap: 8px; width: 260px; padding: 0 6px 0 10px; justify-content: flex-start; font-weight: 400; }
+.btn.search-btn span { flex: 1; text-align: left; color: var(--faint); }
 .btn.search-btn kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; font: 500 11px/16px inherit; color: var(--faint); background: var(--raised); }
-@media (max-width: 1180px) { .btn.search-btn kbd { display: none; } .btn.search-btn { padding: 0; width: 32px; justify-content: center; } }
-.btn.usage-btn { width: 32px; padding: 0; justify-content: center; }
+@media (max-width: 1280px) { .btn.search-btn { width: 200px; } }
+@media (max-width: 1080px) { .btn.search-btn span, .btn.search-btn kbd { display: none; } .btn.search-btn { padding: 0; width: 32px; justify-content: center; } }
 .setting-text { width: 120px; }
 /* 需求栏底部的「同事」入口 */
-.peers-nav { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.peers-nav { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px; }
 .peers-nav > button {
   display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px 8px 14px; border: 0; border-radius: 6px;
   background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
@@ -1109,17 +1110,23 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .peers-nav .faces { display: flex; }
 .peers-nav .faces .peer-face { width: 20px; height: 20px; font-size: 10.5px; box-shadow: 0 0 0 2px var(--rail); }
 .peers-nav .faces .peer-face + .peer-face { margin-left: -5px; }
-.nav-collapsed .peers-nav { width: 100%; display: flex; justify-content: center; }
+.nav-collapsed .peers-nav { width: 100%; align-items: center; }
 .nav-collapsed .peers-nav > button { width: 46px; height: 36px; padding: 0; justify-content: center; }
 .peer-face {
   display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%;
   color: #fff; font-size: 14px; font-weight: 700; background: hsl(var(--h, 210) 55% 52%);
 }
 .peer-face.away { filter: grayscale(1); opacity: .6; }
-/* 同事页 */
-.peers-top { display: flex; align-items: center; gap: 10px; margin: -4px 0 22px; color: var(--faint); font-size: 12.5px; }
-.peers-top .grow { flex: 1; }
-.peer-card { border: 1px solid var(--line-soft); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; background: var(--surface); }
+/* 同事页：标题行 + 每个同事一张卡，不再套一整张大纸 */
+.peers-wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
+.peers-top { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+.peers-top .grow { flex: 1; min-width: 0; }
+.peers-top h1 { margin: 0 0 6px; font-size: 22px; font-weight: 700; }
+.peers-top p { margin: 0; color: var(--faint); font-size: 12.5px; line-height: 1.6; }
+.peers-empty { border: 1px dashed var(--line); border-radius: 10px; background: var(--raised); }
+.peers-empty .empty-state { padding: 36px 16px; }
+.peer-card { border-radius: 10px; padding: 18px 20px; margin-bottom: 14px; background: var(--raised); box-shadow: var(--shadow-card); }
+@media (max-width: 700px) { .peers-wrap { padding: 20px 16px 60px; } }
 .peer-head { display: flex; align-items: center; gap: 12px; }
 .peer-head .who { flex: 1; min-width: 0; }
 .peer-head .who b { display: block; font-size: 15px; }
@@ -1129,7 +1136,7 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .peer-state.away::before { background: var(--faint); }
 .peer-card .hint { margin: 12px 0 0; }
 .peer-jobs { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
-.peer-jobs li { display: grid; grid-template-columns: minmax(0, 1fr) 120px 64px; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; background: var(--raised); font-size: 13px; }
+.peer-jobs li { display: grid; grid-template-columns: minmax(0, 1fr) 120px 64px; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; background: var(--surface); font-size: 13px; }
 .peer-jobs li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .peer-jobs li .t .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }
 .peer-jobs li .bar { height: 5px; border-radius: 99px; background: color-mix(in srgb, var(--pending) 30%, transparent); overflow: hidden; }
@@ -1417,8 +1424,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="btn" id="notify-btn" type="button" hidden title="开启浏览器通知：需求待验收、任务缺少 worker、leader 离线时发送提醒">开启通知</button>
   <button class="mode-pill update-pill" id="update-pill" type="button" hidden></button>
   <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
-  <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）" aria-label="搜索"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><kbd>⌘K</kbd></button>
-  <button class="btn head-btn usage-btn" id="usage-btn" type="button" title="token 用量统计" aria-label="用量"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg></button>
+  <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）" aria-label="搜索"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索卡号或标题</span><kbd>⌘K</kbd></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
 </header>
@@ -3721,17 +3727,20 @@ function peerFace(name, away) {
   for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
   return el('span', { class: `peer-face${away ? ' away' : ''}`, style: `--h:${h}`, 'aria-hidden': 'true' }, [...name][0]?.toUpperCase() ?? '?');
 }
-// 需求栏底部的「同事」入口：开启看板同步后显示
+// 需求栏底部：「用量」一直在，「同事」开启看板同步后显示
 function peersNav() {
-  if (!syncInfo?.enabled) return el('div', { id: 'peers-nav', hidden: '' });
-  const peers = syncInfo.peers ?? [];
-  const busy = peers.reduce((n, p) => n + (p.tasks?.length ?? 0), 0);
-  const tip = peers.length ? `同事的进度：${peers.map((p) => p.name).join('、')}，进行中 ${busy} 张卡` : '同事的进度：尚无同事开启看板同步';
-  return el('div', { class: 'peers-nav', id: 'peers-nav' },
-    el('button', { type: 'button', title: tip, 'aria-current': peersOpen ? 'true' : 'false', onclick: (e) => { e.stopPropagation(); if (peersOpen) closePeers(); else openPeers(); } },
-      icon('users'),
-      navCollapsed ? null : el('span', { class: 'label' }, '同事'),
-      navCollapsed || !peers.length ? null : el('span', { class: 'faces' }, peers.slice(0, 4).map((p) => peerFace(p.name, p.away)))));
+  const item = (ico, label, tip, current, onclick, extra) => el('button', { type: 'button', title: tip, 'aria-label': label, 'aria-current': current ? 'true' : 'false', onclick: (e) => { e.stopPropagation(); onclick(); } },
+    icon(ico), navCollapsed ? null : el('span', { class: 'label' }, label), navCollapsed ? null : extra);
+  const usage = item('chart', '用量', 'token 用量统计', usageOpen, () => { if (usageOpen) closeUsage(); else { if (peersOpen) closePeers(); openUsage(); } });
+  let peers = null;
+  if (syncInfo?.enabled) {
+    const list = syncInfo.peers ?? [];
+    const busy = list.reduce((n, p) => n + (p.tasks?.length ?? 0), 0);
+    const tip = list.length ? `同事的进度：${list.map((p) => p.name).join('、')}，进行中 ${busy} 张卡` : '同事的进度：尚无同事开启看板同步';
+    peers = item('users', '同事', tip, peersOpen, () => { if (peersOpen) closePeers(); else { if (usageOpen) closeUsage(); openPeers(); } },
+      list.length ? el('span', { class: 'faces' }, list.slice(0, 4).map((p) => peerFace(p.name, p.away))) : null);
+  }
+  return el('div', { class: 'peers-nav', id: 'peers-nav' }, usage, peers);
 }
 function renderPeersBtn() {
   if (data && Date.now() - syncLoadedAt > 60000) loadSync();
@@ -3777,8 +3786,8 @@ function renderPeersPage() {
   const peers = s?.peers ?? [];
   const cols = (...w) => el('colgroup', null, w.map((x) => el('col', { style: x ? `width:${x}` : '' })));
   const body = !s ? [el('p', { class: 'hint' }, '读取中…')]
-    : !s.enabled ? [emptyState('users', '未开启看板同步', '在「使用说明 → 设置 → 多人协作」中开启后，可在此查看同一项目中其他成员的进度。')]
-    : !peers.length ? [emptyState('users', '暂无同事', '同一项目的其他成员开启看板同步后，约一分钟内显示在此处。')]
+    : !s.enabled ? [el('div', { class: 'peers-empty' }, emptyState('users', '未开启看板同步', '在「使用说明 → 设置 → 多人协作」中开启后，可在此查看同一项目中其他成员的进度。'))]
+    : !peers.length ? [el('div', { class: 'peers-empty' }, emptyState('users', '暂无同事', '同一项目的其他成员开启看板同步后，约一分钟内显示在此处。其成员拉取本项目的代码并启动 ateam 后会自动开启同步。'))]
     : peers.map((p) => {
       const meta = [`${ago(p.at)}同步`, p.version ? `ateam ${p.version}` : null].filter(Boolean).join(' · ');
       const head = el('div', { class: 'peer-head' },
@@ -3819,13 +3828,15 @@ function renderPeersPage() {
     el('div', { class: 'report-top' },
       el('button', { class: 'btn ghost', onclick: closePeers }, icon('back'), '返回看板'),
       el('span', { class: 'crumb' }, data?.root ? `${data.root.split('/').pop()} / ` : '', el('b', null, '同事'))),
-    el('div', { class: 'report-wrap usage-wrap' },
-      el('article', { class: 'report-sheet usage-sheet' },
-        el('h1', { class: 'report-title' }, '同事的进度'),
-        el('div', { class: 'peers-top' },
-          el('span', { class: 'grow' }, s?.fetchedAt ? `上次拉取 ${fmtTime(s.fetchedAt)} · 只读，任务操作由对方在其看板中进行` : ''),
-          s?.enabled ? el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); loadSync(); } }, '刷新') : null),
-        body)));
+    el('div', { class: 'peers-wrap' },
+      el('div', { class: 'peers-top' },
+        el('div', { class: 'grow' },
+          el('h1', null, '同事的进度'),
+          el('p', null, s?.enabled
+            ? [`本机同步为 ateam/${s.name}`, s.fetchedAt ? `${ago(s.fetchedAt)}拉取` : '尚未拉取', s.error ? `同步失败：${s.error}` : null, '只读，任务操作由对方在其看板中进行'].filter(Boolean).join(' · ')
+            : '多人在同一项目中各自使用 ateam 时，可在此查看彼此进行中的需求和任务。')),
+        s?.enabled ? el('button', { class: 'btn', type: 'button', title: '立即读取最新的同步状态', onclick: (e) => { e.stopPropagation(); loadSync(); } }, '刷新') : null),
+      body));
   page.hidden = false;
   page.scrollTop = scroll;
   document.body.style.overflow = 'hidden';
@@ -3843,7 +3854,7 @@ function usageSpan(from, to) {
   const hm = (t) => new Date(t).toTimeString().slice(0, 5);
   return d(from) === d(to) ? `${d(from)} ${hm(from)}–${hm(to)}` : `${d(from)} – ${d(to)}`;
 }
-let usageOpen = false; // 顶栏「用量」打开的全屏页
+let usageOpen = false; // 需求栏底部「用量」打开的全屏页
 let usageJob = null; // 只看一个需求时的需求编号（从需求概览的 Token 点进来）；null 为全部
 let usageJobData = null; // /api/usage?job= 的结果
 let usageJobLoading = false;
@@ -3852,6 +3863,7 @@ function openUsage(jobId = null) {
   setUsageJob(jobId);
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); }
   renderUsagePage();
+  renderPeersBtn();
   document.getElementById('usage-page').scrollTop = 0;
 }
 // 切换范围：某个需求或全部，并重新统计
@@ -3864,6 +3876,7 @@ function setUsageJob(jobId) {
 function closeUsage() {
   usageOpen = false;
   renderUsagePage();
+  renderPeersBtn();
 }
 function renderUsagePage() {
   const page = document.getElementById('usage-page');
@@ -4188,7 +4201,7 @@ function tokenFact(t, fact) {
   const total = v.input + v.cacheRead + v.output;
   return fact('Token', el('span', { class: 'tokens', title: `模型调用 ${v.calls} 次。缓存命中的输入按低价计费。${v.missing ? `有 ${v.missing} 个会话在本机找不到记录，未计入。` : ''}` },
     el('b', null, `共 ${fmtTokens(total)}`),
-    v.heavy ? el('span', { class: 'heavy-tag', title: '超过同角色已通过卡用量中位数的倍数，详见顶栏「用量」' }, `用量偏高 ${v.heavy} 倍`) : null,
+    v.heavy ? el('span', { class: 'heavy-tag', title: '超过同角色已通过卡用量中位数的倍数，详见需求栏底部「用量」' }, `用量偏高 ${v.heavy} 倍`) : null,
     el('span', { class: 'hint' }, ` 输入 ${fmtTokens(v.input)} · 缓存命中 ${fmtTokens(v.cacheRead)} · 输出 ${fmtTokens(v.output)} · 调用 ${v.calls} 次${v.live ? '（进行中，实时统计）' : ''}`)));
 }
 let lastOutlineStep = null;
@@ -5855,7 +5868,6 @@ document.getElementById('attention').addEventListener('click', (e) => {
   renderAttentionList();
   if (attentionOpen) recheckDoctor();
 });
-document.getElementById('usage-btn').addEventListener('click', (e) => { e.stopPropagation(); if (usageOpen) closeUsage(); else openUsage(); });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   helper = helper.open ? { open: false, focus: null } : { open: true, focus: null };

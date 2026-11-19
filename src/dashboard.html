@@ -1093,10 +1093,50 @@ html.prompter-native .prompter-strip .head .tools button.pz.on { color: #fff; bo
 .card, .job, .job-mini, .demo-row, .cancelled-row, .worker, .accepted-toggle { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .btn.search-btn { gap: 6px; padding: 0 8px 0 10px; }
 .btn.search-btn kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; font: 500 11px/16px inherit; color: var(--faint); background: var(--raised); }
-@media (max-width: 1180px) { .btn.search-btn span, .btn.search-btn kbd, .btn.usage-btn span { display: none; } }
-.btn.usage-btn { gap: 6px; }
+@media (max-width: 1180px) { .btn.search-btn kbd { display: none; } .btn.search-btn { padding: 0; width: 32px; justify-content: center; } }
+.btn.usage-btn { width: 32px; padding: 0; justify-content: center; }
 .setting-text { width: 120px; }
-.peer-jobs { margin: 4px 0 10px; padding-left: 18px; font-size: 13.5px; line-height: 1.8; }
+/* 需求栏底部的「同事」入口 */
+.peers-nav { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.peers-nav > button {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px 8px 14px; border: 0; border-radius: 6px;
+  background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.peers-nav > button:hover { background: var(--sunken); color: var(--ink); }
+.peers-nav > button[aria-current="true"] { background: var(--raised); color: var(--brand-ink); box-shadow: inset 3px 0 0 var(--brand); }
+.peers-nav > button > svg { width: 15px; height: 15px; flex: none; }
+.peers-nav .label { flex: 1; min-width: 0; }
+.peers-nav .faces { display: flex; }
+.peers-nav .faces .peer-face { width: 20px; height: 20px; font-size: 10.5px; box-shadow: 0 0 0 2px var(--rail); }
+.peers-nav .faces .peer-face + .peer-face { margin-left: -5px; }
+.nav-collapsed .peers-nav { width: 100%; display: flex; justify-content: center; }
+.nav-collapsed .peers-nav > button { width: 46px; height: 36px; padding: 0; justify-content: center; }
+.peer-face {
+  display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%;
+  color: #fff; font-size: 14px; font-weight: 700; background: hsl(var(--h, 210) 55% 52%);
+}
+.peer-face.away { filter: grayscale(1); opacity: .6; }
+/* 同事页 */
+.peers-top { display: flex; align-items: center; gap: 10px; margin: -4px 0 22px; color: var(--faint); font-size: 12.5px; }
+.peers-top .grow { flex: 1; }
+.peer-card { border: 1px solid var(--line-soft); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; background: var(--surface); }
+.peer-head { display: flex; align-items: center; gap: 12px; }
+.peer-head .who { flex: 1; min-width: 0; }
+.peer-head .who b { display: block; font-size: 15px; }
+.peer-head .who span { color: var(--faint); font-size: 12px; }
+.peer-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.peer-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--approved); }
+.peer-state.away::before { background: var(--faint); }
+.peer-card .hint { margin: 12px 0 0; }
+.peer-jobs { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.peer-jobs li { display: grid; grid-template-columns: minmax(0, 1fr) 120px 64px; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; background: var(--raised); font-size: 13px; }
+.peer-jobs li .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.peer-jobs li .t .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }
+.peer-jobs li .bar { height: 5px; border-radius: 99px; background: color-mix(in srgb, var(--pending) 30%, transparent); overflow: hidden; }
+.peer-jobs li .bar i { display: block; height: 100%; background: var(--approved); }
+.peer-jobs li .n { text-align: right; color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.peer-card .usage-table { margin-top: 12px; }
+.peer-card .usage-table .lozenge { height: 18px; font-size: 11px; }
 /* 搜索：苹果聚焦搜索那样，顶部居中一个大输入框，下面是结果 */
 .spot-back { position: fixed; inset: 0; z-index: 45; display: flex; justify-content: center; align-items: flex-start; padding: 14vh 16px 16px; background: color-mix(in srgb, var(--backdrop) 60%, transparent); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 .spot-back[hidden] { display: none; }
@@ -1377,9 +1417,8 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
   <button class="btn" id="notify-btn" type="button" hidden title="开启浏览器通知：需求待验收、任务缺少 worker、leader 离线时发送提醒">开启通知</button>
   <button class="mode-pill update-pill" id="update-pill" type="button" hidden></button>
   <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
-  <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
-  <button class="btn head-btn usage-btn" id="usage-btn" type="button" title="token 用量统计"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg><span>用量</span></button>
-  <button class="btn head-btn usage-btn" id="peers-btn" type="button" hidden title="同事的进度（多人协作）"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg><span>同事</span></button>
+  <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）" aria-label="搜索"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><kbd>⌘K</kbd></button>
+  <button class="btn head-btn usage-btn" id="usage-btn" type="button" title="token 用量统计" aria-label="用量"><svg class="ico" aria-hidden="true"><use href="#i-chart"/></svg></button>
   <button class="btn head-btn helper-btn" id="helper-btn" type="button"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>使用说明</button>
   <button class="btn head-btn icon" id="theme-btn" type="button"></button>
 </header>
@@ -2873,10 +2912,10 @@ function renderJobs() {
         onclick: () => { view.job = j.id; view.task = null; view.report = false; saveView(); render(); },
         oncontextmenu: (e) => { e.preventDefault(); getSelection()?.removeAllRanges(); openJobMenu(j.id, e.clientX, e.clientY); },
       }, j.id, el('i', { class: j.demo || !jt.length ? 'none' : '' }, el('i', { style: `width:${jt.length ? Math.round((doneN / jt.length) * 100) : 0}%` })));
-    }), done.length || dropped.length || demos.length ? el('button', { class: 'job-mini more', title: `展开查看演播 ${demos.length}、已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null);
+    }), done.length || dropped.length || demos.length ? el('button', { class: 'job-mini more', title: `展开查看演播 ${demos.length}、已验收 ${done.length}、已作废 ${dropped.length}`, onclick: () => setNavCollapsed(false) }, '···') : null, peersNav());
     return;
   }
-  fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), openGroup, empty, demoGroup, doneGroup, droppedGroup);
+  fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), openGroup, empty, demoGroup, doneGroup, droppedGroup, peersNav());
 }
 
 function renderMain() {
@@ -3675,23 +3714,40 @@ function syncSettings() {
 // 「同事」整页：同事看板里进行中的需求和卡，只读
 let peersOpen = false;
 let peerOpenTask = null; // 展开详情的卡：「名字·编号」
+// 同事名字的头像：首字母 + 按名字算出的固定色相
+function peerFace(name, away) {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360;
+  return el('span', { class: `peer-face${away ? ' away' : ''}`, style: `--h:${h}`, 'aria-hidden': 'true' }, [...name][0]?.toUpperCase() ?? '?');
+}
+// 需求栏底部的「同事」入口：开启看板同步后显示
+function peersNav() {
+  if (!syncInfo?.enabled) return el('div', { id: 'peers-nav', hidden: '' });
+  const peers = syncInfo.peers ?? [];
+  const busy = peers.reduce((n, p) => n + (p.tasks?.length ?? 0), 0);
+  const tip = peers.length ? `同事的进度：${peers.map((p) => p.name).join('、')}，进行中 ${busy} 张卡` : '同事的进度：尚无同事开启看板同步';
+  return el('div', { class: 'peers-nav', id: 'peers-nav' },
+    el('button', { type: 'button', title: tip, 'aria-current': peersOpen ? 'true' : 'false', onclick: (e) => { e.stopPropagation(); if (peersOpen) closePeers(); else openPeers(); } },
+      icon('users'),
+      navCollapsed ? null : el('span', { class: 'label' }, '同事'),
+      navCollapsed || !peers.length ? null : el('span', { class: 'faces' }, peers.slice(0, 4).map((p) => peerFace(p.name, p.away)))));
+}
 function renderPeersBtn() {
-  const btn = document.getElementById('peers-btn');
-  if (!btn) return;
-  if (data && !syncInfo && Date.now() - syncLoadedAt > 60000) loadSync();
-  else if (data && syncInfo?.enabled && Date.now() - syncLoadedAt > 60000) loadSync();
-  btn.hidden = !(syncInfo?.enabled && syncInfo.peers?.length);
+  if (data && Date.now() - syncLoadedAt > 60000 && (!syncInfo || syncInfo.enabled)) loadSync();
+  document.getElementById('peers-nav')?.replaceWith(peersNav());
 }
 function openPeers() {
   peersOpen = true;
   if (helper.open) { helper = { open: false, focus: null }; renderHelper(); }
   loadSync();
   renderPeersPage();
+  renderPeersBtn();
   document.getElementById('peers-page').scrollTop = 0;
 }
 function closePeers() {
   peersOpen = false;
   renderPeersPage();
+  renderPeersBtn();
 }
 function renderPeersPage() {
   const page = document.getElementById('peers-page');
@@ -3704,14 +3760,16 @@ function renderPeersPage() {
   const peers = s?.peers ?? [];
   const cols = (...w) => el('colgroup', null, w.map((x) => el('col', { style: x ? `width:${x}` : '' })));
   const body = !s ? [el('p', { class: 'hint' }, '读取中…')]
-    : !s.enabled ? [el('p', { class: 'hint' }, '未开启看板同步。请在「使用说明 → 设置 → 多人协作」中开启。')]
-    : !peers.length ? [el('p', { class: 'hint' }, '还没有同事的看板。同事在同一项目中开启看板同步后，约一分钟内显示在这里。')]
+    : !s.enabled ? [emptyState('users', '未开启看板同步', '在「使用说明 → 设置 → 多人协作」中开启后，可在此查看同一项目中其他成员的进度。')]
+    : !peers.length ? [emptyState('users', '暂无同事', '同一项目的其他成员开启看板同步后，约一分钟内显示在此处。')]
     : peers.map((p) => {
-      const head = el('div', { class: 'usage-head' },
-        el('h2', null, p.name),
-        el('span', { class: 'hint' }, `${ago(p.at)}同步${p.version ? ` · ateam ${p.version}` : ''}${p.away ? ' · 超过 2 小时未同步，其任务不再阻止本机派发' : ''}`));
-      if (p.newer) return [head, el('p', { class: 'hint' }, '对方使用的 ateam 版本较新，请升级后查看。')];
-      if (p.error) return [head, el('p', { class: 'hint' }, `无法读取：${p.error}`)];
+      const meta = [`${ago(p.at)}同步`, p.version ? `ateam ${p.version}` : null].filter(Boolean).join(' · ');
+      const head = el('div', { class: 'peer-head' },
+        peerFace(p.name, p.away),
+        el('div', { class: 'who' }, el('b', null, p.name), el('span', null, meta)),
+        el('span', { class: `peer-state${p.away ? ' away' : ''}`, title: p.away ? '超过 2 小时未同步，其任务不再阻止本机派发' : '' }, p.away ? '超过 2 小时未同步' : '同步正常'));
+      if (p.newer) return el('section', { class: 'peer-card' }, head, el('p', { class: 'hint' }, '对方使用的 ateam 版本较新，请升级后查看。'));
+      if (p.error) return el('section', { class: 'peer-card' }, head, el('p', { class: 'hint' }, `无法读取：${p.error}`));
       const jobs = p.jobs ?? [];
       const tasks = p.tasks ?? [];
       const rows = tasks.flatMap((t) => {
@@ -3720,7 +3778,7 @@ function renderPeersPage() {
         const row = el('tr', { class: 'click', title: open ? '收起' : '展开查看描述和验收标准', onclick: (e) => { e.stopPropagation(); peerOpenTask = open ? null : key; renderPeersPage(); } },
           el('td', { title: `${t.id} ${t.title}` }, `${open ? '▾' : '▸'} ${t.id} ${t.title}`, t.overlap?.length ? el('span', { class: 'heavy-tag', title: `与本机 ${t.overlap.join('、')} 修改同一批文件` }, `与 ${t.overlap.join('、')} 重叠`) : null),
           el('td', null, el('span', { class: 'tag role', style: roleStyle(t.role) }, t.role)),
-          el('td', { class: 'hint' }, LANE_LABEL[t.status] ?? t.status),
+          el('td', null, el('span', { class: `lozenge c-${laneOf(t)}` }, LANE_LABEL[laneOf(t)] ?? t.status)),
           el('td', { class: 'hint' }, t.assignee ?? '—'),
           el('td', { class: 'hint', title: t.paths.join('\n') }, t.paths.join('、')));
         if (!open) return [row];
@@ -3730,13 +3788,15 @@ function renderPeersPage() {
           t.acceptance?.length ? el('ol', null, t.acceptance.map((a) => el('li', null, a))) : null,
           t.since ? el('p', { class: 'hint' }, `当前状态开始于 ${fmtTime(t.since)}`) : null))];
       });
-      return [
+      return el('section', { class: 'peer-card' },
         head,
-        jobs.length ? el('ul', { class: 'peer-jobs' }, jobs.map((j) => el('li', null, `${j.id} ${j.title}`, el('span', { class: 'hint' }, ` · ${j.total ? `已完成 ${j.done}/${j.total}` : '拆分任务中'}`)))) : el('p', { class: 'hint' }, '没有进行中的需求。'),
-        tasks.length ? el('table', { class: 'usage-table' }, cols('', '72px', '64px', '96px', '22%'),
-          el('thead', null, el('tr', null, el('th', null, '任务（点击展开）'), el('th', null, '角色'), el('th', null, '状态'), el('th', null, '处理人'), el('th', null, '路径'))),
-          el('tbody', null, rows)) : null,
-      ];
+        jobs.length ? el('ul', { class: 'peer-jobs' }, jobs.map((j) => el('li', null,
+          el('span', { class: 't', title: `${j.id} ${j.title}` }, el('span', { class: 'jid' }, j.id), j.title),
+          j.total ? el('span', { class: 'bar' }, el('i', { style: `width:${Math.round((j.done / j.total) * 100)}%` })) : el('span', { class: 'hint' }, '拆分任务中'),
+          el('span', { class: 'n' }, j.total ? `${j.done}/${j.total}` : '')))) : el('p', { class: 'hint' }, '没有进行中的需求。'),
+        tasks.length ? el('table', { class: 'usage-table' }, cols('', '72px', '72px', '96px', '22%'),
+          el('thead', null, el('tr', null, el('th', null, '进行中的任务（点击展开）'), el('th', null, '角色'), el('th', null, '状态'), el('th', null, '处理人'), el('th', null, '路径'))),
+          el('tbody', null, rows)) : null);
     });
   fill(page,
     el('div', { class: 'report-top' },
@@ -3745,9 +3805,9 @@ function renderPeersPage() {
     el('div', { class: 'report-wrap usage-wrap' },
       el('article', { class: 'report-sheet usage-sheet' },
         el('h1', { class: 'report-title' }, '同事的进度'),
-        el('div', { class: 'usage-head' },
-          el('span', { class: 'hint' }, s?.fetchedAt ? `上次拉取 ${fmtTime(s.fetchedAt)} · 只读，任务的操作请由对方在其看板中进行` : ''),
-          el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); loadSync(); } }, '刷新')),
+        el('div', { class: 'peers-top' },
+          el('span', { class: 'grow' }, s?.fetchedAt ? `上次拉取 ${fmtTime(s.fetchedAt)} · 只读，任务操作由对方在其看板中进行` : ''),
+          s?.enabled ? el('button', { class: 'btn sm', type: 'button', onclick: (e) => { e.stopPropagation(); loadSync(); } }, '刷新') : null),
         body)));
   page.hidden = false;
   page.scrollTop = scroll;
@@ -5779,7 +5839,6 @@ document.getElementById('attention').addEventListener('click', (e) => {
   if (attentionOpen) recheckDoctor();
 });
 document.getElementById('usage-btn').addEventListener('click', (e) => { e.stopPropagation(); if (usageOpen) closeUsage(); else openUsage(); });
-document.getElementById('peers-btn').addEventListener('click', (e) => { e.stopPropagation(); if (peersOpen) closePeers(); else openPeers(); });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   helper = helper.open ? { open: false, focus: null } : { open: true, focus: null };

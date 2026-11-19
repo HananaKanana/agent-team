@@ -23,8 +23,14 @@ function readAll() {
 
 export function readSyncConfig(root) {
   const c = readAll()[keyOf(root)] ?? {};
-  return { enabled: !!c.enabled, name: c.name ?? '', remote: c.remote || 'origin', repo: c.repo ?? '' };
+  return { enabled: !!c.enabled, name: c.name ?? '', remote: c.remote || 'origin', repo: c.repo ?? '', autoAt: c.autoAt ?? null };
 }
+
+// 这台电脑对这个项目做过选择没有（开启、关闭都算）。没做过选择的才会自动开启
+export const hasSyncConfig = (root) => keyOf(root) in readAll();
+
+// 迁移提交写进 .ateam/.gitignore 的说明行：同事拉到这一行，就说明这个项目已经用看板同步了
+export const SYNC_MARK = '# 看板改为通过 ateam/<名字> 分支同步，不随代码提交';
 
 export function checkSyncConfig(cur) {
   if (cur.name && !NAME_RE.test(cur.name)) throw new Error('同步名字只能用小写字母、数字和连字符，以字母或数字开头，最多 32 个字符。');
@@ -189,7 +195,8 @@ export async function untrackBoardFiles({ top, rel, dataDir, name }) {
   const have = existsSync(ignore) ? readFileSync(ignore, 'utf8') : '';
   const lines = have.split(/\r?\n/).map((l) => l.trim());
   const want = ['board.json', 'archive/', 'demos/'].filter((w) => !lines.includes(w));
-  if (want.length) writeFileSync(ignore, `${have}${have && !have.endsWith('\n') ? '\n' : ''}# 看板改为通过 ateam/<名字> 分支同步，不随代码提交\n${want.join('\n')}\n`);
+  const add = [...(lines.includes(SYNC_MARK) ? [] : [SYNC_MARK]), ...want];
+  if (add.length) writeFileSync(ignore, `${have}${have && !have.endsWith('\n') ? '\n' : ''}${add.join('\n')}\n`);
   const blob = (await git(top, ['hash-object', '-w', '--no-filters', ignore])).trim();
   const head = (await git(top, ['rev-parse', 'HEAD'])).trim();
   const index = join(tmpdir(), `ateam-untrack-${process.pid}-${Date.now()}.index`);

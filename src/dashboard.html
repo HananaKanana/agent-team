@@ -1426,6 +1426,7 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <!-- 页面提示都做成右上角的浮动气泡，不占页面、可以关掉 -->
 <div class="toasts" id="toasts">
 <div class="banner demo" id="demo-banner" hidden></div>
+<div class="banner" id="sync-banner" hidden></div>
 <div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 <div class="banner stale" id="stale" hidden><b>服务需要重启</b>：<span id="stale-why">ateam 代码已更新，当前服务仍在运行旧版本。</span>请点击「重启」，或在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve。数据不会丢失，worker 和 leader 将自动重连。<button class="btn sm stale-restart" id="stale-restart" type="button">重启</button><button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
 </div>
@@ -3681,12 +3682,12 @@ function syncSettings() {
   remote.addEventListener('click', stop);
   remote.addEventListener('change', () => postSync('/api/sync', { remote: remote.value.trim() }));
   const agoText = (t) => (t ? ago(t) : '尚未');
-  const status = !s.enabled ? '未开启。'
+  const status = !s.enabled ? (s.autoError ? `检测到本项目已改用看板同步，但自动开启失败：${s.autoError}请修改同步名称后手动开启。` : '未开启。')
     : s.error ? `同步失败：${s.error}`
-    : `已同步到分支 ateam/${s.name}。上次推送：${agoText(s.pushedAt)}，上次拉取：${agoText(s.fetchedAt)}；同事 ${s.peers?.length ?? 0} 人。`;
+    : `已同步到分支 ateam/${s.name}。上次推送：${agoText(s.pushedAt)}，上次拉取：${agoText(s.fetchedAt)}；同事 ${s.peers?.length ?? 0} 人。${s.autoAt ? `${fmtTime(s.autoAt)} 检测到本项目已改用看板同步，自动开启。` : ''}`;
   return [
     el('label', { class: 'setting' }, toggle, el('span', null, el('b', null, '同步看板'),
-      el('span', { class: 'hint' }, '多人在同一项目中各自使用 ateam 时开启。本机看板（需求、任务、归档）同步到 git 远程的 ateam/<同步名称> 分支，每分钟拉取一次同事的看板：顶栏「同事」可查看其进行中的需求和任务；同事正在修改的路径，本机的任务会等其提交后再派发（对方超过 2 小时未同步时不再等待）。同步使用本机已有的 git 凭据，不改动工作区和代码分支。'),
+      el('span', { class: 'hint' }, '多人在同一项目中各自使用 ateam 时开启。本机看板（需求、任务、归档）同步到 git 远程的 ateam/<同步名称> 分支，每分钟拉取一次同事的看板：需求栏底部「同事」可查看其进行中的需求和任务；同事正在修改的路径，本机的任务会等其提交后再派发（对方超过 2 小时未同步时不再等待）。同步使用本机已有的 git 凭据，不改动工作区和代码分支。'),
       el('span', { class: 'hint' }, status))),
     el('label', { class: 'setting' }, name, el('span', null, el('b', null, '同步名称'),
       el('span', { class: 'hint' }, `分支名为 ateam/<同步名称>，同事看到的也是这个名称。只能使用小写字母、数字和连字符；留空则使用 ${s.defaultName || 'git 用户名'}。已被其他电脑使用的名称无法开启。`))),
@@ -3733,8 +3734,24 @@ function peersNav() {
       navCollapsed || !peers.length ? null : el('span', { class: 'faces' }, peers.slice(0, 4).map((p) => peerFace(p.name, p.away)))));
 }
 function renderPeersBtn() {
-  if (data && Date.now() - syncLoadedAt > 60000 && (!syncInfo || syncInfo.enabled)) loadSync();
+  if (data && Date.now() - syncLoadedAt > 60000) loadSync();
   document.getElementById('peers-nav')?.replaceWith(peersNav());
+  renderSyncBanner();
+}
+// 自动开启看板同步后提示一次（关掉后这台电脑上不再提示这一次的开启）
+function renderSyncBanner() {
+  const box = document.getElementById('sync-banner');
+  const s = syncInfo;
+  let seen = null;
+  try { seen = localStorage.getItem('ateam.syncAutoSeen'); } catch {}
+  if (!s?.enabled || !s.autoAt || seen === String(s.autoAt)) { box.hidden = true; box.replaceChildren(); return; }
+  const close = () => { try { localStorage.setItem('ateam.syncAutoSeen', String(s.autoAt)); } catch {} box.hidden = true; box.replaceChildren(); };
+  fill(box,
+    el('b', null, '已自动开启看板同步'),
+    el('span', null, `检测到本项目已改用多人看板同步，本机看板以「${s.name}」同步到 ateam/${s.name} 分支，需求栏底部的「同事」可查看同事的进度。`),
+    el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); close(); helper = { open: true, focus: null, tab: 'settings' }; renderHelper(); } }, '查看设置'),
+    toastX(close));
+  box.hidden = false;
 }
 function openPeers() {
   peersOpen = true;

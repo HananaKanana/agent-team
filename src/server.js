@@ -19,7 +19,7 @@ import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
 import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
-import { checkSyncConfig, claimName, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
+import { checkSyncConfig, claimName, hasSyncConfig, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -657,6 +657,36 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
       }
     });
   }
+  // 自动开启：这台电脑没对这个项目做过选择（开启、关闭都没有），而仓库里的 .ateam/.gitignore 有迁移提交写的说明行
+  // （同事已经让这个项目改用看板同步，拉代码时带过来了），就用 git 用户名开启。名字被占用之类的问题不再重试，到设置里手动处理
+  let syncAutoError = null;
+  let syncAutoGaveUp = false;
+  async function syncAuto() {
+    if (syncCfg.enabled || syncAutoGaveUp || hasSyncConfig(root) || !syncRel()) return;
+    let text = '';
+    try { text = readFileSync(join(dataDir, '.gitignore'), 'utf8'); } catch { return; }
+    if (!text.split(/\r?\n/).some((l) => l.trim() === SYNC_MARK)) return;
+    const next = { ...syncCfg, enabled: true, remote: syncCfg.remote || 'origin' };
+    next.name = await defaultName(syncTop(next));
+    const ok = await syncRun(async () => {
+      try {
+        checkSyncConfig(next);
+        await claimName({ top: syncTop(next), remote: next.remote, name: next.name, project: syncProject });
+        syncAutoError = null;
+      } catch (err) {
+        // git 命令失败（网络、凭据）下一分钟再试；名字被占用、名字不合法等不再试
+        syncAutoError = err.stderr || err.killed ? explainGitError(err) : err.message;
+        if (!(err.stderr || err.killed)) syncAutoGaveUp = true;
+        throw err;
+      }
+    }).catch(() => null);
+    if (!ok) return;
+    saveSyncConfig(root, { ...next, autoAt: Date.now() });
+    syncCfg = readSyncConfig(root);
+    console.log(`检测到项目已改用看板同步，已自动开启，同步名称 ${syncCfg.name}`);
+    await syncTick();
+    pushSoon();
+  }
   function syncSoon() {
     if (!syncCfg.enabled || syncTimer) return;
     syncTimer = setTimeout(() => { syncTimer = null; syncTick().catch(() => {}); }, 30000);
@@ -690,7 +720,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     return {
       ...syncCfg, host: thisHost(), defaultName: syncCfg.name || await defaultName(top),
       repos: layout.mode === 'multi' ? layout.repos : null, tracked, busy: syncBusy,
-      pushedAt: syncState.pushedAt, fetchedAt: syncState.fetchedAt, error: syncState.error, peers,
+      pushedAt: syncState.pushedAt, fetchedAt: syncState.fetchedAt, error: syncState.error, peers, autoError: syncCfg.enabled ? null : syncAutoError,
     };
   }
   // 开启 / 改名 / 改远程：先确认名字可用（远程同名分支是别的电脑的就报错），再立即同步一次
@@ -1505,7 +1535,7 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
   // 启动 10 秒后先算一遍（顺带把会话记录解压进缓存，之后打开「用量」页就快了），之后每分钟看一次
   setTimeout(() => { usageReport(true).then(snapshotTokens).catch(() => {}); }, 10000).unref();
   setInterval(() => { snapshotTokens().catch(() => {}); checkRotate().catch(() => {}); }, 60000).unref();
-  setInterval(() => { syncTick().catch(() => {}); }, 60000).unref();
-  if (syncCfg.enabled) setTimeout(() => { syncTick().catch(() => {}); }, 5000).unref();
+  setInterval(() => { syncTick().catch(() => {}); syncAuto().catch(() => {}); }, 60000).unref();
+  setTimeout(() => { (syncCfg.enabled ? syncTick() : syncAuto()).catch(() => {}); }, 5000).unref();
   return server;
 }

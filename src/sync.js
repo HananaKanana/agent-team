@@ -118,7 +118,7 @@ export async function writeSelf({ top, dataDir, meta, heartbeatMs = 10 * 60 * 10
       const [ptree, ptime] = (await git(top, ['log', '-1', '--format=%T %ct', parent])).trim().split(' ');
       if (ptree === tree && Date.now() - Number(ptime) * 1000 < heartbeatMs) return { oid: parent, changed: false };
     }
-    const oid = (await git(top, ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'dashboard sync'], { env: BOT })).trim();
+    const oid = (await git(top, ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'ateam sync'], { env: BOT })).trim();
     await git(top, ['update-ref', SELF_REF, oid, ...(parent ? [parent] : [])]);
     return { oid, changed: true };
   } finally {

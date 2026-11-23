@@ -1,6 +1,6 @@
 {
   "name": "agent-team",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Local task coordination service: a lead agent dispatches tasks to worker agents in one project directory",
   "type": "module",
   "bin": {

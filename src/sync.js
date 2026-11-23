@@ -189,7 +189,12 @@ export async function pushSelf({ top, remote, name, project }) {
   }
   const oid = await refOid(top, SELF_REF);
   await git(top, ['push', '--porcelain', `--force-with-lease=refs/heads/ateam/${name}:${expect}`, remote, `${SELF_REF}:refs/heads/ateam/${name}`], { timeout: 300000 });
-  if (oid) await git(top, ['update-ref', peerRef, oid]); // 记下远程现在是哪一份，下次推送按它核对
+  if (oid) {
+    await git(top, ['update-ref', peerRef, oid]); // 记下远程现在是哪一份，下次推送按它核对
+    // 用户平时 git fetch 留下的远程跟踪分支也跟上：不然心跳替换后，IDE 的提交图里旧心跳和新提交会叉成两条线，直到用户下次 fetch
+    const tracking = `refs/remotes/${remote}/ateam/${name}`;
+    if (await refOid(top, tracking)) await git(top, ['update-ref', tracking, oid]).catch(() => {});
+  }
 }
 
 // 拉取所有 ateam/* 分支到 refs/ateam/peers/，远程删掉的分支本地也删

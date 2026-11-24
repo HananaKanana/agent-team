@@ -186,8 +186,9 @@ function installHooks(bin) {
   if (!platforms.length) return ['没有检测到 DeepSeek Harness 或 WorkBuddy，跳过 hook。'];
   return platforms.map(([p, label]) => {
     const r = spawnSync(process.execPath, [bin, 'hook', 'install', '--platform', p], { encoding: 'utf8', timeout: 60000 });
-    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split('\n')[0] ?? '';
-    return r.status === 0 ? `✓ ${label} hook：${out}` : `✗ ${label} hook 安装失败：${out}（可在看板「帮助 → 安装」重试）`;
+    const lines = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split(/\r?\n/).filter((l) => l.trim());
+    // 成功只要第一行；失败把原因（pnpm 输出等）多带几行，只有第一行看不出为什么失败
+    return r.status === 0 ? `✓ ${label} hook：${lines[0] ?? ''}` : `✗ ${label} hook 安装失败：${lines.slice(0, 8).join('\n')}\n（可在看板「帮助 → 安装」重试）`;
   });
 }
 

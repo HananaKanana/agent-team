@@ -236,12 +236,17 @@ function ownerWarning(owners) {
     '只是提醒，不影响派卡。改动较大的，请告诉用户先和负责人商量。'].join('\n');
 }
 
-function portFree(port) {
+// 两个地址都要试：macOS 上别的服务占着 *:7700（局域网模式）时，单试 127.0.0.1 也能成功，
+// 以为端口空着，真正监听 0.0.0.0 时才报被占用；反过来 --local 的服务占着 127.0.0.1 时单试 0.0.0.0 也一样
+function portFreeOn(port, host) {
   return new Promise((ok) => {
     const probe = createServer();
     probe.once('error', () => ok(false));
-    probe.listen(port, '127.0.0.1', () => probe.close(() => ok(true)));
+    probe.listen(port, host, () => probe.close(() => ok(true)));
   });
+}
+async function portFree(port) {
+  return await portFreeOn(port, '0.0.0.0') && await portFreeOn(port, '127.0.0.1');
 }
 
 // 端口上跑的是不是 ateam、项目目录是哪个
@@ -422,14 +427,17 @@ const commands = {
     const idleMin = Number(flags.idle ?? process.env.ATEAM_IDLE_MIN ?? 3);
     if (!Number.isFinite(leaseMin) || leaseMin <= 0) fail('--lease 必须是正数（分钟）。');
     if (!Number.isFinite(idleMin) || idleMin <= 0) fail('--idle 必须是正数（分钟）。');
-    const port = await pickPort(wanted, flags.port !== undefined);
+    // 默认局域网里的其他电脑也能打开看板（只读）；--local（或 --host 127.0.0.1）只让本机访问。--lan、--host 0.0.0.0 是老写法，等于默认
+    if (flags.host !== undefined && flags.host !== '0.0.0.0' && flags.host !== '127.0.0.1') fail('--host 只支持 0.0.0.0（默认，局域网可只读访问）或 127.0.0.1（同 --local，仅本机）。');
+    if (flags.local && (flags.lan || flags.host === '0.0.0.0')) fail('--local 和 --lan / --host 0.0.0.0 不能同时用。');
+    const lan = !flags.local && flags.host !== '127.0.0.1';
+    const explicit = flags.port !== undefined;
+    let port = await pickPort(wanted, explicit);
     let server;
     try {
-      // 默认局域网里的其他电脑也能打开看板（只读）；--local（或 --host 127.0.0.1）只让本机访问。--lan、--host 0.0.0.0 是老写法，等于默认
-      if (flags.host !== undefined && flags.host !== '0.0.0.0' && flags.host !== '127.0.0.1') fail('--host 只支持 0.0.0.0（默认，局域网可只读访问）或 127.0.0.1（同 --local，仅本机）。');
-      if (flags.local && (flags.lan || flags.host === '0.0.0.0')) fail('--local 和 --lan / --host 0.0.0.0 不能同时用。');
-      const lan = !flags.local && flags.host !== '127.0.0.1';
-      server = await startServer({ root: process.cwd(), port, leaseMin, idleMin, lan, argv: process.argv.slice(2) });
+      // 没指定 --port 时，监听那一刻端口被别的进程抢先（比如别的项目重启的间隙），startServer 自己往后换端口
+      server = await startServer({ root: process.cwd(), port, autoPort: !explicit, leaseMin, idleMin, lan, argv: process.argv.slice(2) });
+      port = server.ateamPort;
     } catch (err) {
       // 两个启动同时进行（比如重启的间隙又点了「启动」）：检查时端口还空着，监听时被另一个抢先。
       // 抢到的是本项目的服务就不算出错

@@ -169,7 +169,7 @@ function lanAddresses() {
 }
 
 // argv：启动参数（重启时原样带上，端口固定为当前端口）
-export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 3, lan = false, argv = [] } = {}) {
+export async function startServer({ root, port = 7700, autoPort = false, leaseMin = 15, idleMin = 3, lan = false, argv = [] } = {}) {
   const layout = await detectRepos(root);
   const startHash = codeHash();
   // 服务需要重启的原因：切换了运行模式（dev / installed，启动脚本会改用另一份代码），或代码改过（code）；都没有为 null
@@ -1577,14 +1577,15 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
 
   // 防止网页跨站调用接口：只认本机 Host（挡 DNS rebinding），POST 必须是 JSON（浏览器跨站发 JSON 需要预检，本服务不响应预检）。
   // 局域网模式下，不是从本机来的请求只读
-  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+  // 按当前端口算：自动换端口时 port 在监听成功后才定下来
+  const allowedHost = (h) => h === `127.0.0.1:${port}` || h === `localhost:${port}`;
   const isLoopback = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress ?? '');
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://localhost');
     const key = `${req.method} ${url.pathname}`;
     try {
-      const local = isLoopback(req) && allowedHosts.has(req.headers.host ?? '');
+      const local = isLoopback(req) && allowedHost(req.headers.host ?? '');
       if (!local) {
         if (!lan) {
           return send(res, 403, { ok: false, code: 'INVALID', message: `只接受 http://127.0.0.1:${port} 或 http://localhost:${port} 的请求。` });
@@ -1673,16 +1674,26 @@ export async function startServer({ root, port = 7700, leaseMin = 15, idleMin = 
     for (const res of streams) res.end();
   });
 
-  await new Promise((resolve, reject) => {
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        reject(Object.assign(new Error(`端口 ${port} 被占用。请重新运行 ateam serve（会自动找空闲端口），或用 --port 指定一个。`), { code: 'EADDRINUSE' }));
-      } else {
-        reject(err);
-      }
-    });
-    server.listen(port, lan ? '0.0.0.0' : '127.0.0.1', resolve);
+  // autoPort：端口是自动选的（没指定 --port），监听那一刻被别的进程抢先就往后换，最多试 10 个。
+  // 不能在外面重新调 startServer：这次已经建好的 store 和定时器会留下，两份同时写数据
+  const listenOn = (p) => new Promise((resolve, reject) => {
+    const onError = (err) => { server.off('listening', onListening); reject(err); };
+    const onListening = () => { server.off('error', onError); resolve(); };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(p, lan ? '0.0.0.0' : '127.0.0.1');
   });
+  for (let tries = 0; ; tries++) {
+    try {
+      await listenOn(port);
+      break;
+    } catch (err) {
+      if (err.code !== 'EADDRINUSE') throw err;
+      if (autoPort && tries < 9 && port < 65535) { port++; continue; }
+      throw Object.assign(new Error(`端口 ${port} 被占用。请重新运行 ateam serve（会自动找空闲端口），或用 --port 指定一个。`), { code: 'EADDRINUSE' });
+    }
+  }
+  server.ateamPort = port;
   // 记下实际端口：端口被占用时会自动换成下一个，项目里的 ateam 命令读这个文件找到服务
   mkdirSync(dataDir, { recursive: true });
   writeFileSync(join(dataDir, 'port'), `${port}\n`);

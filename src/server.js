@@ -22,6 +22,7 @@ import { buildReport } from './usage-report.js';
 import { checkSyncConfig, claimName, hasSyncConfig, pickRemote, codeStatus, commitsLanded, pushCode, fastForward, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
 import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
+import { saveViewPref, viewPrefs } from './view-prefs.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
 const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
@@ -1294,6 +1295,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     },
     'POST /api/approve': (b) => ({ task: store.approve(requireId(b), b.text ?? '') }),
     'POST /api/reject': (b) => ({ task: store.reject(requireId(b), b.text) }),
+    'POST /api/prefs': (b) => { saveViewPref(root, b); return {}; },
     'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
     'POST /api/reply': (b) => ({ task: store.userReply(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
@@ -1602,7 +1604,12 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
       }
       if (key === 'GET /') {
         try {
-          const html = await readFile(DASHBOARD);
+          let html = await readFile(DASHBOARD, 'utf8');
+          // 本机打开：把显示偏好写进页面，看板同步读到（换端口、换浏览器都在）。局域网只读访问不给，用那台电脑自己的浏览器
+          if (local) {
+            const prefs = JSON.stringify(viewPrefs(root)).replace(/</g, '\\u003c');
+            html = html.replace('<script>', `<script>window.ATEAM_PREFS = ${prefs};</script>\n<script>`);
+          }
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
           res.end(html);
         } catch {

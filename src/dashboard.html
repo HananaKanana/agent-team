@@ -1475,6 +1475,37 @@ html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webk
 <script>
 'use strict';
 
+// 显示偏好（主题、侧栏、泳道、分组展开等）：本机打开时存在服务端（~/.config/ateam/dashboard.json，服务把它写进页面的
+// window.ATEAM_PREFS），换端口、换浏览器都在；局域网只读访问时没有它，存在那台电脑自己的浏览器里。
+// PREF_PROJECT 里的只属于当前项目，其余所有项目共用
+const PREF_PROJECT = new Set(['ateam.workerOrder', 'ateam.acceptedOpen', 'ateam.openJobsOpen', 'ateam.demoJobsOpen', 'ateam.cancelledJobsOpen', 'ateam.cancelledOpen', 'ateam.syncAutoSeen']);
+const prefs = (() => {
+  const local = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+  const srv = window.ATEAM_PREFS;
+  if (!srv || typeof srv !== 'object') return local;
+  srv.global ??= {}; srv.project ??= {};
+  const scope = (k) => PREF_PROJECT.has(k) ? 'project' : 'global';
+  return {
+    get(k) {
+      const box = srv[scope(k)];
+      if (Object.hasOwn(box, k)) return box[k];
+      // 第一次：把这个浏览器里原来存的搬到服务端
+      const old = local.get(k);
+      if (old !== null) this.set(k, old);
+      return old;
+    },
+    set(k, v) {
+      const value = String(v), box = srv[scope(k)];
+      if (box[k] === value) return;
+      box[k] = value;
+      fetch('/api/prefs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope: scope(k), key: k, value }) }).catch(() => {});
+    },
+  };
+})();
+
 // 局域网里的其他电脑打开（ateam --lan）：只读。服务端会拒绝所有改动，这里先拦下，直接给出说明，不发请求
 const READONLY = !['127.0.0.1', 'localhost'].includes(location.hostname);
 if (READONLY) {
@@ -1546,7 +1577,7 @@ let showPrompts = false;
 let copied = null; // 刚复制的提示词，用来显示「已复制」
 // 抽屉是否展开到大半屏；记在本浏览器里，下次打开保持
 let drawerWide = false;
-try { drawerWide = localStorage.getItem('ateam.drawerWide') === '1'; } catch {}
+try { drawerWide = prefs.get('ateam.drawerWide') === '1'; } catch {}
 
 // ---------- 小工具 ----------
 
@@ -1788,7 +1819,7 @@ function criticProgress(a) {
 
 // 顶部 worker 一排可以拖动排序：顺序只存在这个浏览器里（编号列表），没排过的新 worker 按默认顺序接在后面
 let workerOrder = [];
-try { workerOrder = JSON.parse(localStorage.getItem('ateam.workerOrder') || '[]'); } catch {}
+try { workerOrder = JSON.parse(prefs.get('ateam.workerOrder') || '[]'); } catch {}
 let workerDrag = null; // 正在拖的编号；拖动中轮询不重画这一排，免得拖到一半被换掉
 function sortByWorkerOrder(list) {
   const rank = (a) => { const i = workerOrder.indexOf(a.id); return i < 0 ? Infinity : i; };
@@ -1850,7 +1881,7 @@ function dragChip(chip, id) {
       const ids = slots().map((n) => n.dataset.id);
       // 已离线的编号也留着：它们用原编号重连时回到原来的位置
       workerOrder = [...ids, ...workerOrder.filter((x) => !ids.includes(x))].slice(0, 200);
-      try { localStorage.setItem('ateam.workerOrder', JSON.stringify(workerOrder)); } catch {}
+      try { prefs.set('ateam.workerOrder', JSON.stringify(workerOrder)); } catch {}
       setTimeout(() => { chip.classList.remove('dragging'); chip.style.transition = ''; workerDrag = null; renderWorkers(); }, 170);
     };
     addEventListener('pointermove', move, { passive: false });
@@ -2108,17 +2139,17 @@ const SETTING_ITEMS = [
 ];
 const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';
-// 触屏模式：只对这台设备的这个浏览器生效（存在本地），默认关闭。开了以后按住拖动就滚动，但拖选文字会变成滚动
+// 触屏模式：默认关闭。开了以后按住拖动就滚动，但拖选文字会变成滚动
 let touchScroll = false;
-try { touchScroll = localStorage.getItem('ateam.touchScroll') === '1'; } catch {}
+try { touchScroll = prefs.get('ateam.touchScroll') === '1'; } catch {}
 // 触屏模式下没有悬停，靠悬停才出现的按钮（概览卡的「暂停领取」等）一直显示
 document.documentElement.classList.toggle('touch-mode', touchScroll);
-// 看板空列收窄：没有卡的列收成窄竖条。只对这台设备的这个浏览器生效，默认开启
-let slimLanes = true;
-try { slimLanes = localStorage.getItem('ateam.slimLanes') !== '0'; } catch {}
-// 悬停卡片时标出依赖关系：只对这台设备的这个浏览器生效，默认关闭（框和标签多了看着重）
+// 看板空列收窄：没有卡的列收成窄竖条。默认关闭
+let slimLanes = false;
+try { slimLanes = prefs.get('ateam.slimLanes') === '1'; } catch {}
+// 悬停卡片时标出依赖关系：默认关闭（框和标签多了看着重）
 let showRelations = false;
-try { showRelations = localStorage.getItem('ateam.showRelations') === '1'; } catch {}
+try { showRelations = prefs.get('ateam.showRelations') === '1'; } catch {}
 
 // 「测试用的浏览器」选 ego-browser 时：列出自动启用的测试用 profile（ego 中名称以 ateam 开头的 profile）
 let egoRefreshing = false;
@@ -2359,7 +2390,7 @@ function settingsPage() {
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
     el('div', { class: 'helper-sec' }, el('h4', null, '多人协作')),
     syncSettings(),
-    el('div', { class: 'helper-sec' }, el('h4', null, '本设备')),
+    el('div', { class: 'helper-sec' }, el('h4', null, '显示偏好')),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
       input.checked = touchScroll;
@@ -2367,10 +2398,10 @@ function settingsPage() {
       input.addEventListener('change', () => {
         touchScroll = input.checked;
         document.documentElement.classList.toggle('touch-mode', touchScroll);
-        try { localStorage.setItem('ateam.touchScroll', touchScroll ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.touchScroll', touchScroll ? '1' : '0'); } catch {}
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '触屏模式'),
-        el('span', { class: 'hint' }, '适用于 Mac 外接触摸屏：在列表、看板和详情面板中按住拖动即可上下或左右滚动。开启后，鼠标拖选文字也会变为滚动（输入框除外，提示词请使用复制按钮）。仅对当前设备的当前浏览器生效。')));
+        el('span', { class: 'hint' }, '适用于 Mac 外接触摸屏：在列表、看板和详情面板中按住拖动即可上下或左右滚动。开启后，鼠标拖选文字也会变为滚动（输入框除外，提示词请使用复制按钮）。保存在本机，所有项目通用。')));
     })(),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -2378,11 +2409,11 @@ function settingsPage() {
       input.addEventListener('click', (e) => e.stopPropagation());
       input.addEventListener('change', () => {
         slimLanes = input.checked;
-        try { localStorage.setItem('ateam.slimLanes', slimLanes ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.slimLanes', slimLanes ? '1' : '0'); } catch {}
         renderMain();
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '空列收窄'),
-        el('span', { class: 'hint' }, '看板中没有任务的列收窄显示，空间留给有任务的列；关闭后各列等宽。仅对当前设备的当前浏览器生效。')));
+        el('span', { class: 'hint' }, '看板中没有任务的列收窄显示，空间留给有任务的列；关闭后各列等宽。保存在本机，所有项目通用。')));
     })(),
     (() => {
       const input = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });
@@ -2390,11 +2421,11 @@ function settingsPage() {
       input.addEventListener('click', (e) => e.stopPropagation());
       input.addEventListener('change', () => {
         showRelations = input.checked;
-        try { localStorage.setItem('ateam.showRelations', showRelations ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.showRelations', showRelations ? '1' : '0'); } catch {}
         markRelated(null);
       });
       return el('label', { class: 'setting' }, input, el('span', null, el('b', null, '悬停显示依赖关系'),
-        el('span', { class: 'hint' }, '鼠标悬停在任务卡上时，高亮其依赖的任务和下游任务并显示标签。关闭后，卡片上的「等依赖」和右键菜单中的相关任务仍可使用。仅对当前设备的当前浏览器生效。')));
+        el('span', { class: 'hint' }, '鼠标悬停在任务卡上时，高亮其依赖的任务和下游任务并显示标签。关闭后，卡片上的「等依赖」和右键菜单中的相关任务仍可使用。保存在本机，所有项目通用。')));
     })(),
   ];
 }
@@ -2820,24 +2851,24 @@ function renderHelper(force = false) {
 
 // 已验收的需求收进左侧底部一个可展开的分组，默认收起
 let acceptedOpen = false;
-try { acceptedOpen = localStorage.getItem('ateam.acceptedOpen') === '1'; } catch {}
+try { acceptedOpen = prefs.get('ateam.acceptedOpen') === '1'; } catch {}
 // 左侧需求栏收起成一条窄栏（只留编号）。记在本浏览器；没设过时窄屏（平板）默认收起
 let navCollapsed = window.innerWidth < 1200;
-try { const v = localStorage.getItem('ateam.navCollapsed'); if (v !== null) navCollapsed = v === '1'; } catch {}
+try { const v = prefs.get('ateam.navCollapsed'); if (v !== null) navCollapsed = v === '1'; } catch {}
 function setNavCollapsed(on) {
   navCollapsed = on;
-  try { localStorage.setItem('ateam.navCollapsed', on ? '1' : '0'); } catch {}
+  try { prefs.set('ateam.navCollapsed', on ? '1' : '0'); } catch {}
   renderJobs();
 }
 // 开发中的需求（规划中、进行中、待验收）：第一组，默认展开
 let openJobsOpen = true;
-try { openJobsOpen = localStorage.getItem('ateam.openJobsOpen') !== '0'; } catch {}
+try { openJobsOpen = prefs.get('ateam.openJobsOpen') !== '0'; } catch {}
 // 演播需求一直是进行中，不和开发需求混在一起：单独一组，默认收起
 let demoJobsOpen = false;
-try { demoJobsOpen = localStorage.getItem('ateam.demoJobsOpen') === '1'; } catch {}
+try { demoJobsOpen = prefs.get('ateam.demoJobsOpen') === '1'; } catch {}
 // 已作废的需求：单独一组，默认收起
 let cancelledJobsOpen = false;
-try { cancelledJobsOpen = localStorage.getItem('ateam.cancelledJobsOpen') === '1'; } catch {}
+try { cancelledJobsOpen = prefs.get('ateam.cancelledJobsOpen') === '1'; } catch {}
 
 function renderJobs() {
   const nav = document.getElementById('jobs');
@@ -2877,7 +2908,7 @@ function renderJobs() {
       class: 'accepted-toggle first', 'aria-expanded': openJobsOpen ? 'true' : 'false',
       onclick: () => {
         openJobsOpen = !openJobsOpen;
-        try { localStorage.setItem('ateam.openJobsOpen', openJobsOpen ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.openJobsOpen', openJobsOpen ? '1' : '0'); } catch {}
         renderJobs();
       },
     }, el('span', null, openJobsOpen ? '▾' : '▸'), `开发中（${open.length}）`),
@@ -2888,7 +2919,7 @@ function renderJobs() {
       class: 'accepted-toggle', 'aria-expanded': demoJobsOpen ? 'true' : 'false',
       onclick: () => {
         demoJobsOpen = !demoJobsOpen;
-        try { localStorage.setItem('ateam.demoJobsOpen', demoJobsOpen ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.demoJobsOpen', demoJobsOpen ? '1' : '0'); } catch {}
         renderJobs();
       },
     }, el('span', null, demoJobsOpen ? '▾' : '▸'), `演播（${demos.length}）`, liveDemo && !demoJobsOpen ? el('span', { class: 'tag live' }, '进行中') : null),
@@ -2899,7 +2930,7 @@ function renderJobs() {
       class: 'accepted-toggle', 'aria-expanded': cancelledJobsOpen ? 'true' : 'false',
       onclick: () => {
         cancelledJobsOpen = !cancelledJobsOpen;
-        try { localStorage.setItem('ateam.cancelledJobsOpen', cancelledJobsOpen ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.cancelledJobsOpen', cancelledJobsOpen ? '1' : '0'); } catch {}
         renderJobs();
       },
     }, el('span', null, cancelledJobsOpen ? '▾' : '▸'), `已作废（${dropped.length}）`),
@@ -2910,7 +2941,7 @@ function renderJobs() {
       class: 'accepted-toggle', 'aria-expanded': acceptedOpen ? 'true' : 'false',
       onclick: () => {
         acceptedOpen = !acceptedOpen;
-        try { localStorage.setItem('ateam.acceptedOpen', acceptedOpen ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.acceptedOpen', acceptedOpen ? '1' : '0'); } catch {}
         renderJobs();
       },
     }, el('span', null, acceptedOpen ? '▾' : '▸'), `已验收（${done.length}）`),
@@ -3030,7 +3061,7 @@ function renderMain() {
 
   // 没有卡的列收成一条窄竖条（列名竖排），宽度让给有卡的列；有卡进来自动展开
   const laneCount = (key) => tasks.filter((t) => laneOf(t) === key).length;
-  const slim = (key) => slimLanes && !laneCount(key); // 设置 → 本设备 →「空列收窄」
+  const slim = (key) => slimLanes && !laneCount(key); // 设置 → 显示偏好 →「空列收窄」
   const cols = LANES.map((lane) => (slim(lane.key) ? '40px' : 'minmax(188px, 1fr)')).join(' ');
   const board = el('div', { class: 'board', style: `--cols: ${cols}` }, LANES.map((lane) => {
     const cards = tasks.filter((t) => laneOf(t) === lane.key);
@@ -3148,7 +3179,7 @@ addEventListener('resize', () => fitActs());
 
 // 已作废：默认收起，展开后一行一张，点开看详情
 let cancelledOpen = false;
-try { cancelledOpen = localStorage.getItem('ateam.cancelledOpen') === '1'; } catch {}
+try { cancelledOpen = prefs.get('ateam.cancelledOpen') === '1'; } catch {}
 function cancelledSection(list) {
   if (!list.length) return null;
   return el('section', { class: 'cancelled-box', 'aria-label': '已作废' },
@@ -3156,7 +3187,7 @@ function cancelledSection(list) {
       class: 'cancelled-toggle', 'aria-expanded': cancelledOpen ? 'true' : 'false',
       onclick: () => {
         cancelledOpen = !cancelledOpen;
-        try { localStorage.setItem('ateam.cancelledOpen', cancelledOpen ? '1' : '0'); } catch {}
+        try { prefs.set('ateam.cancelledOpen', cancelledOpen ? '1' : '0'); } catch {}
         renderMain();
       },
     }, icon('chev-down'), '已作废', el('span', { class: 'n' }, list.length)),
@@ -3497,17 +3528,17 @@ function prompter(t) {
     stepsBar(t),
     el('button', { class: 'btn sm pop', title: '打开字幕窗口，显示在屏幕底部，可拖至副屏', onclick: (e) => { e.stopPropagation(); openPrompter(t); } }, icon('popout'), '弹出提词'));
 }
-// 悬浮窗的偏好：置顶、字号、背景浓淡，存在本窗口的 localStorage。
+// 悬浮窗的偏好：置顶、字号、背景浓淡，和其他显示偏好存在一起（prefs）。
 // 置顶和关闭要窗口自己做：写进地址的 #pin=0/1、#close=1，src/prompter.jxa 每 0.3 秒读一次
 const promptPrefs = (() => {
   const d = { pin: true, scale: 1, alpha: 0.58 };
-  try { return { ...d, ...JSON.parse(localStorage.getItem('ateam-prompter-prefs') || '{}') }; } catch { return d; }
+  try { return { ...d, ...JSON.parse(prefs.get('ateam-prompter-prefs') || '{}') }; } catch { return d; }
 })();
 function applyPromptPrefs(extra = '') {
   const root = document.documentElement.style;
   root.setProperty('--p-scale', promptPrefs.scale);
   root.setProperty('--p-alpha', promptPrefs.alpha);
-  try { localStorage.setItem('ateam-prompter-prefs', JSON.stringify(promptPrefs)); } catch {}
+  try { prefs.set('ateam-prompter-prefs', JSON.stringify(promptPrefs)); } catch {}
   history.replaceState(null, '', `${location.pathname}${location.search}#pin=${promptPrefs.pin ? 1 : 0}${extra}`);
 }
 if (PROMPTER_NATIVE) applyPromptPrefs();
@@ -3844,9 +3875,9 @@ function renderSyncBanner() {
   const box = document.getElementById('sync-banner');
   const s = syncInfo;
   let seen = null;
-  try { seen = localStorage.getItem('ateam.syncAutoSeen'); } catch {}
+  try { seen = prefs.get('ateam.syncAutoSeen'); } catch {}
   if (!s?.enabled || !s.autoAt || seen === String(s.autoAt)) { box.hidden = true; box.replaceChildren(); return; }
-  const close = () => { try { localStorage.setItem('ateam.syncAutoSeen', String(s.autoAt)); } catch {} box.hidden = true; box.replaceChildren(); };
+  const close = () => { try { prefs.set('ateam.syncAutoSeen', String(s.autoAt)); } catch {} box.hidden = true; box.replaceChildren(); };
   fill(box,
     el('b', null, '已自动开启看板同步'),
     el('span', null, `检测到本项目已改用多人看板同步，本机看板以「${s.name}」同步到 ateam/${s.name} 分支，需求栏底部的「同事」可查看同事的进度。`),
@@ -4494,7 +4525,7 @@ function renderDrawer(fresh) {
         onclick: (e) => {
           e.stopPropagation();
           drawerWide = !drawerWide;
-          try { localStorage.setItem('ateam.drawerWide', drawerWide ? '1' : '0'); } catch {}
+          try { prefs.set('ateam.drawerWide', drawerWide ? '1' : '0'); } catch {}
           renderDrawer(false);
         },
       }, icon(drawerWide ? 'shrink' : 'expand')),
@@ -5565,7 +5596,7 @@ function applyTheme(theme) {
   return dark;
 }
 let savedTheme = null;
-try { savedTheme = localStorage.getItem('ateam.theme'); } catch {}
+try { savedTheme = prefs.get('ateam.theme'); } catch {}
 applyTheme(savedTheme);
 themeBtn.addEventListener('click', () => {
   const dark = document.documentElement.dataset.theme
@@ -5573,7 +5604,7 @@ themeBtn.addEventListener('click', () => {
     : matchMedia('(prefers-color-scheme: dark)').matches;
   const next = dark ? 'light' : 'dark';
   applyTheme(next);
-  try { localStorage.setItem('ateam.theme', next); } catch {}
+  try { prefs.set('ateam.theme', next); } catch {}
 });
 
 // 卡片的标签一行放不下时：先压缩（去掉「次」和多余空格），再不够换成符号，还放不下才加渐隐。放得下就照常显示全

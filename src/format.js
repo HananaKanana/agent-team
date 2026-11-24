@@ -256,6 +256,8 @@ function testProgressRule(agentId, task, withTemplate = true, tpl = null) {
 // 「## 浏览器」一节：用哪个浏览器由 ateam 指定（看板设置），worker 不自己挑。
 // ego-browser 的 skill 自己写着「默认优先用它」，所以两种都要明说不用另一个
 const EGO_URL = 'https://lite.ego.app';
+// 被测程序自己调起系统默认浏览器（如 macOS 的 open 打开 Safari）时，worker 容易顺手在那个浏览器里确认、关标签页
+const FOREIGN_BROWSER = (tool, agentId) => `被测程序自己打开了系统默认浏览器（Safari 等）时，**不要在那个浏览器里做任何操作**，也不要用 AppleScript、computer-use 等办法确认或关掉它：把终端打印的地址拿到${tool}里打开，接着判定。「会自动打开浏览器」这类条目以终端启动日志为准，要确认页面确实弹出来了就 \`ateam ask${agentId ? ` --as ${agentId}` : ''}\` 请用户看一眼，那个标签页也由用户关。`;
 export function browserSection(choice, { space, agentId, demo = false, profile = null } = {}) {
   if (choice === 'ego') {
     // profile：服务分给这个 worker 独占的测试用 profile（名称以 ateam 开头）。空间名带上 profile 名：
@@ -279,6 +281,7 @@ export function browserSection(choice, { space, agentId, demo = false, profile =
       login,
       ...(profile?.shared ? [`   注意：测试用的 profile（${profile.names.join('、')}）都被其他 worker 占用，这次用默认 profile，**可能与其他 worker 共用登录状态**：被测项目「新登录作废旧会话」时会互相踢下线，被踢后重新登录再继续，不要当成被测功能的问题。`] : []),
       `5. ${demo ? '收尾时（演播收尾或预演保存后）' : '提交前'}调用 \`await task.finish({ keep: [] })\` 收掉这个空间。`,
+      `6. ${FOREIGN_BROWSER(' ego-browser ', agentId)}`,
     ];
   }
   return [
@@ -286,6 +289,7 @@ export function browserSection(choice, { space, agentId, demo = false, profile =
     '## 浏览器：平台自带',
     '',
     '用户在看板设置里选了**平台自带的浏览器工具**：DeepSeek Harness 用 dsh-cdp（连接和自检见 `browser-cdp-setup` skill），WorkBuddy 用它自带的 Chrome 插件。这次**不要用 ego-browser**，即使它的 skill 说优先用它。',
+    FOREIGN_BROWSER('上面指定的浏览器工具', agentId),
   ];
 }
 

@@ -201,6 +201,7 @@
 14. [ ] ego profile 分配：在 ego lite 里新建 ateam1、ateam2、ateam3 三个 profile，设置选 ego-browser 后「测试用 profile」显示已启用 3 个（新建第 4 个后点「刷新」能读到）；两个 test worker 同时领测试卡，输出里 `taskSpace("<卡号>-ateamN", { profileId: ... })` 的 profile 不同，卡详情「ego profile」和时间线显示用的哪个
 15. [ ] ego profile 释放与沿用：一张卡提交后它的 profile 能分给别的 worker；同一 worker 连续两张卡分到同一个 profile；打回重做时沿用原来的 profile 和空间；预演后演播沿用同一个 profile
 16. [ ] ego profile 全被占：4 个 test worker 同时做卡时第 4 个的输出用 `taskSpace("<卡号>")`，并提示可能与其他 worker 共用登录状态，卡详情显示「默认（测试用 profile 均被占用）」；ego 里没有 ateam 开头的 profile 时，测试卡输出与以前完全一致
+17. [ ] 被测程序自动打开系统默认浏览器：test worker 领测试卡时，「## 浏览器」一节（ego-browser 和平台自带两种都有）写明不在 Safari 等系统默认浏览器里做任何操作、不用 AppleScript 确认或关掉它，把地址拿到指定的浏览器里打开；「自动打开」条目以终端日志为准、`ateam ask` 请用户确认；做一张会自动打开浏览器的测试卡，worker 全程不碰 Safari
 
 
 ## 存储与自检

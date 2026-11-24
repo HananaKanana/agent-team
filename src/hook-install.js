@@ -1,7 +1,7 @@
 // 给 agent 平台装工具后 hook：DSH 走官方桥接包，WorkBuddy 写 settings.json。
 // 重复运行是安全的；改动都在 ateam 标记过的条目里，不碰别人的配置。
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -92,17 +92,60 @@ function dshVersion(flags) {
   throw new Error(`无法读取 DeepSeek Harness 版本${WIN ? '（Windows 上要先打开 DeepSeek Harness）' : ''}。在应用的「关于」里查看，然后用 --dsh-version <版本号> 重新运行。`);
 }
 
+// Windows 上命令的报错可能是系统代码页（中文系统是 GBK）而不是 UTF-8：不是合法 UTF-8 就按 GBK 解
+function decodeOutput(buf) {
+  if (!buf) return '';
+  if (typeof buf === 'string') return buf;
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch {}
+  try { return new TextDecoder('gbk').decode(buf); } catch { return buf.toString('utf8'); }
+}
+
+// DSH 自带的 pnpm（bin/pnpm.cjs）。Mac 上在 ~/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/pnpm；
+// 别的平台、别的版本位置可能不同：在 DSH 的运行时目录和安装目录里往下找几层
+function bundledPnpm() {
+  const dshHome = process.env.DSH_HOME || join(homedir(), '.dsh');
+  const known = join(dshHome, 'dsh-runtimes', 'dsh-primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.cjs');
+  if (existsSync(known)) return known;
+  const roots = [join(dshHome, 'dsh-runtimes')];
+  if (WIN) {
+    const programs = join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Programs');
+    try { for (const n of readdirSync(programs)) if (/deepseek|dsh/i.test(n)) roots.push(join(programs, n)); } catch {}
+    for (const pf of [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(Boolean)) {
+      try { for (const n of readdirSync(pf)) if (/deepseek|dsh/i.test(n)) roots.push(join(pf, n)); } catch {}
+    }
+  }
+  const search = (dir, depth) => {
+    const hit = join(dir, 'pnpm', 'bin', 'pnpm.cjs');
+    if (existsSync(hit)) return hit;
+    if (depth <= 0) return null;
+    let entries = [];
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return null; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.')) continue;
+      const found = search(join(dir, e.name), depth - 1);
+      if (found) return found;
+    }
+    return null;
+  };
+  for (const root of roots) {
+    const found = search(root, 6);
+    if (found) return found;
+  }
+  return null;
+}
+
 // 优先用 DSH 自带的 pnpm，用户机器上不一定装了
 function pnpmAdd(dir, packages) {
-  const bundled = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-runtimes', 'dsh-primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.cjs');
-  // Windows 上 pnpm 是 pnpm.cmd，要经过 cmd.exe 运行
-  const [file, ...args] = existsSync(bundled) ? [process.execPath, bundled] : WIN ? ['cmd.exe', '/d', '/c', 'pnpm'] : ['pnpm'];
+  const bundled = bundledPnpm();
+  // Windows 上系统装的 pnpm 是 pnpm.cmd，要经过 cmd.exe 运行
+  const [file, ...args] = bundled ? [process.execPath, bundled] : WIN ? ['cmd.exe', '/d', '/c', 'pnpm'] : ['pnpm'];
   try {
-    execFileSync(file, [...args, 'add', '-w', ...packages], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', windowsHide: true });
+    execFileSync(file, [...args, 'add', '-w', ...packages], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   } catch (err) {
     // pnpm 把错误原因写在 stdout，只看 stderr 会什么都看不到
-    const output = `${err.stdout ?? ''}\n${err.stderr ?? ''}`.trim().split('\n').filter((l) => l.trim()).slice(-15).join('\n');
-    throw new Error(`在 ${dir} 安装 hook 桥接包失败（${packages.join(' ')}）。pnpm 输出：\n${output || '（无输出）'}`);
+    const output = `${decodeOutput(err.stdout)}\n${decodeOutput(err.stderr)}`.trim().split(/\r?\n/).filter((l) => l.trim()).slice(-15).join('\n');
+    const hint = bundled ? '' : `\n没有找到 DeepSeek Harness 自带的 pnpm，本机也没有安装 pnpm。可以先安装 pnpm（npm install -g pnpm），或把 DeepSeek Harness 安装目录里 pnpm.cjs 的位置告诉维护者。`;
+    throw new Error(`在 ${dir} 安装 hook 桥接包失败（${packages.join(' ')}）。pnpm 输出：\n${output || '（无输出）'}${hint}`);
   }
 }
 

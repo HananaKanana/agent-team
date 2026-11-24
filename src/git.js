@@ -6,6 +6,10 @@
 // 任务路径都相对于项目目录写；提交时按路径找到它所属的仓库，在那个仓库里提交。
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+
+// 真实路径。Windows 上用 native：会把短文件名（C:\Users\ADMINI~1）展开成长文件名、盘符和大小写也和磁盘一致，
+// 和 git rev-parse --show-toplevel 报的路径才对得上；JS 版不展开短文件名，算相对路径会算出 ..\..\ 而把任务路径整个跳过
+const realpath = process.platform === 'win32' ? realpathSync.native : realpathSync;
 import { stat } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
@@ -89,7 +93,7 @@ export function ensureGitignore(root) {
 // 路径可能还不存在（首次提交前目录没建），就往上找最近的已存在目录来判断仓库。
 // 不属于任何仓库的路径跳过。label 是仓库相对于项目目录的位置（单仓库时为空串）。
 async function groupByRepo(root, paths) {
-  const realRoot = realpathSync(root);
+  const realRoot = realpath(root);
   const groups = new Map();
   for (const p of paths) {
     const abs = resolve(realRoot, p);
@@ -103,9 +107,9 @@ async function groupByRepo(root, paths) {
     }
     const top = await repoTop(probe);
     if (!top) continue;
-    const realTop = realpathSync(top);
+    const realTop = realpath(top);
     // 真实路径：existing 部分取 realpath，剩下还不存在的部分原样接上
-    const realAbs = join(realpathSync(existing), relative(existing, abs));
+    const realAbs = join(realpath(existing), relative(existing, abs));
     const rel = relative(realTop, realAbs) || '.';
     // 不保留结尾的「/」：目录写成「dir/」再配上 :(exclude) 排除时，git 会漏掉里面的新文件
     // （git 2.54 实测，有的仓库 :(exclude,top) 也不行）；不带斜杠的「dir」一样只匹配这个目录
@@ -178,7 +182,7 @@ function ateamIn(top, realRoot) {
 // 会把看板状态一起带进 worker 的提交
 export async function commitPaths(root, paths, message) {
   const groups = await groupByRepo(root, paths);
-  const realRoot = realpathSync(root);
+  const realRoot = realpath(root);
   const commits = [];
   const leftover = [];
   for (const [top, { label, paths: repoPaths }] of groups) {
@@ -195,7 +199,7 @@ export async function commitPaths(root, paths, message) {
 // 用作 worker 的「活动心跳」：worker 在写代码，文件就在变；token 用完窗口停了，文件也就不变了。
 export async function latestChangeTime(root, paths) {
   const groups = await groupByRepo(root, paths);
-  const realRoot = realpathSync(root);
+  const realRoot = realpath(root);
   let latest = null;
   for (const [top, { paths: repoPaths }] of groups) {
     // 看板状态文件一直在变，不算 worker 的活动
@@ -214,7 +218,7 @@ export async function latestChangeTime(root, paths) {
 // 一组提交改了哪些文件、各改几行（review 摘要用）。commits 是 commitPaths 返回的提交号（多仓库带「仓库@」前缀）。
 // 返回 [{ file, add, del, binary, created（新建的文件） }]，文件路径相对项目目录；读不到的提交跳过
 export async function commitStats(root, commits) {
-  const realRoot = realpathSync(root);
+  const realRoot = realpath(root);
   const out = new Map();
   for (const c of commits) {
     const at = c.lastIndexOf('@');

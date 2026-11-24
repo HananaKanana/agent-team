@@ -93,7 +93,7 @@ function frontmostIsWorkbuddy() {
   }
 }
 
-// Windows：打开 workbuddy:// 链接（系统按协议交给 WorkBuddy）。只填好提示词和工作目录，回车由用户按
+// Windows：打开 workbuddy:// 链接（系统按协议交给 WorkBuddy），填好提示词和工作目录后模拟按一次回车
 function openLinkWin(link) {
   execFileSync('rundll32', ['url.dll,FileProtocolHandler', link], { stdio: 'ignore', windowsHide: true });
 }
@@ -111,7 +111,41 @@ async function spawnWorkbuddyWin(root, text) {
     await sleep(6000);
   }
   openLinkWin(`workbuddy://task?${new URLSearchParams({ action: 'start', prompt: text, cwd: root })}`);
-  return { sent: false, reason: 'Windows 版不自动发送' };
+  await sleep(2500);
+  return pressEnterInWorkbuddyWin();
+}
+
+// 和 Mac 一样：只在 WorkBuddy 确实是前台窗口时按回车，免得按到别的窗口里。
+// PowerShell 读前台窗口所属的进程名，是 WorkBuddy 就用 SendKeys 发一次回车（Windows 不需要额外授权）
+const ENTER_PS = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class AteamFg {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+}
+"@
+$pid0 = 0
+[void][AteamFg]::GetWindowThreadProcessId([AteamFg]::GetForegroundWindow(), [ref]$pid0)
+$name = (Get-Process -Id $pid0 -ErrorAction SilentlyContinue).ProcessName
+if ($name -notmatch 'workbuddy') { Write-Output "front:$name"; exit 0 }
+Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+Write-Output 'sent'
+`;
+
+function pressEnterInWorkbuddyWin() {
+  try {
+    // 多行脚本、带引号：用 -EncodedCommand（UTF-16LE 的 Base64）传，免得命令行转义出错
+    const encoded = Buffer.from(ENTER_PS, 'utf16le').toString('base64');
+    const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 20000 }).trim();
+    if (out.endsWith('sent')) return { sent: true };
+    return { sent: false, reason: 'WorkBuddy 没有切到最前面' };
+  } catch {
+    return { sent: false, reason: '模拟按键失败' };
+  }
 }
 
 async function spawnWorkbuddy(root, text) {
@@ -150,7 +184,7 @@ export async function spawnWorker({ root, role, name, platform = 'dsh' }) {
   if (platform === 'workbuddy') {
     const text = `使用 ateam-worker skill，角色 ${role}${name ? `，名字 ${name}` : ''}`;
     const { sent, reason } = await spawnWorkbuddy(root, text);
-    return { platform, sessionId: null, inWorkspace: true, text, sent, ...(sent ? {} : { note: WIN ? '提示词和工作目录已填入 WorkBuddy 的输入框，请在 WorkBuddy 中按回车发送。' : `提示词和工作目录已填入 WorkBuddy 的输入框，但没有自动发送（${reason}）。请在 WorkBuddy 中按回车发送。要自动发送，在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 ateam serve 的终端。` }) };
+    return { platform, sessionId: null, inWorkspace: true, text, sent, ...(sent ? {} : { note: WIN ? `提示词和工作目录已填入 WorkBuddy 的输入框，但没有自动发送（${reason}）。请在 WorkBuddy 中按回车发送。` : `提示词和工作目录已填入 WorkBuddy 的输入框，但没有自动发送（${reason}）。请在 WorkBuddy 中按回车发送。要自动发送，在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 ateam serve 的终端。` }) };
   }
   const key = launchKey();
   const port = await findLauncher(key);

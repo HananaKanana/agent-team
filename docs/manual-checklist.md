@@ -254,7 +254,7 @@
 3. [ ] skill：`%USERPROFILE%\.claude\skills\ateam-lead`、DeepSeek Harness 和 WorkBuddy 的 `ateam-worker` 是指向安装目录的目录联接；hook：DeepSeek Harness（需已打开）和 WorkBuddy 的 hook 都装上，worker 做卡时看板「最后活动」随工具调用更新，hook 不报错、不拦工具
 4. [ ] 托盘：右下角出现 ateam 图标，左键、右键都弹出菜单；「添加项目…」选目录后列出，「启动并打开看板」后台启动服务（没有黑色窗口）并在浏览器打开看板，`.ateam\serve.log` 有输出；停止、重启、查看日志（记事本）、在资源管理器中显示、在终端中打开、在 VS Code 中打开（装了时）都可用；退出托盘后服务仍在运行，重新打开托盘能识别
 5. [ ] 托盘待处理：项目有待验收等事项时图标出现小红点、菜单顶部列出事项，点击直达看板；持续 1 分钟后弹系统通知，点通知直达；「设置」里关掉通知后不再弹
-6. [ ] 托盘在线 worker 子菜单：打开它的卡、发消息（输入框发送后 worker 收到）、做完后下线 / 立即下线（先确认）；「启动 worker」按角色在 DeepSeek Harness 中新开会话；WorkBuddy 平台时打开 WorkBuddy 并填好提示词和工作目录，提示「请按回车发送」
+6. [ ] 托盘在线 worker 子菜单：打开它的卡、发消息（输入框发送后 worker 收到）、做完后下线 / 立即下线（先确认）；「启动 worker」按角色在 DeepSeek Harness 中新开会话；WorkBuddy 平台时打开 WorkBuddy、填好提示词和工作目录并自动按回车发送（不需要额外授权）；启动的瞬间切到别的窗口时不按回车，提示在 WorkBuddy 中按回车发送
 7. [ ] 托盘「设置」：阻止睡眠开启且有进行中的任务时，菜单顶部显示「正在阻止休眠」，`powercfg /requests` 里能看到 ateam.exe 的 SYSTEM 请求；「开机后自动打开」取消后注销重登不再自动出现，再勾上恢复
 8. [ ] 两个项目同时运行：第二个自动改用 7701；看板显示偏好（主题、空列收窄）两个项目共用
 9. [ ] 设置 →「测试用的浏览器」显示 ego-browser 且不可修改，说明里写明 Windows 版仅支持 ego-browser；test worker 领测试卡时输出「## 浏览器：ego-browser」；装了 ego lite 时「安装」页显示已安装、ego profile 能读到；「安装」页不显示「方式二：平台自带」

@@ -108,7 +108,6 @@
 Windows 版的限制：
 - **不支持预演和演播**（演播卡显示「Windows 版不支持演播」，可在 Mac 上演播）；
 - **测试浏览器只支持 ego-browser**（ego lite 有 Windows 版，操作与 Mac 相同），「测试用的浏览器」设置固定为 ego-browser；
-- **WorkBuddy 自动启动 worker 只填好提示词**，需要在 WorkBuddy 中按回车发送；DeepSeek Harness 自动启动不受影响；
 - worker 用 PowerShell 或 cmd 运行命令时，多行文字的写法见 worker skill（PowerShell 用 `@'…'@`）。
 
 **看板显示偏好**：主题、侧栏收起、空列收窄（默认关闭）、触屏模式、悬停显示依赖、提词悬浮窗设置这些所有项目共用；worker 顺序、各分组是否展开按项目分开。都存在本机 `~/.config/ateam/dashboard.json`，项目换了端口、换个浏览器打开都还在。局域网只读访问的电脑改这些只存在它自己的浏览器里。

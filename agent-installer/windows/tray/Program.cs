@@ -256,16 +256,24 @@ namespace Ateam
         private bool baselined;
         private string balloonUrl;
         private readonly Font bold;
+        private Image headImage;
 
         public Tray()
         {
             _ = ui.Handle;   // 先建好句柄，后台线程才能 BeginInvoke 回来
             try { baseIcon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location); } catch { baseIcon = SystemIcons.Application; }
+            // 菜单样式：接近 Windows 11 原生菜单（见 MenuTheme / ModernRenderer），跟随系统的深浅色
+            ToolStripManager.Renderer = new ModernRenderer();
+            menu.Font = new Font("Microsoft YaHei UI", 9.5F);
+            menu.Padding = new Padding(0, 4, 0, 4);
             bold = new Font(menu.Font, FontStyle.Bold);
             icon = new NotifyIcon { Icon = baseIcon, Text = "ateam", Visible = true, ContextMenuStrip = menu };
             menu.ShowImageMargin = true;
+            menu.HandleCreated += (s, e) => MenuTheme.RoundCorners(menu);
             menu.Opening += (s, e) =>
             {
+                MenuTheme.Refresh();
+                menu.BackColor = MenuTheme.Back;
                 LoadProjects();
                 Rebuild();
                 e.Cancel = false;
@@ -460,9 +468,14 @@ namespace Ateam
             // 顶部：ateam 和版本号；开发模式 / 源码运行标出来；正在阻止休眠时写明
             var version = info.Str("version") ?? "";
             var mode = info.Str("mode") ?? "";
-            var head = new ToolStripLabel("ateam  " + version + (mode == "dev" ? "  开发模式" : mode == "source" ? "  源码运行" : "")) { Font = bold };
+            var sub0 = version + (mode == "dev" ? "  开发模式" : mode == "source" ? "  源码运行" : "");
+            var head = new ToolStripMenuItem("ateam    " + sub0)
+            {
+                Image = headImage ?? (headImage = new Icon(baseIcon, 16, 16).ToBitmap()),
+                Tag = new TwoTone("ateam", sub0, true, true),
+            };
             items.Add(head);
-            if (keepingAwake) items.Add(new ToolStripLabel("正在阻止休眠 · " + workingTotal + " 个任务进行中") { ForeColor = SystemColors.GrayText });
+            if (keepingAwake) Label(items, "正在阻止休眠 · " + workingTotal + " 个任务进行中");
             items.Add(new ToolStripSeparator());
 
             // 待处理：各项目待你处理的事，点了直达看板上的那个需求或那张卡
@@ -495,8 +508,9 @@ namespace Ateam
                     if (st.Items.Count > 0) parts.Add(st.Items.Count + " 项待处理");
                     detail = string.Join(" · ", parts);
                 }
-                var it = new ToolStripMenuItem(Name(p) + "    " + detail)
+                var it = new ToolStripMenuItem(Name(p) + "      " + detail)
                 {
+                    Tag = new TwoTone(Name(p), detail),
                     Image = Dot(st.Running ? (st.Attention ? Color.DarkOrange : Color.FromArgb(40, 170, 80)) : Color.Silver),
                 };
                 var sub = it.DropDownItems;
@@ -575,6 +589,7 @@ namespace Ateam
             items.Add(help);
             items.Add(new ToolStripSeparator());
             Add(items, "退出 ateam 托盘", () => ExitThread());
+            MenuTheme.Style(menu.Items);
             menu.ResumeLayout();
         }
 
@@ -917,6 +932,161 @@ namespace Ateam
 
         private static void Alert(string title, string text) =>
             MessageBox.Show(text, title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    // ------------------------------------------------------------------ 菜单样式
+
+    /// <summary>一行两种颜色：前半（项目名、ateam）正常色，后半（运行状态、版本号）灰色。Static 的行不高亮、点了没反应</summary>
+    internal sealed class TwoTone
+    {
+        public readonly string Main, Sub;
+        public readonly bool Bold, Static;
+        public TwoTone(string main, string sub, bool bold = false, bool isStatic = false) { Main = main; Sub = sub; Bold = bold; Static = isStatic; }
+    }
+
+    /// <summary>菜单配色：跟随「设置 → 个性化 → 颜色 → 选择默认应用模式」的深浅色</summary>
+    internal static class MenuTheme
+    {
+        public static bool Dark;
+        public static Color Back, Hover, Fore, Gray, Sep, Border;
+
+        static MenuTheme() { Refresh(); }
+
+        public static void Refresh()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+                    Dark = key?.GetValue("AppsUseLightTheme") is int v && v == 0;
+            }
+            catch { Dark = false; }
+            Back = Dark ? Color.FromArgb(44, 44, 44) : Color.FromArgb(249, 249, 249);
+            Hover = Dark ? Color.FromArgb(61, 61, 61) : Color.FromArgb(234, 234, 234);
+            Fore = Dark ? Color.FromArgb(240, 240, 240) : Color.FromArgb(26, 26, 26);
+            Gray = Dark ? Color.FromArgb(155, 155, 155) : Color.FromArgb(128, 128, 128);
+            Sep = Dark ? Color.FromArgb(68, 68, 68) : Color.FromArgb(226, 226, 226);
+            Border = Dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(214, 214, 214);
+        }
+
+        /// <summary>行高加大；子菜单同样的底色、圆角</summary>
+        public static void Style(ToolStripItemCollection items)
+        {
+            foreach (ToolStripItem item in items)
+            {
+                if (item is ToolStripSeparator sep)
+                {
+                    sep.AutoSize = false;
+                    sep.Height = 9;
+                    continue;
+                }
+                item.Padding = new Padding(2, 5, 8, 5);
+                if (item is ToolStripMenuItem mi && mi.HasDropDownItems)
+                {
+                    var drop = mi.DropDown;
+                    drop.BackColor = Back;
+                    drop.Padding = new Padding(0, 4, 0, 4);
+                    if (drop is ToolStripDropDownMenu dm) dm.ShowImageMargin = true;
+                    drop.HandleCreated += (s, e) => RoundCorners(drop);
+                    Style(mi.DropDownItems);
+                }
+            }
+        }
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        /// <summary>Windows 11 上把菜单窗口设成圆角（DWMWA_WINDOW_CORNER_PREFERENCE = 圆角）；Windows 10 上没有这个属性，调用无效果</summary>
+        public static void RoundCorners(Control c)
+        {
+            try { var round = 2; DwmSetWindowAttribute(c.Handle, 33, ref round, sizeof(int)); } catch { }
+        }
+    }
+
+    internal sealed class ModernRenderer : ToolStripRenderer
+    {
+        private static GraphicsPath Rounded(Rectangle r, int radius)
+        {
+            var path = new GraphicsPath();
+            var d = radius * 2;
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            using (var b = new SolidBrush(MenuTheme.Back)) e.Graphics.FillRectangle(b, e.AffectedBounds);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            var r = new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
+            using (var p = new Pen(MenuTheme.Border)) e.Graphics.DrawRectangle(p, r);
+        }
+
+        // 左边的图标栏和底色一样，不画成灰条
+        protected override void OnRenderImageMargin(ToolStripRenderEventArgs e) { }
+
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            var item = e.Item;
+            if (!item.Selected || !item.Enabled || (item.Tag as TwoTone)?.Static == true) return;
+            var r = new Rectangle(4, 1, item.Width - 8, item.Height - 2);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var b = new SolidBrush(MenuTheme.Hover))
+            using (var path = Rounded(r, 4))
+                e.Graphics.FillPath(b, path);
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            var y = e.Item.Height / 2;
+            using (var p = new Pen(MenuTheme.Sep)) e.Graphics.DrawLine(p, 12, y, e.Item.Width - 12, y);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            var tt = e.Item.Tag as TwoTone;
+            var color = e.Item.Enabled || tt?.Static == true ? MenuTheme.Fore : MenuTheme.Gray;
+            const TextFormatFlags flags = TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine;
+            if (tt == null)
+            {
+                // 带下拉的项右边留出箭头的位置
+                TextRenderer.DrawText(e.Graphics, e.Text, e.TextFont, e.TextRectangle, color, flags);
+                return;
+            }
+            using (var font = tt.Bold ? new Font(e.TextFont, FontStyle.Bold) : null)
+            {
+                var mainFont = font ?? e.TextFont;
+                var r = e.TextRectangle;
+                TextRenderer.DrawText(e.Graphics, tt.Main, mainFont, r, color, flags);
+                var w = TextRenderer.MeasureText(e.Graphics, tt.Main, mainFont, r.Size, flags).Width;
+                var sub = new Rectangle(r.X + w + 10, r.Y, Math.Max(0, r.Width - w - 10), r.Height);
+                TextRenderer.DrawText(e.Graphics, tt.Sub, e.TextFont, sub, MenuTheme.Gray, flags | TextFormatFlags.EndEllipsis);
+            }
+        }
+
+        protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+        {
+            e.ArrowColor = e.Item?.Enabled == false ? MenuTheme.Gray : MenuTheme.Fore;
+            base.OnRenderArrow(e);
+        }
+
+        // 勾选：在图标位置画一个对勾，不画方框
+        protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
+        {
+            var r = e.ImageRectangle;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var p = new Pen(MenuTheme.Fore, 1.6F))
+            {
+                var x = r.X + r.Width / 2F;
+                var y = r.Y + r.Height / 2F;
+                e.Graphics.DrawLines(p, new[] { new PointF(x - 5, y), new PointF(x - 1.5F, y + 3.5F), new PointF(x + 5, y - 4) });
+            }
+        }
     }
 
     /// <summary>发消息用的小输入框</summary>

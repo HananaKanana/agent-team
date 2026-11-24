@@ -6,13 +6,13 @@ import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, readdirSync, readlinkSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { spawnWorker } from './spawn.js';
 import { readFile } from 'node:fs/promises';
-import { basename, dirname, join, relative, resolve, sep } from 'node:path';
+import { basename, delimiter, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AteamError } from './errors.js';
 import { createStore } from './store.js';
 import { addRule, leadRules, needsTidy, rulesFor, sectionCounts, unreceived } from './rules.js';
 import { runDoctor } from './doctor.js';
-import { devRepo, mode as runMode, modeLabel, modeMismatch, rememberProject, version as ateamVersion, WRAPPER } from './install.js';
+import { APP_DIR, devRepo, installed, mode as runMode, modeLabel, modeMismatch, rememberProject, version as ateamVersion, WIN, WRAPPER } from './install.js';
 import { check as checkRelease, install as installRelease } from './update.js';
 import { anyPushOn, EVENT_TYPES, eventOn, maskedPush, pushEnabled, readDigest, readPrefs, saveDigest, savePrefs, savePush, sendPush, setPushEnabled } from './push.js';
 import { buildDigest, dueAt, DIGEST_SECTIONS } from './digest.js';
@@ -157,7 +157,8 @@ function installInfo() {
   let workbuddyHook = null;
   if (workbuddyFile) { try { workbuddyHook = readFileSync(workbuddyFile, 'utf8').includes('hook pre-browser'); } catch {} }
   // ego-browser：命令装在 ~/.local/bin（服务的 PATH 里不一定有），skill 由 ego lite 安装时自己链接到各平台的 skill 目录
-  const egoBin = [join(home, '.local', 'bin', 'ego-browser'), ...String(process.env.PATH ?? '').split(':').filter(Boolean).map((d) => join(d, 'ego-browser'))].find((f) => existsSync(f)) ?? null;
+  const egoNames = WIN ? ['ego-browser.exe', 'ego-browser.cmd'] : ['ego-browser'];
+  const egoBin = [join(home, '.local', 'bin'), ...String(process.env.PATH ?? '').split(delimiter).filter(Boolean)].flatMap((d) => egoNames.map((n) => join(d, n))).find((f) => existsSync(f)) ?? null;
   const egoSkill = Object.fromEntries([['DeepSeek Harness', skillsDir], ['WorkBuddy', join(home, '.workbuddy', 'skills')]].map(([k, d]) => [k, existsSync(join(d, 'ego-browser', 'SKILL.md'))]));
   return { home, dshHome, profilesDir, profiles, skillsDir, browserSkill, cdpConfigured, hookInstalled, workbuddyHook, egoBin, egoSkill, toolDir: TOOL_DIR };
 }
@@ -354,7 +355,12 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
         return done();
       }
       // ego-browser nodejs 里 console.log 的输出走 stderr，两路都找；加前缀标记，免得混进别的提示行
-      execFile(bin, ['nodejs', '-e', 'console.log("ATEAM_PROFILES " + JSON.stringify(await profiles()))'], { timeout: 15000 }, (err, stdout, stderr) => {
+      const code = 'console.log("ATEAM_PROFILES " + JSON.stringify(await profiles()))';
+      // Windows 上 .cmd 要经过 cmd.exe 运行（Node 不让直接 execFile），参数自己加引号
+      const [file, args, extra] = WIN && /\.cmd$/i.test(bin)
+        ? ['cmd.exe', ['/d', '/s', '/c', `""${bin}" nodejs -e "${code.replace(/"/g, '\\"')}""`], { windowsVerbatimArguments: true }]
+        : [bin, ['nodejs', '-e', code], {}];
+      execFile(file, args, { timeout: 15000, windowsHide: true, ...extra }, (err, stdout, stderr) => {
         try {
           if (err) throw err;
           const line = `${stdout}\n${stderr}`.split('\n').find((l) => l.startsWith('ATEAM_PROFILES '));
@@ -428,8 +434,10 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
         const log = openSync(join(dataDir, 'serve.log'), 'a');
         let script = process.argv[1];
         try { script = realpathSync(script); } catch {}
-        const [cmd, ...pre] = existsSync(WRAPPER) ? [WRAPPER] : [process.execPath, script];
-        const child = spawn(cmd, [...pre, ...args, '--port', String(port)], { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env });
+        // Windows：ateam.cmd 不能直接 spawn（要经过 cmd），也不需要：按启动脚本的规则（开发模式用仓库、否则用安装目录）选好代码，用同一个 node 跑
+        if (WIN && installed()) script = join(devRepo() ?? APP_DIR, 'bin', 'ateam.js');
+        const [cmd, ...pre] = !WIN && existsSync(WRAPPER) ? [WRAPPER] : [process.execPath, script];
+        const child = spawn(cmd, [...pre, ...args, '--port', String(port)], { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env, windowsHide: true });
         child.unref();
         console.log(`\nateam 服务已在后台重启（进程 ${child.pid}），输出写到 ${join(dataDir, 'serve.log')}。`);
       } else {
@@ -1101,6 +1109,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     },
     // steps：演播只演这几步。总步数从脚本读，读不到就交给 store 拒绝
     'POST /api/demo/start': async (b) => {
+      if (WIN) throw new AteamError('INVALID', 'Windows 版暂不支持预演和演播，请在 Mac 上运行 ateam 演播这张卡。');
       const id = requireId(b);
       await settleOps();
       let total = null;
@@ -1468,7 +1477,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     'GET /api/state': (_b, url) => ({
       // 看板不用事件列表（命令行 status 要用它数未读事件），?view=dashboard 时去掉，减小数据量
       state: url.searchParams.get('view') === 'dashboard' ? { ...store.state, events: [] } : store.state,
-      pending: store.pendingActions(), root, toolDir: TOOL_DIR, home: homedir(), port, repos: layout.mode === 'multi' ? layout.repos : null,
+      pending: store.pendingActions(), root, toolDir: TOOL_DIR, home: homedir(), port, platform: process.platform, repos: layout.mode === 'multi' ? layout.repos : null,
       // 代码已更新、或切换了开发模式 / 安装版，但服务还没重启。staleWhy：code / dev / installed
       stale: !!staleWhy(),
       staleWhy: staleWhy(),

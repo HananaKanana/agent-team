@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ateam 的 Windows 安装程序：一个 exe，里面嵌着 payload.zip（node、app、托盘程序 ateam.exe、ateam.cmd）。
+    装到 %LOCALAPPDATA%\Programs\ateam，不需要管理员权限。
+
+    build.sh 传进来：-p:Version=... -p:AteamPayload=<payload.zip> -p:AteamIcon=<ateam.ico>
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>ateam-setup</AssemblyName>
+    <RootNamespace>Ateam</RootNamespace>
+    <ApplicationIcon>$(AteamIcon)</ApplicationIcon>
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+    <Version>0.0.0</Version>
+    <Product>ateam</Product>
+    <Company>ateam</Company>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Installation.cs" />
+    <EmbeddedResource Include="$(AteamPayload)" LogicalName="payload.zip" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

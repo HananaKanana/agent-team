@@ -1,6 +1,6 @@
 // 升级：从 GitHub Releases 查新版本、下载对应架构的安装包、核对 sha256、交给系统安装程序。
 // 只有安装版（install.js 的 mode() 为 installed）才查；开发模式和源码运行不查。
-// Release 约定：tag vX.Y.Z，附件 ateam-X.Y.Z-arm64.pkg / ateam-X.Y.Z-x64.pkg 和各自的 <安装包名>.sha256（release.sh 生成）。
+// Release 约定：tag vX.Y.Z，附件 ateam-X.Y.Z-arm64.pkg / ateam-X.Y.Z-x64.pkg / ateam-X.Y.Z-win-x64.exe 和各自的 <安装包名>.sha256（release.sh 生成）。
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
@@ -23,7 +23,8 @@ export function isNewer(a, b) {
   return false;
 }
 
-export function packageName(v, arch = process.arch) {
+export function packageName(v, arch = process.arch, platform = process.platform) {
+  if (platform === 'win32') return arch === 'x64' ? `ateam-${v}-win-x64.exe` : null;
   return arch === 'arm64' || arch === 'x64' ? `ateam-${v}-${arch}.pkg` : null;
 }
 
@@ -105,6 +106,11 @@ export async function install(wanted, onProgress = () => {}) {
     throw new Error('安装包校验失败（sha256 不一致），已删除下载的文件。请稍后重试');
   }
   renameSync(part, file);
+  if (process.platform === 'win32') {
+    // Windows 安装程序 /update：不弹窗，退掉托盘程序、换掉程序文件、重新打开托盘。不需要管理员权限
+    spawn(file, ['/update'], { detached: true, stdio: 'ignore', windowsHide: true, cwd: tmpdir() }).unref();
+    return { version: rel.version, file };
+  }
   // 交给系统安装程序：用户输一次管理员密码。下载的文件没有隔离标记，不会被 Gatekeeper 拦
   spawn('open', [file], { detached: true, stdio: 'ignore' }).unref();
   return { version: rel.version, file };

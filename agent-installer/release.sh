@@ -8,7 +8,7 @@
 #   1. 检查：在 main、工作区干净、版本号比当前新、tag 不存在、gh 已登录；
 #   2. 发布前检查（precheck.mjs：语法、文档里提到的命令都存在），不过就停；
 #   3. 改 package.json 的版本并提交；
-#   4. 打 arm64 和 x64 两个安装包（build.sh 自己会展开核对 node 签名和文件），生成各自的 .sha256；
+#   4. 打 Mac 的 arm64、x64 两个安装包（build.sh 自己会展开核对 node 签名和文件）和 Windows 的 win-x64 安装包，生成各自的 .sha256；
 #   5. 生成更新说明（上个 tag 以来的提交标题），可以先编辑；确认后打 tag、推送 main 和 tag、建 Release 上传。
 # 中途失败：第 3 步之后失败时，版本号提交还在本地，没有推送；修好后可以用同一个版本号重跑（会跳过改版本）。
 
@@ -59,8 +59,7 @@ fi
 log "打包"
 rm -f "$DIST"/ateam-"$NEW"-*
 bash "$HERE/mac/build-all.sh"
-for arch in arm64 x64; do
-    PKG="ateam-$NEW-$arch.pkg"
+for PKG in "ateam-$NEW-arm64.pkg" "ateam-$NEW-x64.pkg" "ateam-$NEW-win-x64.exe"; do
     [ -f "$DIST/$PKG" ] || die "没有打出 $PKG"
     ( cd "$DIST" && shasum -a 256 "$PKG" > "$PKG.sha256" )
     cat "$DIST/$PKG.sha256"
@@ -87,7 +86,8 @@ git tag -a "v$NEW" -m "v$NEW"
 git push origin main "v$NEW"
 gh release create "v$NEW" --repo "$GH_REPO" --title "v$NEW" --notes-file "$NOTES" \
     "$DIST/ateam-$NEW-arm64.pkg" "$DIST/ateam-$NEW-arm64.pkg.sha256" \
-    "$DIST/ateam-$NEW-x64.pkg" "$DIST/ateam-$NEW-x64.pkg.sha256"
+    "$DIST/ateam-$NEW-x64.pkg" "$DIST/ateam-$NEW-x64.pkg.sha256" \
+    "$DIST/ateam-$NEW-win-x64.exe" "$DIST/ateam-$NEW-win-x64.exe.sha256"
 
 log "完成"
 echo "v$NEW 已发布：https://github.com/$GH_REPO/releases/tag/v$NEW"

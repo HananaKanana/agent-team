@@ -2378,13 +2378,16 @@ function settingsPage() {
         input = el('select', { class: 'setting-num' }, it.options.map(([value, label]) => el('option', { value }, label)));
         input.value = String(cfg[it.key]);
         input.addEventListener('change', () => saveSetting(it.key, input.value));
+        // Windows 版只支持 ego-browser（服务端也按 ego 处理）
+        if (it.key === 'testBrowser' && data.platform === 'win32') input.disabled = true;
       } else {
         input = el('input', { type: 'number', class: 'setting-num', min: String(it.min ?? 1), step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);
         input.addEventListener('change', () => saveSetting(it.key, input.value));
       }
       input.addEventListener('click', (e) => e.stopPropagation());
-      const row = el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, it.hint)));
+      const hint = it.key === 'testBrowser' && data.platform === 'win32' ? `${it.hint}Windows 版仅支持 ego-browser。` : it.hint;
+      const row = el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, hint)));
       return it.key === 'testBrowser' && cfg.testBrowser === 'ego' ? [row, egoProfilesSetting()] : row;
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
@@ -3410,6 +3413,8 @@ function rehearsalTag(t) {
 }
 function demoButton(t) {
   const stop = (e) => e.stopPropagation();
+  // Windows 版不支持预演和演播（提词悬浮窗、窗口控制只有 Mac 版）
+  if (t.status === 'ready' && data.platform === 'win32') return el('span', { class: 'lozenge c-pending', title: '请在 Mac 上运行 ateam 预演和演播这张卡' }, 'Windows 版不支持演播');
   if (t.status === 'ready') {
     const blockers = data.demoBlockers?.[t.id] ?? [];
     // 旧的按坐标录的操作记录：只能重新预演
@@ -5336,7 +5341,7 @@ function installGuide() {
       ? el('div', { class: 'wcard' },
         el('div', { class: 'wcard-head' }, el('b', null, 'ateam 命令与 skill')),
         done(true, `已通过安装包安装（${data.update.modeLabel}），命令和 skill 已自动配置`),
-        el('p', { class: 'hint' }, '菜单栏的 ateam 图标可启动、停止各项目的服务，有新版本时点页头的「有新版本」更新。skill 链接被删除或平台是后来才安装的，在终端运行 ateam setup 重新配置。'))
+        el('p', { class: 'hint' }, `${data.platform === 'win32' ? '屏幕右下角托盘' : '菜单栏'}的 ateam 图标可启动、停止各项目的服务，有新版本时点页头的「有新版本」更新。skill 链接被删除或平台是后来才安装的，在终端运行 ateam setup 重新配置。`))
       : step('ateam 命令与 skill',
         '推荐使用安装包：在 GitHub 的 agent-team 发布页（Releases）下载对应芯片的安装包，安装后自动完成以下配置，并提供菜单栏图标和自动更新。从源码运行时，在终端执行一次以下命令：ateam setup 会把 skill 链接到本机已安装的 Claude Code、DeepSeek Harness、WorkBuddy，并安装 hook。提示找不到 ateam 命令时，说明 npm 全局目录不在 PATH 中，需将 $(npm prefix -g)/bin 加入 ~/.zshrc 的 PATH。',
         `cd ${tool}\nnpm link\nateam setup`),
@@ -5353,6 +5358,8 @@ function installGuide() {
       info.egoBin
         ? done(true, `已安装（${info.egoBin}）${Object.entries(info.egoSkill ?? {}).filter(([, ok]) => !ok).map(([p]) => `；${p} 的 skill 目录中未找到 ego-browser，请重新运行 ego lite 安装`).join('')}`)
         : el('p', { class: 'hint' }, '在浏览器中打开 ', el('a', { href: 'https://lite.ego.app', target: '_blank', rel: 'noopener' }, 'lite.ego.app'), ' 下载并安装 ego lite。安装时会自动把 ego-browser skill 链接到各 agent 平台，无需手动配置。安装后在「设置」中将「测试用的浏览器」改为 ego-browser。被测网站首次未登录时，test worker 会把浏览器交给你并发起提问，在 ego lite 中登录一次即可。')),
+    // Windows 版只支持 ego-browser：dsh-cdp 的启动脚本和窗口控制只有 Mac 版
+    ...(data.platform === 'win32' ? [el('p', { class: 'hint' }, 'Windows 版仅支持 ego-browser，无需配置「平台自带」。')] : [
     el('div', { class: 'helper-sec' }, el('h4', null, '方式二：平台自带')),
     el('p', { class: 'hint' }, '仅在 DeepSeek Harness 上使用 test worker 进行测试或演播时需要，只需配置一次；WorkBuddy 上的 test worker 使用其自带的 Chrome 插件，无需以下步骤。DeepSeek Harness 的 test worker 将打开独立的 Chrome 窗口操作页面，与日常使用的 Chrome 相互隔离，不影响书签和登录状态，也不会反复弹出「允许远程调试」提示。'),
     info.browserSkill === 'linked'
@@ -5361,6 +5368,7 @@ function installGuide() {
         `${info.browserSkill === 'copied' ? `rm -rf ${skillsDir}/browser-cdp-setup\n` : ''}ln -s ${tool}/skills/browser-cdp-setup ${skillsDir}/browser-cdp-setup`),
     installStep2(info, installProfile),
     step('③ 由 test worker 完成后续配置', 'test worker 启动后将自动打开测试专用的 Chrome（独立窗口）并完成自检。被测网站首次未登录时，test worker 会发起提问（任务进入「等待答复」），在该窗口中登录一次即可，登录状态长期有效。', null),
+    ]),
   ];
 }
 

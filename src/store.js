@@ -65,6 +65,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   function config() {
     const out = {};
     for (const [key, spec] of Object.entries(SETTINGS)) out[key] = state.settings?.[key] ?? spec.def();
+    // Windows 上只支持 ego-browser（dsh-cdp 的启动脚本、窗口控制只有 Mac 版）。看板同步来的设置也按这台电脑算
+    if (process.platform === 'win32') out.testBrowser = 'ego';
     return out;
   }
 
@@ -225,7 +227,8 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   // ---------- 路径重叠 ----------
 
   function normPath(p) {
-    const s = String(p).trim().replace(/^\.\//, '').replace(/\/+$/, '');
+    // Windows 上可能写成 web\\src：统一成 /
+    const s = String(p).trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
     return s === '.' ? '' : s;
   }
 

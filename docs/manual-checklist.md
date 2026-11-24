@@ -247,6 +247,22 @@
 28. [ ] 服务在运行时切换模式：安装版服务运行中执行 `ateam dev on ~/code/agent-team`，约 3 秒内看板顶部出现「服务需要重启：已切换到开发模式，当前服务仍在运行安装版的代码」，「待处理」和菜单栏也提示；点「重启」后提示消失、看板用的是仓库里的代码；反过来 `ateam dev off` 提示「已切换回安装版……」；没有切换时不出现
 29. [ ] 两个项目同时用默认端口：项目 A 的服务（局域网模式，占着 7700）在运行时，从菜单栏或命令行启动项目 B，B 自动改用 7701 并正常打开看板，不再弹「启动失败：端口 7700 被占用」；B 用 `--local` 启动时也一样换到 7701，不会和 A 同时占着 7700
 
+## Windows 版
+
+1. [ ] 在 Windows 10 / 11 上双击 `ateam-<版本>-win-x64.exe`：SmartScreen 拦下时点「更多信息 → 仍要运行」后不再弹 UAC；出现「正在安装」小窗，装完弹出说明（托盘位置、需重新打开终端和 agent 平台、skill 与 hook 结果）；`%LOCALAPPDATA%\Programs\ateam` 下有 `ateam.exe`、`ateam.cmd`、`node\v24.21.0\node.exe`、`app\`；安装记录在 `%TEMP%\ateam-install.log`
+2. [ ] 新开的 PowerShell 和 cmd 里 `ateam version` 都能运行，输出中文不乱码；`ateam status`、`ateam wait` 等命令的中文输出在 DeepSeek Harness、WorkBuddy 的 worker 会话里也不乱码（这一条最先测）
+3. [ ] skill：`%USERPROFILE%\.claude\skills\ateam-lead`、DeepSeek Harness 和 WorkBuddy 的 `ateam-worker` 是指向安装目录的目录联接；hook：DeepSeek Harness（需已打开）和 WorkBuddy 的 hook 都装上，worker 做卡时看板「最后活动」随工具调用更新，hook 不报错、不拦工具
+4. [ ] 托盘：右下角出现 ateam 图标，左键、右键都弹出菜单；「添加项目…」选目录后列出，「启动并打开看板」后台启动服务（没有黑色窗口）并在浏览器打开看板，`.ateam\serve.log` 有输出；停止、重启、查看日志（记事本）、在资源管理器中显示、在终端中打开、在 VS Code 中打开（装了时）都可用；退出托盘后服务仍在运行，重新打开托盘能识别
+5. [ ] 托盘待处理：项目有待验收等事项时图标出现小红点、菜单顶部列出事项，点击直达看板；持续 1 分钟后弹系统通知，点通知直达；「设置」里关掉通知后不再弹
+6. [ ] 托盘在线 worker 子菜单：打开它的卡、发消息（输入框发送后 worker 收到）、做完后下线 / 立即下线（先确认）；「启动 worker」按角色在 DeepSeek Harness 中新开会话；WorkBuddy 平台时打开 WorkBuddy 并填好提示词和工作目录，提示「请按回车发送」
+7. [ ] 托盘「设置」：阻止睡眠开启且有进行中的任务时，菜单顶部显示「正在阻止休眠」，`powercfg /requests` 里能看到 ateam.exe 的 SYSTEM 请求；「开机后自动打开」取消后注销重登不再自动出现，再勾上恢复
+8. [ ] 两个项目同时运行：第二个自动改用 7701；看板显示偏好（主题、空列收窄）两个项目共用
+9. [ ] 设置 →「测试用的浏览器」显示 ego-browser 且不可修改，说明里写明 Windows 版仅支持 ego-browser；test worker 领测试卡时输出「## 浏览器：ego-browser」；装了 ego lite 时「安装」页显示已安装、ego profile 能读到；「安装」页不显示「方式二：平台自带」
+10. [ ] 演播卡在 Windows 上显示「Windows 版不支持演播」，没有预演 / 演播按钮
+11. [ ] 升级：发布更高版本后托盘出现「有新版本 …，点击更新…」，点击后托盘图标消失片刻后重新出现，版本号更新；正在运行的服务不中断，看板提示重启后点「重启」正常
+12. [ ] 卸载：「设置 → 应用」里卸载 ateam，确认后各项目服务停止，托盘消失，安装目录、开始菜单快捷方式、PATH 里的 ateam 目录、开机自启项都被删除，skill 联接和 hook 被移除；各项目 `.ateam\` 和 `.config\ateam` 保留
+13. [ ] 任务路径写成 `web\src` 与 `web/src` 效果相同（路径重叠判断、提交）
+
 ## 多人协作
 
 1. [ ] 两台电脑（或同一台电脑上的两个克隆）在同一个项目里各自启动 ateam；甲在项目目录运行 `ateam sync init`：输出「已开启，名字 <git 用户名>，分支 ateam/<名字>」；远程仓库出现 `ateam/<名字>` 分支；本地 `git branch` 看不到它，`git status` 和 `git log` 没有变化

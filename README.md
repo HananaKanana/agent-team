@@ -74,7 +74,7 @@
 
 ## 一、安装（只做一次）
 
-### 方式一：安装包（推荐，仅 macOS）
+### 方式一：安装包（推荐，macOS 与 Windows）
 
 在 <https://github.com/HananaKanana/agent-team/releases/latest> 下载对应芯片的安装包：Apple 芯片（M 系列）选 `ateam-<版本>-arm64.pkg`，Intel 芯片选 `-x64.pkg`。双击安装，输入一次管理员密码。安装包没有签名，第一次打开被拦时到「系统设置 → 隐私与安全性」点「仍要打开」。
 
@@ -94,6 +94,22 @@
 **卸载**：运行 `/Library/Application Support/ateam/卸载 ateam.command`。各项目里的 `.ateam/` 不会删除。
 
 **开发模式**（维护 ateam 源码的人用）：`ateam dev on ~/code/agent-team` 让 `ateam` 命令、skill 和 hook 改用源码仓库的代码，改完代码重启服务即生效，不检查更新；`ateam dev off` 切回安装版；`ateam dev` 查看当前模式。切换后 skill 链接和 hook 自动改指向，正在运行的服务要重启（菜单栏「重启服务」或看板提示条上的「重启」）才会改用另一份代码，切换后看板顶部会提示「服务需要重启」并说明原因；菜单栏顶部显示当前模式，看板左上角的版本号悬停也能看到。第一次安装时，如果现有 skill 链接指向某个源码仓库（下面方式二的用法），会自动进入开发模式并保持原样，同时删掉 `npm link` 留下的旧命令。
+
+### Windows 安装包
+
+在同一个发布页下载 `ateam-<版本>-win-x64.exe`，双击安装（不需要管理员权限）。安装包没有签名，第一次运行时 Windows 提示「Windows 已保护你的电脑」，点「更多信息 → 仍要运行」。
+
+- 装到 `%LOCALAPPDATA%\Programs\ateam`（自带 Node），把这个目录加进用户 PATH，提供 `ateam` 命令（`ateam.cmd`）。**装完要重新打开终端、Claude Code、DeepSeek Harness 和 WorkBuddy**，之后在里面才能用 `ateam` 命令；
+- 和 Mac 一样自动链接 skill（Windows 上建的是目录联接）、安装 hook、设置开机自启；配置目录也都在用户目录下（`.dsh`、`.workbuddy`、`.claude`、`.config\ateam`）；
+- **托盘程序**：屏幕右下角通知区域的 ateam 图标（可能收在「^」里），左键或右键点开，功能与 Mac 菜单栏图标相同：项目列表、启动 / 停止 / 重启服务、打开看板、待处理事项和小红点、在线 worker 及其子菜单、按角色启动 worker、检查更新；「设置」里有阻止睡眠、系统通知、开机后自动打开三个开关。新的待处理事项以系统通知提示，点通知直达看板（通知上没有操作按钮）；
+- 升级：点「有新版本」后在后台下载安装，托盘图标消失片刻后重新出现，之后按看板提示重启服务；
+- 卸载：「设置 → 应用 → 已安装的应用」里找到 ateam 卸载，或运行 `%LOCALAPPDATA%\Programs\ateam\ateam.exe --uninstall`。会先停止各项目的服务；各项目的 `.ateam\` 和 `.config\ateam` 不删除。
+
+Windows 版的限制：
+- **不支持预演和演播**（演播卡显示「Windows 版不支持演播」，可在 Mac 上演播）；
+- **测试浏览器只支持 ego-browser**（ego lite 有 Windows 版，操作与 Mac 相同），「测试用的浏览器」设置固定为 ego-browser；
+- **WorkBuddy 自动启动 worker 只填好提示词**，需要在 WorkBuddy 中按回车发送；DeepSeek Harness 自动启动不受影响；
+- worker 用 PowerShell 或 cmd 运行命令时，多行文字的写法见 worker skill（PowerShell 用 `@'…'@`）。
 
 **看板显示偏好**：主题、侧栏收起、空列收窄（默认关闭）、触屏模式、悬停显示依赖、提词悬浮窗设置这些所有项目共用；worker 顺序、各分组是否展开按项目分开。都存在本机 `~/.config/ateam/dashboard.json`，项目换了端口、换个浏览器打开都还在。局域网只读访问的电脑改这些只存在它自己的浏览器里。
 
@@ -451,6 +467,6 @@ ateam help          # 全部命令
 bash agent-installer/release.sh 1.0.1
 ```
 
-它会依次：做发布前检查（所有脚本和看板页面的语法、文档里提到的 `ateam` 命令都存在，不通过就停）→ 改 `package.json` 版本并提交 → 打 arm64 和 x64 两个安装包（下载官方 Node 并核对 sha256，打完展开核对 Node 签名未被改动、文件齐全）→ 生成 `.sha256` → 生成更新说明（上个版本以来的提交标题，可先编辑）→ 确认后打 tag、推送、在 GitHub 建 Release 并上传。只打包不发布：`bash agent-installer/mac/build-all.sh`，产物在 `agent-installer/dist/`，建议先装上测试，确认无误后再运行 `release.sh` 发布。GitHub 仓库需公开，未登录的电脑才能检查更新和下载。
+它会依次：做发布前检查（所有脚本和看板页面的语法、文档里提到的 `ateam` 命令都存在，不通过就停）→ 改 `package.json` 版本并提交 → 打 Mac 的 arm64、x64 两个安装包（下载官方 Node 并核对 sha256，打完展开核对 Node 签名未被改动、文件齐全）和 Windows 的 win-x64 安装包（`agent-installer/windows/build.sh`，在 Mac 上用 dotnet SDK 编译托盘程序和安装程序）→ 生成 `.sha256` → 生成更新说明（上个版本以来的提交标题，可先编辑）→ 确认后打 tag、推送、在 GitHub 建 Release 并上传。只打包不发布：`bash agent-installer/mac/build-all.sh`，产物在 `agent-installer/dist/`，建议先装上测试，确认无误后再运行 `release.sh` 发布。GitHub 仓库需公开，未登录的电脑才能检查更新和下载。
 
 设计细节见 [docs/superpowers/specs/2026-10-03-agent-team-design.md](docs/superpowers/specs/2026-10-03-agent-team-design.md)。

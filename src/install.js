@@ -1,18 +1,22 @@
 // 安装包相关：版本、运行模式（安装版 / 开发模式 / 源码）、skill 软链、开发模式切换、菜单栏程序用的项目列表。
-// 安装包把程序装在 /Library/Application Support/ateam（node/ 和 app/），/usr/local/bin/ateam 是启动脚本：
+// Mac：安装包把程序装在 /Library/Application Support/ateam（node/ 和 app/），/usr/local/bin/ateam 是启动脚本。
+// Windows：装在 %LOCALAPPDATA%\Programs\ateam（node\、app\、托盘程序 ateam.exe），启动脚本是那里的 ateam.cmd（安装时加进用户 PATH）。
 // ~/.config/ateam/dev-repo 记着源码仓库时运行仓库里的代码（开发模式），否则运行 app/ 里的。
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, delimiter, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const TOOL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const INSTALL_DIR = '/Library/Application Support/ateam';
+export const WIN = process.platform === 'win32';
+export const INSTALL_DIR = WIN ? join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Programs', 'ateam') : '/Library/Application Support/ateam';
 export const APP_DIR = join(INSTALL_DIR, 'app');
-export const WRAPPER = '/usr/local/bin/ateam';
-export const MENU_APP = '/Applications/ateam.app';
+export const WRAPPER = WIN ? join(INSTALL_DIR, 'ateam.cmd') : '/usr/local/bin/ateam';
+export const MENU_APP = WIN ? join(INSTALL_DIR, 'ateam.exe') : '/Applications/ateam.app';
 const home = () => homedir();
+// Windows 的开机自启：HKCU\...\Run 里的 ateam 一项（Mac 是 LaunchAgents 里的 plist）
+const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 export const configDir = () => join(home(), '.config', 'ateam');
 const devFile = () => join(configDir(), 'dev-repo');
 const projectsFile = () => join(configDir(), 'projects.json');
@@ -20,6 +24,8 @@ const loginItemFile = () => join(home(), 'Library', 'LaunchAgents', 'com.ateam.m
 const noLoginItemFile = () => join(configDir(), 'no-login-item');
 
 const real = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+// 软链（Windows 上是 junction）指向的绝对路径。junction 读出来可能带 \\?\ 前缀和结尾的分隔符
+const linkTarget = (dir, link) => resolve(dir, readlinkSync(link).replace(/^\\\\\?\\/, '').replace(/[\\/]+$/, ''));
 const isDir = (p) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
 export function version() {
@@ -101,7 +107,7 @@ function extraLinks() {
       if (fixed.has(dest)) continue;
       try {
         if (!lstatSync(dest).isSymbolicLink()) continue;
-        const target = resolve(dir, readlinkSync(dest));
+        const target = linkTarget(dir, dest);
         if (basename(target) === name && basename(dirname(target)) === 'skills' && isRepo(dirname(dirname(target)))) out.push({ platform: dir.replace(h, '~'), name, dir });
       } catch {}
     }
@@ -115,7 +121,7 @@ function linkedRepo() {
     try {
       const link = join(t.dir, t.name);
       if (!lstatSync(link).isSymbolicLink()) continue;
-      const repo = resolve(t.dir, readlinkSync(link), '..', '..');
+      const repo = resolve(linkTarget(t.dir, link), '..', '..');
       if (isRepo(repo) && real(repo) !== real(APP_DIR)) return repo;
     } catch {}
   }
@@ -135,7 +141,7 @@ function linkSkills(source) {
       let st = null;
       try { st = lstatSync(dest); } catch {}
       if (st?.isSymbolicLink()) {
-        if (resolve(t.dir, readlinkSync(dest)) === target) { lines.push(`✓ ${t.platform}：${t.name} 已链接`); continue; }
+        if (linkTarget(t.dir, dest) === target) { lines.push(`✓ ${t.platform}：${t.name} 已链接`); continue; }
         unlinkSync(dest);
       } else if (st) {
         const backup = join(configDir(), 'backup', `${t.platform.replace(/\s+/g, '')}-${t.name}-${stamp}`);
@@ -143,7 +149,8 @@ function linkSkills(source) {
         renameSync(dest, backup);
         lines.push(`  ${dest} 原来是一个目录，已移到 ${backup}`);
       }
-      symlinkSync(target, dest);
+      // Windows 上建目录联接（junction）：普通符号链接要管理员权限或开发者模式
+      symlinkSync(target, dest, WIN ? 'junction' : 'dir');
       lines.push(`✓ ${t.platform}：${t.name} → ${target}`);
     } catch (err) {
       lines.push(`✗ ${t.platform}：${t.name} 链接失败（${err.message.split('\n')[0]}）`);
@@ -159,7 +166,7 @@ function unlinkSkills(source) {
   for (const t of [...skillTargets(), ...extraLinks()]) {
     const dest = join(t.dir, t.name);
     try {
-      if (lstatSync(dest).isSymbolicLink() && resolve(t.dir, readlinkSync(dest)).startsWith(`${source}/`)) {
+      if (lstatSync(dest).isSymbolicLink() && linkTarget(t.dir, dest).startsWith(`${source}${sep}`)) {
         unlinkSync(dest);
         lines.push(`已删除 ${dest}`);
       }
@@ -198,7 +205,9 @@ function uninstallHooks(bin) {
 // PATH 里名为 ateam、指向某个 .../bin/ateam.js 的软链（npm link 建的）会抢在 /usr/local/bin/ateam 前面，删掉
 function removeNpmLinks() {
   const h = home();
-  const dirs = new Set([...String(process.env.PATH ?? '').split(':'), '/opt/homebrew/bin', join(h, '.npm-global', 'bin'), join(h, '.local', 'bin')]);
+  // Windows 上 npm link 建的是 ateam.cmd 之类的脚本，不是软链，这里不处理
+  if (WIN) return [];
+  const dirs = new Set([...String(process.env.PATH ?? '').split(delimiter), '/opt/homebrew/bin', join(h, '.npm-global', 'bin'), join(h, '.local', 'bin')]);
   const nvm = join(h, '.nvm', 'versions', 'node');
   if (isDir(nvm)) for (const v of readdirSync(nvm)) dirs.add(join(nvm, v, 'bin'));
   const lines = [];
@@ -220,10 +229,22 @@ function removeNpmLinks() {
 // ---------- 登录时打开菜单栏程序 ----------
 
 export function loginItemOn() {
+  if (WIN) {
+    try { execFileSync('reg', ['query', RUN_KEY, '/v', 'ateam'], { stdio: 'ignore', windowsHide: true }); return true; } catch { return false; }
+  }
   return existsSync(loginItemFile());
 }
 
 export function setLoginItem(on) {
+  if (WIN) {
+    try {
+      if (on) execFileSync('reg', ['add', RUN_KEY, '/v', 'ateam', '/t', 'REG_SZ', '/d', `"${MENU_APP}"`, '/f'], { stdio: 'ignore', windowsHide: true });
+      else execFileSync('reg', ['delete', RUN_KEY, '/v', 'ateam', '/f'], { stdio: 'ignore', windowsHide: true });
+    } catch {}
+    if (on) rmSync(noLoginItemFile(), { force: true });
+    else { mkdirSync(configDir(), { recursive: true }); writeFileSync(noLoginItemFile(), ''); }
+    return;
+  }
   if (on) {
     mkdirSync(dirname(loginItemFile()), { recursive: true });
     writeFileSync(loginItemFile(), `<?xml version="1.0" encoding="UTF-8"?>
@@ -265,7 +286,7 @@ export function setup({ installer = false } = {}) {
   lines.push(...installHooks(join(source, 'bin', 'ateam.js')));
   if (installed() && !loginItemOn() && !existsSync(noLoginItemFile())) {
     setLoginItem(true);
-    lines.push('✓ 已设置登录时自动打开 ateam 菜单栏程序（可在菜单里取消）');
+    lines.push(WIN ? '✓ 已设置开机后自动打开 ateam 托盘程序（可在托盘菜单里取消）' : '✓ 已设置登录时自动打开 ateam 菜单栏程序（可在菜单里取消）');
   }
   return lines.join('\n');
 }
@@ -276,7 +297,7 @@ export function teardown() {
   const dev = devRepo();
   if (dev) lines.push(...unlinkSkills(dev));
   lines.push(...uninstallHooks(join(APP_DIR, 'bin', 'ateam.js')));
-  rmSync(loginItemFile(), { force: true });
+  if (WIN) { try { execFileSync('reg', ['delete', RUN_KEY, '/v', 'ateam', '/f'], { stdio: 'ignore', windowsHide: true }); } catch {} } else rmSync(loginItemFile(), { force: true });
   if (dev) lines.push(`开发模式记录的仓库 ${dev} 没有动。卸载后要继续从源码运行，在仓库里执行 npm link，再运行 ateam setup。`);
   return lines.join('\n');
 }

@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    ateam 的 Windows 托盘程序（和 Mac 的 menubar/main.swift 对应）。
+
+    目标框架是 .NET Framework 4.8：Windows 10 / 11 自带，用户不用另装运行库；
+    在 Mac 上用 dotnet SDK 就能编（EnableWindowsTargeting），不需要 Windows 机器。
+    build.sh 传进来：-p:Version=... -p:AteamIcon=<ateam.ico> -p:AteamNodeVersion=v24.21.0
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>ateam</AssemblyName>
+    <RootNamespace>Ateam</RootNamespace>
+    <ApplicationIcon>$(AteamIcon)</ApplicationIcon>
+    <ApplicationManifest>..\app.manifest</ApplicationManifest>
+    <Version>0.0.0</Version>
+    <Product>ateam</Product>
+    <Company>ateam</Company>
+    <Nullable>disable</Nullable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 和安装程序共用：退掉托盘、PATH、卸载入口 -->
+    <Compile Include="..\Installation.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 托盘程序按这个版本找 node\<版本>\node.exe -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>NodeVersion</_Parameter1>
+      <_Parameter2>$(AteamNodeVersion)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- JavaScriptSerializer：解析服务返回的 JSON（.NET Framework 自带） -->
+    <Reference Include="System.Web.Extensions" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

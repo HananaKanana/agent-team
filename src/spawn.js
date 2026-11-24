@@ -20,8 +20,32 @@ function launchKey() {
   }
 }
 
+const WIN = process.platform === 'win32';
+
+// Windows：netstat 列出监听中的本机端口和进程号，tasklist 找出 DeepSeek Harness 的进程
+function dshPortsWin() {
+  let net = '', tasks = '';
+  try {
+    net = execFileSync('netstat', ['-ano', '-p', 'TCP'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    tasks = execFileSync('tasklist', ['/FO', 'CSV', '/NH'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+  } catch {}
+  const pids = new Set();
+  for (const line of tasks.split(/\r?\n/)) {
+    const m = line.match(/^"([^"]+)","(\d+)"/);
+    if (m && /deepseek|dsh/i.test(m[1])) pids.add(m[2]);
+  }
+  const ports = [];
+  for (const line of net.split(/\r?\n/)) {
+    // 监听中的行对端是 0.0.0.0:0 / [::]:0；状态那一列在中文系统上可能是本地化的文字，不看它
+    const m = line.trim().match(/^TCP\s+(?:127\.0\.0\.1|\[::1\]):(\d+)\s+(?:0\.0\.0\.0|\[::\]):0\s+\S+\s+(\d+)$/i);
+    if (m && pids.has(m[2])) ports.push(Number(m[1]));
+  }
+  return [...new Set(ports)];
+}
+
 // DSH 的本机服务端口每次启动都不同：从正在监听的端口里找
 function dshPorts() {
+  if (WIN) return dshPortsWin();
   let out = '';
   try {
     out = execFileSync('lsof', ['-nP', '-a', '-c', 'DeepSeek', '-iTCP', '-sTCP:LISTEN', '-Fn'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -69,8 +93,30 @@ function frontmostIsWorkbuddy() {
   }
 }
 
+// Windows：打开 workbuddy:// 链接（系统按协议交给 WorkBuddy）。只填好提示词和工作目录，回车由用户按
+function openLinkWin(link) {
+  execFileSync('rundll32', ['url.dll,FileProtocolHandler', link], { stdio: 'ignore', windowsHide: true });
+}
+function workbuddyRunningWin() {
+  try {
+    return /workbuddy/i.test(execFileSync('tasklist', ['/FO', 'CSV', '/NH'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }));
+  } catch { return false; }
+}
+
+async function spawnWorkbuddyWin(root, text) {
+  // 冷启动时送到的链接会被丢掉：没在运行就先用不带参数的链接把它打开，等它就绪
+  if (!workbuddyRunningWin()) {
+    try { openLinkWin('workbuddy://'); } catch { throw new AteamError('BAD_STATE', '没有找到 WorkBuddy，请先安装并登录。'); }
+    for (let i = 0; i < 30 && !workbuddyRunningWin(); i++) await sleep(500);
+    await sleep(6000);
+  }
+  openLinkWin(`workbuddy://task?${new URLSearchParams({ action: 'start', prompt: text, cwd: root })}`);
+  return { sent: false, reason: 'Windows 版不自动发送' };
+}
+
 async function spawnWorkbuddy(root, text) {
-  if (process.platform !== 'darwin') throw new AteamError('INVALID', '在 WorkBuddy 中自动启动 worker 目前只支持 macOS。');
+  if (WIN) return spawnWorkbuddyWin(root, text);
+  if (process.platform !== 'darwin') throw new AteamError('INVALID', '在 WorkBuddy 中自动启动 worker 目前只支持 macOS 和 Windows。');
   // 冷启动时送到的链接会被丢掉：先把 WorkBuddy 打开，等它就绪
   if (!workbuddyRunning()) {
     try {
@@ -104,7 +150,7 @@ export async function spawnWorker({ root, role, name, platform = 'dsh' }) {
   if (platform === 'workbuddy') {
     const text = `使用 ateam-worker skill，角色 ${role}${name ? `，名字 ${name}` : ''}`;
     const { sent, reason } = await spawnWorkbuddy(root, text);
-    return { platform, sessionId: null, inWorkspace: true, text, sent, ...(sent ? {} : { note: `提示词和工作目录已填入 WorkBuddy 的输入框，但没有自动发送（${reason}）。请在 WorkBuddy 中按回车发送。要自动发送，在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 ateam serve 的终端。` }) };
+    return { platform, sessionId: null, inWorkspace: true, text, sent, ...(sent ? {} : { note: WIN ? '提示词和工作目录已填入 WorkBuddy 的输入框，请在 WorkBuddy 中按回车发送。' : `提示词和工作目录已填入 WorkBuddy 的输入框，但没有自动发送（${reason}）。请在 WorkBuddy 中按回车发送。要自动发送，在「系统设置 → 隐私与安全性 → 辅助功能」里允许运行 ateam serve 的终端。` }) };
   }
   const key = launchKey();
   const port = await findLauncher(key);

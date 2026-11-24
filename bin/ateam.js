@@ -273,7 +273,7 @@ async function pickPort(wanted, explicit) {
       if (await portFree(port)) return port;
       root = await ateamRootAt(port);
     }
-    if (root && resolve(root) === here) fail(`这个项目的 ateam 服务已经在运行：http://127.0.0.1:${port}。不用再启动；要重启的话，点看板提示条上的「重启」或菜单栏 ateam 图标里的「重启服务」，或在原来的终端里按 Ctrl+C 后重新运行。`);
+    if (root && resolve(root) === here) fail(`这个项目的 ateam 服务已经在运行：http://127.0.0.1:${port}。不用再启动；要重启的话，点看板提示条上的「重启」或菜单栏（Windows 上是右下角托盘）ateam 图标里的「重启服务」，或在原来的终端里按 Ctrl+C 后重新运行。`);
     if (explicit) fail(`端口 ${port} 被占用${root ? `（另一个项目 ${root} 的 ateam 服务）` : ''}。换一个端口，或者去掉 --port 让它自动找空闲端口。`);
   }
   fail(`${wanted} 到 ${wanted + 19} 的端口都被占用了。请用 --port 指定一个空闲端口。`);
@@ -494,7 +494,9 @@ const commands = {
         const pct = total ? Math.floor((received / total) * 100) : -1;
         if (pct >= 0 && pct !== shown && pct % 10 === 0) { shown = pct; process.stderr.write(`下载中 ${pct}%\n`); }
       });
-      return `已下载 ${r.version} 并通过校验，已打开安装程序：按提示输入管理员密码完成安装，然后重启正在运行的 ateam 服务。`;
+      return process.platform === 'win32'
+        ? `已下载 ${r.version} 并通过校验，正在后台安装（托盘图标会消失片刻后重新出现）。装好后重启正在运行的 ateam 服务。`
+        : `已下载 ${r.version} 并通过校验，已打开安装程序：按提示输入管理员密码完成安装，然后重启正在运行的 ateam 服务。`;
     } catch (err) {
       fail(err.message);
     }

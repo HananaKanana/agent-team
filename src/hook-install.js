@@ -5,7 +5,9 @@ import { copyFileSync, existsSync, readFileSync, realpathSync, writeFileSync } f
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const WIN = process.platform === 'win32';
 
 const BRIDGE = '@deepseek-ai/dsh-hooks-claude-code';
 const PROTOCOL = '@deepseek-ai/dsh-hook-protocol';
@@ -30,6 +32,9 @@ const read = (file) => (existsSync(file) ? readFileSync(file, 'utf8') : '');
 function hookCommand(sub) {
   let script = process.argv[1];
   try { script = realpathSync(script); } catch {}
+  // Windows 上 hook 可能由 cmd 也可能由 PowerShell 执行：PowerShell 把带引号的路径当成字符串而不是命令，
+  // 所以路径里没有空格时不加引号（安装目录 %LOCALAPPDATA%\Programs\ateam 一般没有空格），两边都能运行
+  if (WIN && !/\s/.test(process.execPath + script)) return `${process.execPath} ${script} ${sub}`;
   return `"${process.execPath}" "${script}" ${sub}`;
 }
 
@@ -43,9 +48,10 @@ function dshHooks() {
   };
 }
 
-// WorkBuddy 把非 0 退出当成拦截，node 路径随它升级失效时不能影响 worker，所以兜底成功退出
+// WorkBuddy 把非 0 退出当成拦截，node 路径随它升级失效时不能影响 worker，所以兜底成功退出。
+// Windows 上 hook 命令不一定经过 sh（可能是 cmd 或 PowerShell），不加 sh 的写法；hook 子命令自己总是成功退出
 function workbuddyHooks() {
-  const safe = (sub) => [{ type: 'command', command: `${hookCommand(sub)} 2>/dev/null || true`, timeout: 5 }];
+  const safe = (sub) => [{ type: 'command', command: WIN ? hookCommand(sub) : `${hookCommand(sub)} 2>/dev/null || true`, timeout: 5 }];
   return {
     PostToolUse: [{ hooks: safe(POST_TOOL) }],
     PreToolUse: [
@@ -74,15 +80,25 @@ function dshVersion(flags) {
       return execFileSync('defaults', ['read', '/Applications/DeepSeek Harness.app/Contents/Info', 'CFBundleShortVersionString'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     } catch {}
   }
-  throw new Error('无法读取 DeepSeek Harness 版本。在应用的「关于」里查看，然后用 --dsh-version <版本号> 重新运行。');
+  if (WIN) {
+    // 正在运行的 DeepSeek Harness 主程序的产品版本（Electron 写的是 package.json 里的版本，如 0.2.2-rc.5）
+    try {
+      const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+        "Get-Process | Where-Object { $_.ProcessName -like 'DeepSeek*' -and $_.Path } | Select-Object -First 1 -ExpandProperty Path | ForEach-Object { (Get-Item $_).VersionInfo.ProductVersion }"],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 20000 }).trim();
+      if (/^\d+\.\d+\.\d+/.test(out)) return out;
+    } catch {}
+  }
+  throw new Error(`无法读取 DeepSeek Harness 版本${WIN ? '（Windows 上要先打开 DeepSeek Harness）' : ''}。在应用的「关于」里查看，然后用 --dsh-version <版本号> 重新运行。`);
 }
 
 // 优先用 DSH 自带的 pnpm，用户机器上不一定装了
 function pnpmAdd(dir, packages) {
   const bundled = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-runtimes', 'dsh-primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.cjs');
-  const [file, ...args] = existsSync(bundled) ? [process.execPath, bundled] : ['pnpm'];
+  // Windows 上 pnpm 是 pnpm.cmd，要经过 cmd.exe 运行
+  const [file, ...args] = existsSync(bundled) ? [process.execPath, bundled] : WIN ? ['cmd.exe', '/d', '/c', 'pnpm'] : ['pnpm'];
   try {
-    execFileSync(file, [...args, 'add', '-w', ...packages], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+    execFileSync(file, [...args, 'add', '-w', ...packages], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', windowsHide: true });
   } catch (err) {
     // pnpm 把错误原因写在 stdout，只看 stderr 会什么都看不到
     const output = `${err.stdout ?? ''}\n${err.stderr ?? ''}`.trim().split('\n').filter((l) => l.trim()).slice(-15).join('\n');
@@ -115,7 +131,7 @@ function installDsh(flags) {
   // 新插件必须放在 insert 里：只有 id 的条目是改已有的行，匹配不到会被 DSH 跳过。
   // 启动插件的 id 和地址都带上代码的哈希：DSH 会缓存已加载的模块，代码变了要换个新行才会重新加载
   const hash = createHash('sha256').update(read(LAUNCHER)).digest('hex').slice(0, 8);
-  const launcher = `    - id: ateam-launcher-${hash}\n      name: '${new URL(`file://${LAUNCHER}`).href}?v=${hash}'\n`;
+  const launcher = `    - id: ateam-launcher-${hash}\n      name: '${pathToFileURL(LAUNCHER).href}?v=${hash}'\n`;
   const block = `${BEGIN}\n- insert:\n    - id: ateam-hooks\n      name: '${BRIDGE}'\n      config:\n        configPath: ${JSON.stringify(configFile)}\n${launcher}${END}\n`;
   if (installed === version && patch.includes(block) && read(configFile) === config) {
     return `hook 已安装（DeepSeek Harness ${version}），不需要操作。`;

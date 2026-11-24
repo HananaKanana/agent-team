@@ -719,6 +719,7 @@ namespace Ateam
         // 后台启动：经 cmd.exe 把输出追加到 .ateam\serve.log。cmd 不开窗口，托盘退出后服务继续运行
         private void Launch(string p)
         {
+            var from = LogMark(p);
             try
             {
                 Directory.CreateDirectory(Path.Combine(p, ".ateam"));
@@ -735,7 +736,7 @@ namespace Ateam
             {
                 busy.Remove(p);
                 if (ok) Program.Open(statuses.TryGetValue(p, out var s) ? s.Url() : null);
-                else Alert("启动失败", "服务没有在 20 秒内启动。日志末尾：\n\n" + LogTail(p));
+                else Alert("启动失败", "服务没有在 20 秒内启动。本次启动的日志：\n\n" + LogTail(p, from));
             });
         }
 
@@ -753,6 +754,7 @@ namespace Ateam
             var port = Port(p);
             if (port == null) return;
             busy[p] = "重启中…";
+            var from = LogMark(p);
             Task.Run(() =>
             {
                 Http.Call("http://127.0.0.1:" + port + "/api/restart", true);
@@ -760,7 +762,7 @@ namespace Ateam
                 OnUi(() => WaitFor(p, true, 20, ok =>
                 {
                     busy.Remove(p);
-                    if (!ok) Alert("重启失败", "服务没有在 20 秒内重新启动。日志末尾：\n\n" + LogTail(p));
+                    if (!ok) Alert("重启失败", "服务没有在 20 秒内重新启动。本次重启的日志：\n\n" + LogTail(p, from));
                 }));
             });
         }
@@ -785,12 +787,40 @@ namespace Ateam
             });
         }
 
-        private static string LogTail(string p)
+        // serve.log 每次启动都往后追加：启动前记下长度，失败时只显示这之后新写的（不然弹窗里大半是以前几次运行的旧日志）。
+        // 超过 2MB 先改名成 serve.log.old（只留一份），免得越积越大
+        private static long LogMark(string p)
+        {
+            var log = Path.Combine(p, ".ateam", "serve.log");
+            long size;
+            try { size = new FileInfo(log).Length; } catch { return 0; }
+            if (size <= 2 * 1024 * 1024) return size;
+            // 服务还开着这个文件（重启时）就改不了名：这次照常往后接着读，下次停着的时候再换
+            try
+            {
+                File.Delete(log + ".old");
+                File.Move(log, log + ".old");
+                return 0;
+            }
+            catch
+            {
+                return size;
+            }
+        }
+
+        private static string LogTail(string p, long from = 0)
         {
             try
             {
-                var lines = File.ReadAllLines(Path.Combine(p, ".ateam", "serve.log"), Encoding.UTF8);
-                return string.Join("\n", lines.Skip(Math.Max(0, lines.Length - 8)));
+                using (var fs = new FileStream(Path.Combine(p, ".ateam", "serve.log"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                {
+                    fs.Seek(Math.Min(from, fs.Length), SeekOrigin.Begin);
+                    using (var reader = new StreamReader(fs, Encoding.UTF8))
+                    {
+                        var lines = reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                        return lines.Length == 0 ? "（没有输出）" : string.Join("\n", lines.Skip(Math.Max(0, lines.Length - 12)));
+                    }
+                }
             }
             catch
             {

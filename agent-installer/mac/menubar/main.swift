@@ -730,6 +730,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
 
     func launch(_ p: String) {
         try? FileManager.default.createDirectory(atPath: p + "/.ateam", withIntermediateDirectories: true)
+        let from = logMark(p)
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
         proc.arguments = ["-lc", "cd \(shellQuote(p)) && exec /usr/bin/nohup \(WRAPPER) serve >> .ateam/serve.log 2>&1"]
@@ -744,7 +745,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         waitFor(p, running: true, seconds: 20) { ok in
             self.busy[p] = nil
             if ok, let port = self.port(p), let url = URL(string: "http://127.0.0.1:\(port)/") { NSWorkspace.shared.open(url) }
-            else { self.alert("启动失败", "服务没有在 20 秒内启动。日志末尾：\n\n" + self.logTail(p)) }
+            else { self.alert("启动失败", "服务没有在 20 秒内启动。本次启动的日志：\n\n" + self.logTail(p, from: from)) }
         }
     }
 
@@ -760,12 +761,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         guard let p = sender.representedObject as? String, let port = port(p) else { return }
         busy[p] = "重启中…"
         rebuild()
+        let from = logMark(p)
         DispatchQueue.global().async { _ = httpJSON("http://127.0.0.1:\(port)/api/restart", post: true) }
         // 先等旧服务停下，再等新服务起来
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             self.waitFor(p, running: true, seconds: 20) { ok in
                 self.busy[p] = nil
-                if !ok { self.alert("重启失败", "服务没有在 20 秒内重新启动。日志末尾：\n\n" + self.logTail(p)) }
+                if !ok { self.alert("重启失败", "服务没有在 20 秒内重新启动。本次重启的日志：\n\n" + self.logTail(p, from: from)) }
                 self.rebuild()
             }
         }
@@ -792,9 +794,26 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotifica
         tick()
     }
 
-    func logTail(_ p: String) -> String {
-        guard let text = try? String(contentsOfFile: p + "/.ateam/serve.log", encoding: .utf8) else { return "（没有日志）" }
-        return text.split(separator: "\n", omittingEmptySubsequences: false).suffix(8).joined(separator: "\n")
+    // serve.log 每次启动都往后追加：启动前记下长度，失败时只显示这之后新写的（不然弹窗里大半是以前几次运行的旧日志）。
+    // 超过 2MB 先改名成 serve.log.old（只留一份），免得越积越大
+    func logMark(_ p: String) -> UInt64 {
+        let log = p + "/.ateam/serve.log"
+        let size = ((try? FileManager.default.attributesOfItem(atPath: log))?[.size] as? NSNumber)?.uint64Value ?? 0
+        if size > 2 * 1024 * 1024 {
+            try? FileManager.default.removeItem(atPath: log + ".old")
+            try? FileManager.default.moveItem(atPath: log, toPath: log + ".old")
+            return 0
+        }
+        return size
+    }
+
+    func logTail(_ p: String, from: UInt64 = 0) -> String {
+        guard let h = FileHandle(forReadingAtPath: p + "/.ateam/serve.log") else { return "（没有日志）" }
+        defer { h.closeFile() }
+        h.seek(toFileOffset: from)
+        let text = String(decoding: h.readDataToEndOfFile(), as: UTF8.self)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: true).suffix(12)
+        return lines.isEmpty ? "（没有输出）" : lines.joined(separator: "\n")
     }
 
     @objc func showLog(_ sender: NSMenuItem) {

@@ -431,13 +431,26 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
         }
         // 装了安装包：用 /usr/local/bin/ateam 启动（它按开发模式 / 安装版选代码，切换模式后重启也跟着走）。
         // 否则用当前程序的真实路径：argv[1] 可能是 npm link 的软链，装安装包时会被删掉
-        const log = openSync(join(dataDir, 'serve.log'), 'a');
+        const logFile = join(dataDir, 'serve.log');
         let script = process.argv[1];
         try { script = realpathSync(script); } catch {}
         // Windows：ateam.cmd 不能直接 spawn（要经过 cmd），也不需要：按启动脚本的规则（开发模式用仓库、否则用安装目录）选好代码，用同一个 node 跑
         if (WIN && installed()) script = join(devRepo() ?? APP_DIR, 'bin', 'ateam.js');
         const [cmd, ...pre] = !WIN && existsSync(WRAPPER) ? [WRAPPER] : [process.execPath, script];
-        const child = spawn(cmd, [...pre, ...args, '--port', String(port)], { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env, windowsHide: true });
+        const all = [...pre, ...args, '--port', String(port)];
+        let child;
+        if (WIN) {
+          // 托盘经「cmd /c ... >> serve.log」启动的服务：那个 cmd 一直占着 serve.log，直到本进程退出，这里打开会 EBUSY。
+          // 所以也经 cmd 启动新服务，先等两秒（本进程和旧 cmd 退出、放开文件）再打开日志
+          const quoted = [cmd, ...all].map((a) => `"${a}"`).join(' ');
+          child = spawn('cmd.exe', ['/d', '/s', '/c', `"ping -n 3 127.0.0.1 >nul & ${quoted} >> "${logFile}" 2>&1"`],
+            { cwd: root, detached: true, stdio: 'ignore', env: process.env, windowsHide: true, windowsVerbatimArguments: true });
+        } else {
+          // 打不开日志也照样重启，输出丢掉而已，不能让服务就此停掉
+          let log = 'ignore';
+          try { log = openSync(logFile, 'a'); } catch {}
+          child = spawn(cmd, all, { cwd: root, detached: true, stdio: ['ignore', log, log], env: process.env });
+        }
         child.unref();
         console.log(`\nateam 服务已在后台重启（进程 ${child.pid}），输出写到 ${join(dataDir, 'serve.log')}。`);
       } else {

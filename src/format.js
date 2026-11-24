@@ -273,7 +273,7 @@ export function browserSection(choice, { space, agentId, demo = false, profile =
       '## 浏览器：ego-browser',
       '',
       `用户在看板设置里选了 **ego-browser**。这次**只用 ego-browser**，不用 dsh-cdp，也不用 WorkBuddy 自带的浏览器插件。`,
-      '1. 开工前运行 `ego-browser skill`，按它输出的指南操作（脚本用 `ego-browser nodejs` 运行）。命令找不到就 `ateam ask` 请用户安装 ego lite（' + EGO_URL + '，装好后会自己把 skill 链接好），不要换别的浏览器。',
+      '1. 开工前先加载 **ego-browser skill**（平台里没装这个 skill 就运行 `ego-browser skill` 命令看同一份指南），按指南操作（脚本用 `ego-browser nodejs` 运行）。命令找不到就 `ateam ask` 请用户安装 ego lite（' + EGO_URL + '，装好后会自己把 skill 链接好），不要换别的浏览器。',
       own
         ? `2. 这张卡只用一个 TaskSpace：\`${spaceCall}\`，掉线重来也用这个名字和参数接着用；换页面在同一个页面里 \`goto\`，不要每个地址新开页面。`
         : `2. 这张卡只用一个 TaskSpace，名字用卡号：\`${spaceCall}\`，掉线重来也用这个名字接着用；换页面在同一个页面里 \`goto\`，不要每个地址新开页面。`,

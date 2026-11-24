@@ -73,6 +73,21 @@ function dshProfileDir(flags) {
   return dir;
 }
 
+// Electron 的 app.asar：开头是头部长度，接着一段 JSON 目录，文件内容在头部之后。只取 package.json 的 version
+function asarVersion(file) {
+  try {
+    const buf = readFileSync(file);
+    const json = JSON.parse(buf.subarray(16, 16 + buf.readUInt32LE(12)).toString('utf8'));
+    const entry = json.files?.['package.json'];
+    if (!entry) return null;
+    const start = 8 + buf.readUInt32LE(4) + Number(entry.offset);
+    const version = JSON.parse(buf.subarray(start, start + entry.size).toString('utf8')).version;
+    return /^\d+\.\d+\.\d+/.test(version ?? '') ? version : null;
+  } catch {
+    return null;
+  }
+}
+
 function dshVersion(flags) {
   if (flags['dsh-version']) return flags['dsh-version'];
   if (process.platform === 'darwin') {
@@ -81,13 +96,22 @@ function dshVersion(flags) {
     } catch {}
   }
   if (WIN) {
-    // 正在运行的 DeepSeek Harness 主程序的产品版本（Electron 写的是 package.json 里的版本，如 0.2.2-rc.5）
+    // exe 的「产品版本」是四段数字（0.2.2.0），丢了 -rc.5 这样的后缀，桥接包要的是完整版本：
+    // 读安装目录 resources\app.asar 里 package.json 的 version。先找正在运行的主程序，再看常见安装位置
+    const dirs = [];
     try {
-      const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-        "Get-Process | Where-Object { $_.ProcessName -like 'DeepSeek*' -and $_.Path } | Select-Object -First 1 -ExpandProperty Path | ForEach-Object { (Get-Item $_).VersionInfo.ProductVersion }"],
+      const exe = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
+        "Get-Process | Where-Object { $_.ProcessName -like 'DeepSeek*' -and $_.Path } | Select-Object -First 1 -ExpandProperty Path"],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 20000 }).trim();
-      if (/^\d+\.\d+\.\d+/.test(out)) return out;
+      if (exe) dirs.push(dirname(exe));
     } catch {}
+    for (const base of [join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Programs'), process.env.ProgramFiles].filter(Boolean)) {
+      try { for (const n of readdirSync(base)) if (/deepseek/i.test(n)) dirs.push(join(base, n)); } catch {}
+    }
+    for (const d of dirs) {
+      const v = asarVersion(join(d, 'resources', 'app.asar'));
+      if (v) return v;
+    }
   }
   throw new Error(`无法读取 DeepSeek Harness 版本${WIN ? '（Windows 上要先打开 DeepSeek Harness）' : ''}。在应用的「关于」里查看，然后用 --dsh-version <版本号> 重新运行。`);
 }

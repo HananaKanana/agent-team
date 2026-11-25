@@ -361,11 +361,13 @@ async function preJobOutputHook() {
   }
 }
 
-// 从工具调用认出会抢焦点的浏览器操作。只有认出来才去问服务，普通命令不多一次请求。
+// 从工具调用认出浏览器操作（会抢焦点的、以及非测试角色不该用的）。只有认出来才去问服务，普通命令不多一次请求。
 // 辅助函数常写成 c activate、cdp.sh cmd activate；读文件、报进度时提到这些词的不算
 const CDP_HELPER = String.raw`(?:^|[\s;&|(])(?:c|cmd|cdp|\S*cdp\.sh(?:\s+cmd)?)\s+['"]?`;
 const ACTIVATE_IN_COMMAND = new RegExp(String.raw`cmd=activate\b|\bbringToFront\b|\bactivateTarget\b|/json/activate\b|osascript[^\n]*\bactivate\b|\bopen\s+-a\s+[^\n]*(?:Chrome|Chromium)|${CDP_HELPER}activate\b`);
 const OPEN_IN_COMMAND = new RegExp(String.raw`cmd=open\b|${CDP_HELPER}open\b`);
+// 其余用浏览器的办法：只拦非测试角色（服务端按角色判断）
+const USE_IN_COMMAND = /\/api\/dsh-cdp\b|[?&]cmd=[a-z]|chrome-agent\.sh\b|(?:^|[\s;&|(\/])ego-browser(?:\.exe|\.cmd)?(?=\s|$|['"])|--remote-debugging-port\b/;
 const ONLY_MENTIONS = /^\s*(?:(?:cd\s+\S+\s*&&\s*)?(?:ateam|\S*\/ateam|grep|rg|cat|echo|sed|head|tail|less)\s)/;
 
 function browserAction(payload) {
@@ -373,11 +375,13 @@ function browserAction(payload) {
   const name = String(payload.tool_name === 'DeferExecuteTool' ? input.toolName ?? '' : payload.tool_name ?? '');
   if (name === 'mcp__browser__tab_focus') return 'activate';
   if (name === 'mcp__browser__tabs_new') return 'open';
+  if (name.startsWith('mcp__browser__')) return 'use';
   if (!/^(bash|shell)$/i.test(name)) return null;
   const command = String(input.command ?? '');
   if (ONLY_MENTIONS.test(command)) return null;
   if (ACTIVATE_IN_COMMAND.test(command)) return 'activate';
-  return OPEN_IN_COMMAND.test(command) ? 'open' : null;
+  if (OPEN_IN_COMMAND.test(command)) return 'open';
+  return USE_IN_COMMAND.test(command) ? 'use' : null;
 }
 
 async function preBrowserHook() {

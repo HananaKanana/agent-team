@@ -150,12 +150,12 @@ function installInfo() {
     return [p, /^- id:\s*['"]?dsh-cdp['"]?[ \t]*\n(?:(?:[ \t].*)?\n)*?[ \t]+dataDir:/m.test(text)];
   }));
   const hookInstalled = profiles.some((p) => {
-    try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('ateam-hooks-3.json'); } catch { return false; }
+    try { return readFileSync(join(profilesDir, p, 'cordis.patch.yml'), 'utf8').includes('ateam-hooks-4.json'); } catch { return false; }
   });
   // WorkBuddy：用户级 settings.json 里有 ateam 的 hook 命令
   const workbuddyFile = [join(home, '.workbuddy', 'settings.json'), join(home, '.codebuddy', 'settings.json')].find((f) => existsSync(f));
   let workbuddyHook = null;
-  if (workbuddyFile) { try { workbuddyHook = readFileSync(workbuddyFile, 'utf8').includes('hook pre-browser'); } catch {} }
+  if (workbuddyFile) { try { const t = readFileSync(workbuddyFile, 'utf8'); workbuddyHook = t.includes('hook pre-browser') && t.includes('mcp__browser__.*'); } catch {} }
   // ego-browser：命令装在 ~/.local/bin（服务的 PATH 里不一定有），skill 由 ego lite 安装时自己链接到各平台的 skill 目录
   const egoNames = WIN ? ['ego-browser.exe', 'ego-browser.cmd'] : ['ego-browser'];
   const egoBin = [join(home, '.local', 'bin'), ...String(process.env.PATH ?? '').split(delimiter).filter(Boolean)].flatMap((d) => egoNames.map((n) => join(d, n))).find((f) => existsSync(f)) ?? null;

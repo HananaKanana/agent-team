@@ -1,7 +1,7 @@
 // 给 agent 平台装工具后 hook：DSH 走官方桥接包，WorkBuddy 写 settings.json。
 // 重复运行是安全的；改动都在 ateam 标记过的条目里，不碰别人的配置。
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -17,7 +17,7 @@ const POST_TOOL = 'hook post-tool';
 const PRE_JOB_OUTPUT = 'hook pre-job-output';
 const PRE_BROWSER = 'hook pre-browser';
 // 可能抢焦点的工具：跑 shell 命令的（dsh-cdp 经 curl 调用），和 WorkBuddy 的浏览器工具（可能包在 DeferExecuteTool 里）
-const BROWSER_TOOLS = '^(bash|Bash|shell|Shell|DeferExecuteTool|mcp__browser__tab_focus|mcp__browser__tabs_new)$';
+const BROWSER_TOOLS = '^(bash|Bash|shell|Shell|DeferExecuteTool|mcp__browser__.*)$';
 // 读后台输出的工具：DSH 是 job_output，WorkBuddy 是 TaskOutput
 const JOB_OUTPUT_TOOLS = '^(job_output|TaskOutput)$';
 const MANUAL = '文档：agent-team 仓库的 docs/worker-hook-setup.md。';
@@ -191,7 +191,7 @@ function installDsh(flags) {
   const version = dshVersion(flags);
   const patchFile = join(dir, 'cordis.patch.yml');
   // 配置内容变了就换文件名：DSH 只在 patch 变化时重新加载，文件名写在 patch 里
-  const configFile = join(dir, 'ateam-hooks-3.json');
+  const configFile = join(dir, 'ateam-hooks-4.json');
   const installed = JSON.parse(read(join(dir, 'package.json')) || '{}').dependencies?.[BRIDGE];
   const patch = read(patchFile);
   const config = JSON.stringify({ hooks: dshHooks() }, null, 2) + '\n';
@@ -206,6 +206,8 @@ function installDsh(flags) {
   // 版本必须和 DSH 完全一致（桥接包的 peer 依赖锁定了版本）
   if (installed !== version) pnpmAdd(dir, [`${BRIDGE}@${version}`, `${PROTOCOL}@${version}`]);
   writeFileSync(configFile, config);
+  // 旧版本的配置文件 patch 里已经不引用了，顺手删掉
+  for (const f of readdirSync(dir)) if (/^ateam-hooks(-\d+)?\.json$/.test(f) && join(dir, f) !== configFile) rmSync(join(dir, f), { force: true });
   if (!patch.includes(block)) {
     // 备份只留第一次的，它才是 ateam 动手之前的样子
     if (patch && !existsSync(`${patchFile}.bak.ateam`)) copyFileSync(patchFile, `${patchFile}.bak.ateam`);

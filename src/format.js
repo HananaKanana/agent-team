@@ -163,7 +163,7 @@ const CRITIQUE_STATUS = {
 };
 
 // 测试卡常见的毛病：一进浏览器就忘了报进度，看板上一直没动静，15 分钟后还会被当成停住
-const isTestRole = (role) => /^(test|qa|测试)$/i.test(String(role ?? '').trim());
+export const isTestRole = (role) => /^(test|qa|测试)$/i.test(String(role ?? '').trim());
 // 测试报告放哪：任务路径里直接写了 .md 文件就用它，否则放在第一个路径下面。报告一律是 Markdown
 export function testReportPath(task) {
   const ext = '.md';
@@ -300,6 +300,9 @@ function recordedTool(script) {
   return /ego/i.test(m[1]) ? 'ego' : 'platform';
 }
 
+// 非测试卡：自查只做编译、构建、既有测试和代码审阅，浏览器只给测试卡用（hook 也会拦）
+const DEV_NO_BROWSER = '自查只做编译、构建、跑项目已有的测试和代码审阅；**不要打开浏览器验证页面**（dsh-cdp、chrome-agent.sh、ego-browser、WorkBuddy 的浏览器工具都不用，会被 hook 拒绝），也不为了验证去起服务、用 curl 或脚本做端到端。功能验证由测试卡在浏览器里做；提交时如实写验证到哪一步。';
+
 function footer(agentId, task, kind, tpl, browser, egoProfile) {
   return [
     '',
@@ -310,6 +313,7 @@ function footer(agentId, task, kind, tpl, browser, egoProfile) {
     '',
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
+    ...(task && task.kind !== 'demo' && !isTestRole(task.role) ? [DEV_NO_BROWSER] : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId, profile: egoProfile }) : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');

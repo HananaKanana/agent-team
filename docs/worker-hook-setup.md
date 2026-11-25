@@ -23,7 +23,7 @@ ateam hook install --platform dsh        # 或 --platform workbuddy
 
 命令可以重复运行。如果 agent 平台的权限模式只允许写项目目录，worker 自己装不上，会请你在终端里运行这条命令。改动内容：
 
-- **DeepSeek Harness：** 在 profile 目录安装和应用版本一致的桥接包，写入 `ateam-hooks.json`，并在 `cordis.patch.yml` 追加一段带标记的配置。DSH 会自动重新加载这个文件，实测约 25 秒内对运行中的会话生效，不用重启。如果一直不生效（会话日志里没有 `hook/invoked`），再在菜单中点击「Restart App and Host」。重启会打断所有会话，由用户选择时机。DSH 升级后重新运行一次。
+- **DeepSeek Harness：** 在 profile 目录安装和应用版本一致的桥接包，写入 `ateam-hooks-4.json`（配置内容变化时换文件名，DSH 才会重新加载；旧文件自动删除），并在 `cordis.patch.yml` 追加一段带标记的配置。DSH 会自动重新加载这个文件，实测约 25 秒内对运行中的会话生效，不用重启。如果一直不生效（会话日志里没有 `hook/invoked`），再在菜单中点击「Restart App and Host」。重启会打断所有会话，由用户选择时机。DSH 升级后重新运行一次。
 - **WorkBuddy：** 在 `~/.workbuddy/settings.json`（没有则用 `~/.codebuddy/settings.json`）的 `PostToolUse` 追加一条，已有条目不变。之后重启会话，或在 `/hooks` 面板确认。
 
 修改前会把原文件备份为 `<文件名>.bak.ateam`。
@@ -48,7 +48,7 @@ ateam hook install --platform dsh        # 或 --platform workbuddy
 
 - 只在工具调用结束后送达。worker 卡在一条长命令里时，要等这条命令结束。
 - worker 刚加入、还没运行过带 `--as` 的命令时收不到。worker 加入后会马上运行 `ateam wait --as`，实际不受影响。
-- 工具调用前，`ateam hook pre-browser` 拦下会抢焦点的浏览器操作：除演播卡外，`cmd=activate`、`bringToFront`、`osascript … activate`、`open -a Chrome`、WorkBuddy 的 `tab_focus` 一律拒绝；新开标签页（`cmd=open`、`tabs_new`）每个 worker 只放行一次，标签页确实没了时运行 `ateam tab-lost --as <编号>` 后可再开。藏在脚本文件里的调用看不到。
+- 工具调用前，`ateam hook pre-browser` 拦下会抢焦点的浏览器操作：除演播卡外，`cmd=activate`、`bringToFront`、`osascript … activate`、`open -a Chrome`、WorkBuddy 的 `tab_focus` 一律拒绝；新开标签页（`cmd=open`、`tabs_new`）每个 worker 只放行一次，标签页确实没了时运行 `ateam tab-lost --as <编号>` 后可再开。非测试角色（任务卡或 worker 的角色不是 test / qa / 测试，演播卡除外）的浏览器操作全部拒绝：除上述操作外，还包括 `chrome-agent.sh`、`/api/dsh-cdp` 或 `?cmd=` 请求、`ego-browser` 命令、`--remote-debugging-port` 以及 WorkBuddy 的全部 `mcp__browser__*` 工具。藏在脚本文件里的调用看不到。
 - 送达补充说明、任务作废通知（以「# ateam：任务 T? 已作废」开头），以及立即停手通知（以「# ateam：立即停手」开头：worker 干活时被立即下线、任务被收回、演播被用户叫停）。打回仍在 worker 下一次调用 ateam 时送达（那时 worker 在等待，会立即收到）。
 
 ## 停用

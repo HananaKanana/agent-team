@@ -1,5 +1,6 @@
 // 纯逻辑状态机：需求、任务、worker、事件。不碰网络和磁盘，时钟可注入。
 import { AteamError } from './errors.js';
+import { isTestRole } from './format.js';
 import { stepsLabel, VIEWPORT_RE } from './demo.js';
 
 const KEEP_DELIVERED_EVENTS = 200;
@@ -1567,6 +1568,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     if (!agent || agent.status !== 'online') return {};
     const task = agent.currentTask && getTask(agent.currentTask);
     if (task && isDemo(task)) return {};
+    if (!isTestRole(task?.role ?? agent.role)) {
+      return { deny: `浏览器只给测试卡用，${task ? `${task.id} 是 ${task.role} 卡` : `你的角色是 ${agent.role}`}：自查只做编译、构建、跑项目已有的测试和代码审阅，不打开浏览器验证页面，也不为验证起服务做端到端。功能验证交给测试卡；提交时如实写验证到哪一步。确实需要看页面，用 ateam ask --as ${agent.id} 说明原因。` };
+    }
+    if (action === 'use') return {};
     if (action === 'activate') {
       return { deny: `不允许把标签页或浏览器切到前面：这会抢走用户正在用的窗口的焦点，只有演播卡可以。直接在后台标签页里操作（点击、输入、核对、截图都不需要它在前面）。确实操作不了，用 ateam ask --as ${agent.id} 请用户切过去，不要换别的办法置顶。` };
     }

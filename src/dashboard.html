@@ -400,7 +400,8 @@ select.setting-num { width: auto; text-align: left; }
 .usage-tile { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--raised); min-width: 0; }
 .usage-tile > span { display: block; font-size: 11.5px; color: var(--faint); }
 .usage-tile > b { display: block; font-size: 19px; line-height: 26px; color: var(--ink); white-space: nowrap; }
-.usage-tile > small { display: block; font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.usage-tile > small { display: block; font-size: 11.5px; color: var(--faint); }
+.usage-tile > small > span { white-space: nowrap; }
 .usage-split { display: flex; height: 4px; border-radius: 2px; overflow: hidden; background: var(--sunken); margin-top: 6px; }
 .usage-split i { display: block; height: 100%; }
 .u-work { background: var(--brand); }
@@ -4234,7 +4235,7 @@ function usagePage() {
   if (!u.sessions) return [head, el('p', { class: 'hint' }, '本机没有这个项目的 Claude Code 或 DeepSeek Harness 会话记录。WorkBuddy 的 worker 不提供 token 数据。'), note];
   const tile = (name, x) => el('div', { class: 'usage-tile' },
     el('span', null, name), el('b', null, fmtTokens(x.total)),
-    el('small', { title: `输入 ${x.input} · 缓存命中 ${x.cacheRead} · 输出 ${x.output}` }, `调用 ${x.calls} 次 · leader ${pct(x.leader || 0, x.total)} · 空转 ${pct(x.idle, x.total)}`), usageSplit(x));
+    el('small', { title: `输入 ${x.input} · 缓存命中 ${x.cacheRead} · 输出 ${x.output}` }, [`调用 ${x.calls} 次`, `leader ${pct(x.leader || 0, x.total)}`, `空转 ${pct(x.idle, x.total)}`].flatMap((t, i) => [i ? ' · ' : '', el('span', null, t)])), usageSplit(x));
   const open = (id) => { closeUsage(); jumpToTask(id); };
   const jobs = usageAllJobs ? u.jobs : u.jobs.slice(0, 12);
   const jobRows = jobs.flatMap((j) => {

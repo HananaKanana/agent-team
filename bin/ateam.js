@@ -29,7 +29,7 @@ const RETRY_INTERVAL_MS = 2000;
 const RETRYABLE = new Set(['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']);
 const DEFAULT_HOLD_SEC = 90;
 
-const BOOLEAN_FLAGS = new Set(['yes', 'follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local', 'json', 'check', 'installer', 'remove']);
+const BOOLEAN_FLAGS = new Set(['yes', 'user', 'follow', 'no-changes', 'all', 'user-approved', 'after-task', 'top', 'off', 'todo', 'demo', 'slow', 'stuck', 'lan', 'local', 'json', 'check', 'installer', 'remove']);
 const REPEATABLE_FLAGS = new Set(['accept']);
 // 本来就能写多个值（逗号分隔）的参数：写了几遍就合并，不悄悄只留最后一个
 const LIST_FLAGS = new Set(['paths', 'after']);

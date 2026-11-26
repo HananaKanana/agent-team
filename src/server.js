@@ -48,8 +48,10 @@ const EGO_KINDS = new Set([...RULES_KINDS, 'rejected', 'back', 'answer']);
 // 服务端代码指纹：src/*.js 和 bin/ateam.js 的内容哈希。启动时记一份，之后比对，
 // 代码被更新（git pull、改了代码）而服务没重启时，看板和 status 提示重启。
 // 只在文件修改时间变了时才重新读内容，看板每 3 秒查一次也不费事。
+// 服务端代码：src/ 下的 .js 和拆出去的子目录（看板 src/dashboard 不算，刷新就生效）
+const CODE_DIRS = ['src', 'src/store', 'src/server'];
 const CODE_FILES = () => [
-  ...readdirSync(join(TOOL_DIR, 'src')).filter((f) => f.endsWith('.js')).map((f) => join(TOOL_DIR, 'src', f)),
+  ...CODE_DIRS.flatMap((d) => { try { return readdirSync(join(TOOL_DIR, d)).filter((f) => f.endsWith('.js')).map((f) => join(TOOL_DIR, d, f)); } catch { return []; } }),
   join(TOOL_DIR, 'bin', 'ateam.js'),
 ];
 let codeCache = { key: '', hash: '' };

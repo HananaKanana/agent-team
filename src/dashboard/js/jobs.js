@@ -1,7 +1,30 @@
-'use strict';
 // 左侧需求列表、需求页（概览、动态）、看板的卡片、验收按钮
 
-async function acceptJob(id) {
+import { prefs } from './prefs.js';
+import { data, DEMO_STATUS, HISTORY, JOB_STATUS, LANES, view } from './state.js';
+import {
+  agentName, avatar, dur, el, emptyState, fill, fmtTime, icon, laneOf, laneTime, renderMarkdown, reviewStats,
+  roleStyle, strip
+} from './util.js';
+import { lastClaimSince } from './workers.js';
+import { slimLanes } from './settings.js';
+import { openGuide } from './helper.js';
+import { fmtTokens, modeWord, stagePanels, stepOutline } from './demo.js';
+import { demoRow } from './prompter.js';
+import { peersNav } from './sync.js';
+import { openUsage, usageForJob } from './usage.js';
+import { critiqueTag, holdAction, renderDrawer } from './drawer.js';
+import { flashId, openCardMenu, openJobMenu } from './menu.js';
+import { resetRelated } from './search.js';
+import { openReport } from './report.js';
+import { poll, render, saveView } from './app.js';
+
+const JOB_LOZENGE = { planning: 'pending', active: 'working', awaiting_acceptance: 'asking', accepted: 'approved', cancelled: 'cancelled' };
+let descOpenJob = null; // 展开了说明的需求
+let acceptArm = null; // 「验收通过」两步确认：记需求编号
+let lastOutlineStep = null;
+
+export async function acceptJob(id) {
   try {
     await fetch('/api/jobs/accept', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [id] }) });
   } catch {}
@@ -9,7 +32,7 @@ async function acceptJob(id) {
   await poll();
 }
 // 待验收需求的「验收通过」按钮，点两次生效
-function acceptButtons(job) {
+export function acceptButtons(job) {
   if (job.status !== 'awaiting_acceptance') return null;
   if (acceptArm !== job.id) {
     return el('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); acceptArm = job.id; render(); } }, '验收通过');
@@ -19,12 +42,12 @@ function acceptButtons(job) {
     el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); acceptJob(job.id); } }, `确认 ${job.id} 验收通过`),
   ];
 }
-const ACCEPT_HINT = '测试无误后点击「验收通过」；如有问题，请在对话中向 leader 说明，leader 将在该需求下新增修复任务。';
+export const ACCEPT_HINT = '测试无误后点击「验收通过」；如有问题，请在对话中向 leader 说明，leader 将在该需求下新增修复任务。';
 // 已验收的需求收进左侧底部一个可展开的分组，默认收起
 let acceptedOpen = false;
 try { acceptedOpen = prefs.get('ateam.acceptedOpen') === '1'; } catch {}
 // 左侧需求栏收起成一条窄栏（只留编号）。记在本浏览器；没设过时窄屏（平板）默认收起
-let navCollapsed = window.innerWidth < 1200;
+export let navCollapsed = window.innerWidth < 1200;
 try { const v = prefs.get('ateam.navCollapsed'); if (v !== null) navCollapsed = v === '1'; } catch {}
 function setNavCollapsed(on) {
   navCollapsed = on;
@@ -40,7 +63,7 @@ try { demoJobsOpen = prefs.get('ateam.demoJobsOpen') === '1'; } catch {}
 // 已作废的需求：单独一组，默认收起
 let cancelledJobsOpen = false;
 try { cancelledJobsOpen = prefs.get('ateam.cancelledJobsOpen') === '1'; } catch {}
-function renderJobs() {
+export function renderJobs() {
   const nav = document.getElementById('jobs');
   const { jobs, tasks } = data.state;
   const jobItem = (j) => {
@@ -144,8 +167,8 @@ function renderJobs() {
   }
   fill(nav, el('div', { class: 'nav-head' }, el('h2', null, '需求'), toggle), openGroup, empty, demoGroup, doneGroup, droppedGroup, peersNav());
 }
-function renderMain() {
-  relFor = null; // 卡片重画后，下一次悬停重新标依赖
+export function renderMain() {
+  resetRelated();
   requestAnimationFrame(clipCardTags); // 画完再量标签有没有溢出
   const main = document.getElementById('main');
   const job = data.state.jobs.find((j) => j.id === view.job);

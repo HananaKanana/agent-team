@@ -1,7 +1,29 @@
-'use strict';
 // 帮助面板：给 worker 的提示词、安装引导、启动 worker、缺人提示
 
-function renderHelper(force = false) {
+import { data, view } from './state.js';
+import { agentLabel, ago, avatar, criticProgress, el, fill, icon, post, roleStyle } from './util.js';
+import {
+  dismissAgents, dismissArm, dismissButtons, isLastOfRole, isStale, leaderCard, messageBox, pendingCancel,
+  reconnectPrompt, renderOfflinePanel, resetMsgState, stopPrompt, wakePrompt
+} from './workers.js';
+import { clearSettingsMsg, settingsPage, testTemplateEditor, testTpl } from './settings.js';
+import { pushPage, resetPush } from './push.js';
+import { loadRules, rulesEditor } from './rules.js';
+import { renderDrawer } from './drawer.js';
+import { jumpToTask } from './menu.js';
+import { render } from './app.js';
+
+let copied = null; // 刚复制的提示词，用来显示「已复制」
+let dismissAllArm = false; // 「全部下线」两步确认
+let msgArm = null; // 正在给哪个 worker 写消息
+
+// 面板状态：open、focus（展开哪个 worker）、tab（哪一页）、mode。别的文件用 openHelper / closeHelper 开关
+export let helper = { open: false, focus: null };
+export function openHelper(opts = {}) { helper = { open: true, focus: null, ...opts }; renderHelper(); }
+export function closeHelper() { helper = { open: false, focus: null }; renderHelper(); }
+export const openGuide = (tab) => el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openHelper({ tab }); } }, tab === 'lead' ? '查看 leader 提示词' : '打开帮助');
+
+export function renderHelper(force = false) {
   const panel = document.getElementById('helper');
   if (!helper.open || !data) { panel.hidden = true; panel.replaceChildren(); return; }
   // 正在编辑规则：轮询刷新不重画面板，免得输入框被替换、打字丢失
@@ -44,8 +66,8 @@ function renderHelper(force = false) {
       if (key === 'rules') loadRules();
       if (key === 'tests' && !testTpl.loading) testTpl.loaded = false; // 每次切进来重新读，别处改过也能看到
       if (key === 'install') installInfo = null; // 每次切进「安装」页重新读一遍本机情况
-      if (key === 'push') pushCfg = null; // 每次切进「推送」重新读配置
-      settingsMsg = '';
+      if (key === 'push') resetPush(); // 每次切进「推送」重新读配置
+      clearSettingsMsg();
       renderHelper(true);
     },
   }, label);
@@ -88,7 +110,7 @@ function renderHelper(force = false) {
               a.role.trim().toLowerCase() === 'critic' ? criticProgress(a)
                 : a.currentTask && data.state.tasks.some((t) => t.id === a.currentTask)
                   // 卡号可点：关掉面板，切到那张卡所在的需求并打开详情
-                  ? ['正在处理 ', el('a', { href: '#', class: 'task-jump', title: `跳转到 ${a.currentTask} 并打开卡片详情`, onclick: (e) => { e.preventDefault(); e.stopPropagation(); helper = { open: false, focus: null }; renderHelper(); jumpToTask(a.currentTask); } }, a.currentTask)]
+                  ? ['正在处理 ', el('a', { href: '#', class: 'task-jump', title: `跳转到 ${a.currentTask} 并打开卡片详情`, onclick: (e) => { e.preventDefault(); e.stopPropagation(); closeHelper(); jumpToTask(a.currentTask); } }, a.currentTask)]
                   : (a.currentTask ? `正在处理 ${a.currentTask}` : '空闲'),
               ` · 心跳 ${ago(a.lastSeenAt)}`)),
           el('span', { class: 'tag role', style: roleStyle(a.role) }, a.role),
@@ -98,7 +120,7 @@ function renderHelper(force = false) {
           a.dismiss ? el('span', { class: 'pill', title: a.role.trim().toLowerCase() === 'critic' ? '审核完待审任务后下线' : '完成当前任务后下线，不再领取新任务' }, a.role.trim().toLowerCase() === 'critic' ? '审完后下线' : '完成后下线') : null,
           pendingCancel(a) ? el('span', { class: 'pill', title: '该 worker 仍在处理已作废的任务' }, `${pendingCancel(a).id} 已作废，尚未通知到`) : null),
         dismissArm === a.id ? null : el('span', { class: 'wcard-acts' },
-          el('button', { class: 'btn ghost sm', title: '直接向该 worker 发送消息', onclick: (e) => { e.stopPropagation(); msgArm = msgArm === a.id ? null : a.id; msgState = { id: null, sending: false, error: '', sent: '' }; renderHelper(true); document.querySelector('#helper .msg-input')?.focus(); } }, '发消息'),
+          el('button', { class: 'btn ghost sm', title: '直接向该 worker 发送消息', onclick: (e) => { e.stopPropagation(); msgArm = msgArm === a.id ? null : a.id; resetMsgState(); renderHelper(true); document.querySelector('#helper .msg-input')?.focus(); } }, '发消息'),
           dismissButtons(a))),
       msgArm === a.id ? messageBox(a) : null,
       // 点了「下线」要选怎么下线：单独一条确认栏，按钮不挤在名字那一行里折行
@@ -144,7 +166,7 @@ function renderHelper(force = false) {
 // 「安装」页：一次性安装步骤，命令里的路径用服务所在的真实目录
 // 本机安装情况（DeepSeek Harness 的 skill 目录、profile、是否已装好），进「安装」页时读一次
 let installInfo = null;
-let installProfile = null;
+export let installProfile = null;
 async function loadInstallInfo() {
   installInfo = {}; // 读取中，避免重画时重复请求
   try {
@@ -290,16 +312,16 @@ const STANDARD_ROLES = [
   { key: 'critic', label: '审卡', what: '审核任务卡质量，不涉及代码' },
 ];
 // 「在 DeepSeek Harness 中启动」：由 ateam 通过 DSH 插件新开会话并发出上面的提示词
-let spawnState = { role: null, busy: false, msg: '', error: false };
+export let spawnState = { role: null, busy: false, msg: '', error: false };
 let spawnTimer = 0;
 // 「worker」页和任务详情里都有「启动」，状态共用一份，两边一起重画
 function rerenderSpawn() {
   renderHelper(true);
   if (view.task) renderDrawer();
 }
-const platformLabel = () => ((data.config?.spawnPlatform ?? 'dsh') === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness');
+export const platformLabel = () => ((data.config?.spawnPlatform ?? 'dsh') === 'workbuddy' ? 'WorkBuddy' : 'DeepSeek Harness');
 // taskId：从任务详情里点的。worker 加入后很快就领走这张卡，「分配 worker」一节随之消失，提示要换个地方留着
-function spawnButton(role, taskId = null) {
+export function spawnButton(role, taskId = null) {
   const mine = spawnState.role === role ? spawnState : { busy: false };
   const start = async (e) => {
     e.stopPropagation();
@@ -318,18 +340,18 @@ function spawnButton(role, taskId = null) {
   return el('button', { class: 'btn ghost sm spawn-btn', disabled: mine.busy, title: `在 ${platformLabel()} 中新建会话并自动发送下方提示词（平台可在「设置」中切换）`, onclick: start },
     icon('play'), mine.busy ? '启动中…' : '启动');
 }
-function spawnMessage(role) {
+export function spawnMessage(role) {
   if (spawnState.role !== role || !spawnState.msg) return null;
   return el('p', { class: `spawn-msg${spawnState.error ? ' err' : ''}` }, spawnState.msg);
 }
-function workerPrompt(role) {
+export function workerPrompt(role) {
   return `使用 ateam-worker skill，角色 ${role}`;
 }
-function promptBox(role) {
+export function promptBox(role) {
   return promptBlock(workerPrompt(role), render);
 }
 // 一段可复制的提示词；rerender 用来刷新「已复制」状态
-function promptBlock(text, rerender) {
+export function promptBlock(text, rerender) {
   const done = copied === text;
   return el('div', { class: 'pblock' },
     el('code', null, text),
@@ -344,7 +366,7 @@ function promptBlock(text, rerender) {
     }, done ? '已复制' : '复制'));
 }
 // 待领取、依赖已满足、但没有同角色在线 worker 的任务 → 需要有人开新窗口接手
-function rolesNeedingWorkers() {
+export function rolesNeedingWorkers() {
   const { tasks, agents } = data.state;
   const approved = new Set(tasks.filter((t) => t.status === 'approved').map((t) => t.id));
   const onlineRoles = new Set(agents.filter((a) => a.status === 'online').map((a) => a.role.trim().toLowerCase()));
@@ -360,7 +382,7 @@ function rolesNeedingWorkers() {
   return byRole;
 }
 // 「有任务没人做」：并进了页头的「需要你处理」（缺人那几项可以就地展开提示词），这里不再单独弹气泡
-function renderNeeds() {
+export function renderNeeds() {
   const box = document.getElementById('needs');
   box.hidden = true;
   box.replaceChildren();

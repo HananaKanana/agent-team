@@ -1,7 +1,21 @@
-'use strict';
 // 任务详情抽屉：详情、时间线、回复、暂停、审卡意见、指派、优先级、收回
 
-function renderDrawer(fresh) {
+import { prefs } from './prefs.js';
+import { data, DEMO_STATUS, HISTORY, LANE_LABEL, view } from './state.js';
+import {
+  agentLabel, avatar, dur, el, fill, fmtTime, icon, laneOf, post, renderMarkdown, roleStyle, spent
+} from './util.js';
+import { pendingCancel, stopPrompt } from './workers.js';
+import { platformLabel, promptBlock, promptBox, spawnButton, spawnMessage, spawnState } from './helper.js';
+import { demoDrawerBody, isDemoTask, modeWord, rehearsalTag, tokenFact } from './demo.js';
+import { openDecide } from './dialogs.js';
+import { poll, render, saveView } from './app.js';
+
+// 抽屉是否展开到大半屏；记在显示偏好里，下次打开保持
+let drawerWide = false;
+try { drawerWide = prefs.get('ateam.drawerWide') === '1'; } catch {}
+
+export function renderDrawer(fresh) {
   const drawer = document.getElementById('drawer');
   const t = view.task && data.state.tasks.find((x) => x.id === view.task);
   if (!t) { drawer.hidden = true; drawer.replaceChildren(); assignOpen = null; return; }
@@ -126,7 +140,7 @@ function timelineText(text) {
   box.innerHTML = renderMarkdown(text); // renderMarkdown 先转义了 HTML
   return box;
 }
-function closeDrawer() {
+export function closeDrawer() {
   view.task = null;
   saveView();
   renderDrawer();
@@ -135,7 +149,7 @@ function closeDrawer() {
 let priorityError = null;
 let holdError = null;
 // 暂停 / 恢复领取：kind 是 tasks 或 jobs
-async function holdAction(kind, id, on) {
+export async function holdAction(kind, id, on) {
   try {
     const res = await fetch(`/api/${kind}/hold`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, on, by: 'user' }) });
     const out = await res.json();
@@ -182,7 +196,7 @@ function replyBox(t) {
       el('div', { class: 'reply-foot' }, foot,
         el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送'))));
 }
-function focusReply(id) {
+export function focusReply(id) {
   view.task = id; saveView(); renderDrawer(true);
   const area = document.querySelector(`#drawer .reply-input[data-id="${id}"]`);
   if (area) { area.scrollIntoView({ block: 'center' }); area.focus(); }
@@ -206,15 +220,15 @@ const CRITIQUE_STATUS = {
   open: '待 leader 回复', proposed: 'leader 已同意，待确认', disputed: 'leader 不同意，待决定',
   redo: '已决定，待 leader 执行', resolved: '已处理', closed: '决定不修改', overruled: '维持原样',
 };
-const awaitingUser = (c) => c.status === 'proposed' || c.status === 'disputed';
-function critiqueTag(t) {
+export const awaitingUser = (c) => c.status === 'proposed' || c.status === 'disputed';
+export function critiqueTag(t) {
   const list = t.critiques || [];
   if (list.some(awaitingUser)) return el('span', { class: 'tag warn' }, '审卡：待决定');
   const open = list.filter((c) => c.status === 'open' || c.status === 'redo').length;
   return open ? el('span', { class: 'tag critique' }, `审卡意见 ${open}`) : null;
 }
 // 一条审卡意见的完整内容：意见、依据、leader 的回复、你的决定、改了什么
-function critiqueItem(c) {
+export function critiqueItem(c) {
   const md = (text) => { const d = el('div', { class: 'md' }); d.innerHTML = renderMarkdown(text); return d; }; // renderMarkdown 先转义了 HTML
   const replyLabel = c.replyKind === 'agree' ? 'leader 同意，拟修改如下：' : c.replyKind === 'dispute' ? 'leader 不同意，理由：' : 'leader：';
   return el('div', { class: 'critique-item' },
@@ -234,13 +248,14 @@ function critiqueBox(t) {
     el('h4', null, `审卡意见（${list.length}）`),
     list.map(critiqueItem),
     waiting ? el('div', { class: 'prompt' },
-      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); decideLater.delete(t.id); decideFocus = t.id; renderDecideDialog(); } }, '去处理')) : null,
+      el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); openDecide(t.id); } }, '去处理')) : null,
   ];
 }
 // 指派：用户在看板上把任务交给某个 worker（比如难的任务交给 Claude 的窗口）。只有它能领，它优先领。
 let assignError = null;
-let assignOpen = null; // 展开着「指派给」列表的任务编号
-function assignBox(t) {
+export let assignOpen = null; // 展开着「指派给」列表的任务编号
+export function closeAssign() { assignOpen = null; renderDrawer(false); }
+export function assignBox(t) {
   const role = t.role.trim().toLowerCase();
   const online = data.state.agents.filter((a) => a.status === 'online' && a.role.trim().toLowerCase() === role);
   const current = t.assignTo && data.state.agents.find((a) => a.id === t.assignTo);
@@ -313,7 +328,7 @@ function priorityBox(t) {
 // 收回任务：两步确认，避免误点
 let reclaimArm = null;   // 已点过一次「收回任务」的任务编号
 let reclaimError = null;
-function reclaimBox(t) {
+export function reclaimBox(t) {
   const armed = reclaimArm === t.id;
   return [
     el('h4', null, '原窗口已关闭？'),

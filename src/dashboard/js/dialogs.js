@@ -1,15 +1,21 @@
-'use strict';
 // 弹框：通用确认、审卡分歧、worker 无响应
+
+import { data, LANE_LABEL, setView } from './state.js';
+import { agentLabel, avatar, el, fill, laneOf, modalHead, renderMarkdown } from './util.js';
+import { wakePrompt } from './workers.js';
+import { promptBlock } from './helper.js';
+import { awaitingUser, critiqueItem, renderDrawer } from './drawer.js';
+import { poll, render, saveView } from './app.js';
 
 // 通用确认框：title、body、ok（按钮文字）、reason（要不要填原因）、disabled、run(reason) → { ok, message }
 let confirmState = null;
-function closeConfirm() {
+export function closeConfirm() {
   confirmState = null;
   const box = document.getElementById('confirm-dialog');
   box.hidden = true;
   box.replaceChildren();
 }
-function openConfirm(opts) {
+export function openConfirm(opts) {
   confirmState = { ...opts, error: null, busy: false };
   renderConfirm();
 }
@@ -43,6 +49,8 @@ function renderConfirm() {
 // leader 回复了审卡意见（同意或不同意）后，由你决定怎么办。一次显示一张卡，「稍后再说」这次先不弹。
 const decideLater = new Set();
 let decideFocus = null;
+// 打开某张卡的分歧弹框（之前点过「稍后」的也重新弹）
+export function openDecide(id) { decideLater.delete(id); decideFocus = id; renderDecideDialog(); }
 let decideCustom = false;
 let decideError = null;
 function decideTasks() {
@@ -58,7 +66,7 @@ async function decide(t, side, text) {
   await poll();
   renderDecideDialog();
 }
-function renderDecideDialog() {
+export function renderDecideDialog() {
   const box = document.getElementById('decide-dialog');
   // 正在写自己的意见：轮询刷新不重画，免得打字丢失
   if (decideCustom && box.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA') return;
@@ -91,7 +99,7 @@ function renderDecideDialog() {
     modalHead(all.length > 1 ? `审卡存在分歧，待决定（共 ${all.length} 项）` : '审卡存在分歧，待决定', later),
     el('div', { class: 'modal-body' },
       el('p', { class: 'lead' }, el('b', { style: 'color: var(--ink)' }, `${t.id} ${t.title}`), `　需求 ${t.jobId} · ${t.role} · ${LANE_LABEL[laneOf(t)] || t.status}　`,
-        el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }) }, '查看任务详情')),
+        el('button', { class: 'btn ghost sm', onclick: stop(() => { decideLater.add(t.id); renderDecideDialog(); setView({ job: t.jobId, task: t.id, report: false }); saveView(); render(); renderDrawer(true); }) }, '查看任务详情')),
       job?.origin ? [el('div', { class: 'ci-label' }, `需求原文（${t.jobId}）`), origin] : null,
       waiting.map(critiqueItem),
       el('div', { class: 'ci-label', style: 'margin-top: 16px' }, '处理方式'),
@@ -107,7 +115,7 @@ function renderDecideDialog() {
 }
 // 手上有进行中任务、但很久没动静的 worker（服务标记 stale）。任务不会自动转手，
 // 用户确认「窗口没了」才收回交给别人；确认「还在」就继续等它。点「稍后」只是这次先不弹。
-const staleLater = new Set();
+export const staleLater = new Set();
 let staleError = null;
 async function staleAction(path, body) {
   try {
@@ -121,7 +129,7 @@ async function staleAction(path, body) {
 function staleAgents() {
   return data.state.agents.filter((a) => a.status === 'online' && a.stale && a.currentTask);
 }
-function renderStaleDialog() {
+export function renderStaleDialog() {
   const box = document.getElementById('stale-dialog');
   for (const id of [...staleLater]) if (!staleAgents().some((a) => a.id === id)) staleLater.delete(id);
   const list = staleAgents().filter((a) => !staleLater.has(a.id));

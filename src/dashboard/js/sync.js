@@ -1,7 +1,15 @@
-'use strict';
 // 多人协作：同步设置、负责人、同事页
 
-let syncInfo = null; // /api/sync 的结果
+import { prefs, READONLY } from './prefs.js';
+import { data, LANE_LABEL, view } from './state.js';
+import { ago, el, emptyState, fill, fmtTime, icon, laneOf, renderMarkdown, roleStyle } from './util.js';
+import { saveSetting } from './settings.js';
+import { closeHelper, helper, openHelper, renderHelper } from './helper.js';
+import { navCollapsed } from './jobs.js';
+import { closeUsage, openUsage, usageOpen } from './usage.js';
+import { toastX } from './app.js';
+
+export let syncInfo = null; // /api/sync 的结果
 let syncLoadedAt = 0;
 let syncMsg = null;
 let syncMsgBad = false; // syncMsg 是失败原因（红字）
@@ -88,7 +96,7 @@ function ownersSettings(ro) {
     el('span', { class: 'hint' }, '声明各目录由谁负责，名称使用同步名称。leader 建卡或修改路径时，路径落在他人负责的目录中会收到提醒（仅提醒，不影响派发）；同事页显示各人负责的目录。保存在 .ateam/owners.md，随代码提交，团队共用。'),
     area, el('span', null, save), ownersMsg ? el('span', { class: 'hint' }, ownersMsg) : null));
 }
-function syncSettings() {
+export function syncSettings() {
   const s = syncInfo;
   if (Date.now() - syncLoadedAt > 30000) loadSync(); // 打开设置页时刷新一次（命令行开启、同步状态变化）
   if (!s) return el('p', { class: 'hint' }, '读取中…');
@@ -137,10 +145,10 @@ function syncSettings() {
   ];
 }
 // 「同事」整页：同事看板里进行中的需求和卡，只读
-let peersOpen = false;
+export let peersOpen = false;
 let peerOpenTask = null; // 展开详情的卡：「名字·编号」
 // 同事名字的头像：首字母 + 按名字算出的固定色相
-const peerHue = (name) => { let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
+export const peerHue = (name) => { let h = 0; for (const c of name) h = (h * 31 + c.codePointAt(0)) % 360; return h; };
 // 同事的在线状态（服务端 syncStatus 算好的 state）
 const PEER_STATE = {
   busy: ['工作中', '服务运行中，有 worker 在处理任务'],
@@ -161,7 +169,7 @@ function peerTip(p) {
   return [p.name, st, who, `${ago(p.at)}同步`].filter(Boolean).join(' · ');
 }
 // 需求栏底部：「用量」一直在，「同事」开启看板同步后显示
-function peersNav() {
+export function peersNav() {
   const item = (ico, label, tip, current, onclick, extra) => el('button', { type: 'button', title: tip, 'aria-label': label, 'aria-current': current ? 'true' : 'false', onclick: (e) => { e.stopPropagation(); onclick(); } },
     icon(ico), navCollapsed ? null : el('span', { class: 'label' }, label), navCollapsed ? null : extra);
   const usage = item('chart', '用量', 'token 用量统计', usageOpen, () => { if (usageOpen) closeUsage(); else { if (peersOpen) closePeers(); openUsage(); } });
@@ -175,7 +183,7 @@ function peersNav() {
   }
   return el('div', { class: 'peers-nav', id: 'peers-nav' }, usage, peers);
 }
-function renderPeersBtn() {
+export function renderPeersBtn() {
   if (data && Date.now() - syncLoadedAt > 60000) loadSync();
   document.getElementById('peers-nav')?.replaceWith(peersNav());
   renderSyncBanner();
@@ -191,19 +199,19 @@ function renderSyncBanner() {
   fill(box,
     el('b', null, '已自动开启看板同步'),
     el('span', null, `检测到本项目已改用多人看板同步，本机看板以「${s.name}」同步到 ateam/${s.name} 分支，需求栏底部的「同事」可查看同事的进度。`),
-    el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); close(); helper = { open: true, focus: null, tab: 'settings' }; renderHelper(); } }, '查看设置'),
+    el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); close(); openHelper({ tab: 'settings' }); } }, '查看设置'),
     toastX(close));
   box.hidden = false;
 }
 function openPeers() {
   peersOpen = true;
-  if (helper.open) { helper = { open: false, focus: null }; renderHelper(); }
+  if (helper.open) { closeHelper(); }
   loadSync();
   renderPeersPage();
   renderPeersBtn();
   document.getElementById('peers-page').scrollTop = 0;
 }
-function closePeers() {
+export function closePeers() {
   peersOpen = false;
   renderPeersPage();
   renderPeersBtn();

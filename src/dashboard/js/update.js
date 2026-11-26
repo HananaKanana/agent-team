@@ -1,5 +1,10 @@
-'use strict';
 // 版本与更新、运行模式、重启服务
+
+import { READONLY } from './prefs.js';
+import { data, setView } from './state.js';
+import { el, fill } from './util.js';
+import { frozenDemo, modeWord } from './demo.js';
+import { poll, render, saveView } from './app.js';
 
 // data.update：当前版本、运行模式、最新版本、正在下载的更新（每次轮询都有）
 let updateError = null; // 点「有新版本」后安装请求失败的原因
@@ -18,7 +23,7 @@ function updateJobLine(job) {
   if (job.status === 'opened') return `${job.version} 已下载并通过校验，已打开安装程序。请按提示输入管理员密码完成安装，安装后按页面提示重启服务。`;
   return `更新失败：${job.error}`;
 }
-function renderUpdatePill() {
+export function renderUpdatePill() {
   const btn = document.getElementById('update-pill');
   const u = data?.update;
   const downloading = u?.job?.status === 'downloading';
@@ -35,7 +40,7 @@ function renderUpdatePill() {
   btn.hidden = false;
 }
 // 「服务需要重启」的「重启」：服务在后台按原参数重新启动，连上新服务后刷新页面
-async function restartServer(btn) {
+export async function restartServer(btn) {
   btn.disabled = true;
   btn.textContent = '重启中…';
   const tip = (text) => {
@@ -59,7 +64,7 @@ async function restartServer(btn) {
   }
   tip('服务未能在 30 秒内重新启动，请查看项目中的 .ateam/serve.log，或在终端中运行 ateam 启动。');
 }
-function renderModePill() {
+export function renderModePill() {
   const btn = document.getElementById('mode-pill');
   const t = data && frozenDemo();
   if (!t) { btn.hidden = true; btn.replaceChildren(); return; }
@@ -68,6 +73,6 @@ function renderModePill() {
     el('span', null, t.status === 'queued' ? `等待${modeWord(t)}` : `${modeWord(t)}中`),
     el('span', { class: 'sub' }, '· 派发已暂停'));
   btn.title = `${t.id} ${t.title}\n${modeWord(t)}期间暂停派发新任务，结束或叫停后自动恢复。点击查看`;
-  btn.onclick = (e) => { e.stopPropagation(); view = { job: t.jobId, task: null, report: false }; saveView(); render(); };
+  btn.onclick = (e) => { e.stopPropagation(); setView({ job: t.jobId, task: null, report: false }); saveView(); render(); };
   btn.hidden = false;
 }

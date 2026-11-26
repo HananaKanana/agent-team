@@ -1,5 +1,12 @@
-'use strict';
 // 页头 worker 一排（拖动排序、收窄）、leader 状态、worker 卡片上的留言和停用
+
+import { prefs } from './prefs.js';
+import { data } from './state.js';
+import {
+  agentLabel, ago, avatar, avText, criticProgress, el, fill, fmtTime, icon, idHasRole, post, roleStyle
+} from './util.js';
+import { closeHelper, openHelper, promptBlock, renderHelper } from './helper.js';
+import { poll } from './app.js';
 
 // 顶部 worker 一排可以拖动排序：顺序只存在这个浏览器里（编号列表），没排过的新 worker 按默认顺序接在后面
 let workerOrder = [];
@@ -73,7 +80,7 @@ function dragChip(chip, id) {
     addEventListener('pointercancel', up);
   });
 }
-function renderWorkers() {
+export function renderWorkers() {
   if (workerDrag) return;
   const box = document.getElementById('workers');
   const agents = data.state.agents;
@@ -89,7 +96,7 @@ function renderWorkers() {
       : leader.away
         ? `无 leader 模式（${fmtTime(leader.away.since)} 起，${leader.away.by === 'user' ? '手动设置' : '检测到 leader 离线'}）：等待答复、待 review 的任务暂时搁置，worker 转做无依赖的任务；leader 恢复后自动退出。点击查看加入提示词`
         : 'leader 未连接：未在监听事件，且近 3 分钟无操作。点击查看加入提示词',
-    onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab: 'lead' }; renderHelper(); },
+    onclick: (e) => { e.stopPropagation(); openHelper({ tab: 'lead' }); },
   }, el('span', { class: 'av' }, 'L'), el('b', null, 'leader'), el('span', { class: `task${leader.online && leader.watching && !leader.away ? ' idle' : ''}` }, leader.away ? '无 leader 模式' : leader.online ? (leader.watching ? '在线' : '在线，未监听') : '未连接'));
   // 审卡 worker 和 leader 一样常驻，紧挨着 leader 放
   const isCriticAgent = (a) => a.role.trim().toLowerCase() === 'critic';
@@ -99,7 +106,7 @@ function renderWorkers() {
       class: 'worker online',
       style: roleStyle(a.role),
       title: `${agentLabel(a.id)}，心跳 ${ago(a.lastSeenAt)}。点击查看提示词，拖动可调整顺序`,
-      onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: a.id }; renderHelper(); },
+      onclick: (e) => { e.stopPropagation(); openHelper({ focus: a.id }); },
     },
     el('span', { class: 'av' }, avText(a.name || a.id)),
     // 新编号本身带角色（frontend-2），就不再单独写角色，只按角色上色；老编号（fr-cbb7）照旧显示角色
@@ -114,7 +121,7 @@ function renderWorkers() {
   if (offline.length) {
     chips.push(el('button', {
       type: 'button', class: 'worker offline', title: '点击查看或移除已离线的 worker',
-      onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, mode: 'offline' }; renderHelper(); },
+      onclick: (e) => { e.stopPropagation(); openHelper({ mode: 'offline' }); },
     }, `${offline.length} 个已离线`));
   }
   if (chips.length === 1) chips.push(el('span', { class: 'hint' }, '暂无 worker 加入，可在右侧「帮助」中添加 worker'));
@@ -135,17 +142,15 @@ function fitWorkers() {
 addEventListener('resize', () => fitWorkers());
 // 在线 worker 超过 3 分钟没有任何动静（挂着 wait 的 worker 最多 90 秒就会刷新一次心跳）→ 多半停住了
 const STALE_MS = 3 * 60 * 1000;
-function isStale(a) {
+export function isStale(a) {
   return a.status === 'online' && Date.now() - a.lastSeenAt > STALE_MS;
 }
-let helper = { open: false, focus: null };
-let dismissAllArm = false; // 「全部下线」两步确认
-let msgArm = null; // 正在给哪个 worker 写消息
 const msgDrafts = new Map(); // worker 编号 → 没发出去的草稿
 let msgState = { id: null, sending: false, error: '', sent: '' };
-let dismissArm = null; // 单个 worker 下线的两步确认（手上有任务，或是本角色最后一个时）
+export function resetMsgState() { msgState = { id: null, sending: false, error: '', sent: '' }; }
+export let dismissArm = null; // 单个 worker 下线的两步确认（手上有任务，或是本角色最后一个时）
 // 本角色唯一在线的 worker（已安排「做完再下线」的不算）：每个角色至少留一个，下线前要用户确认
-function isLastOfRole(a) {
+export function isLastOfRole(a) {
   if (a.dismiss) return false;
   const role = a.role.trim().toLowerCase();
   return data.state.agents.filter((x) => x.status === 'online' && !x.dismiss && x.role.trim().toLowerCase() === role).length === 1;
@@ -159,7 +164,7 @@ async function setLeaderAway(on) {
   await poll();
   renderHelper(true);
 }
-function leaderCard() {
+export function leaderCard() {
   const leader = data.leader || {};
   const away = leader.away;
   const state = away ? `无 leader 模式 · ${fmtTime(away.since)} 起${away.by === 'user' ? '，手动设置' : '，检测到离线'}`
@@ -178,14 +183,14 @@ function leadWakePrompt() {
   return '继续。你是 ateam leader。先运行 ateam status，按「待你处理」继续（先答复，再 review）；如果后台的 ateam watch --follow 监听停了，用 Monitor 重新启动它。中途不要停下来等我。';
 }
 // worker 在 since 之后最近领的一张卡（老数据没记 parkedFor 时，从历史里找它转做了哪张）
-function lastClaimSince(agentId, since) {
+export function lastClaimSince(agentId, since) {
   let best = null;
   for (const x of data.state.tasks) {
     for (const h of x.history) if (h.type === 'claimed' && h.actor === agentId && h.ts >= since && (!best || h.ts > best.ts)) best = { id: x.id, ts: h.ts };
   }
   return best?.id ?? null;
 }
-function messageBox(a) {
+export function messageBox(a) {
   const mine = msgState.id === a.id ? msgState : { sending: false, error: '', sent: '' };
   const area = el('textarea', { class: 'reply-input msg-input', rows: '3', placeholder: `填写给 ${agentLabel(a.id)} 的消息…` });
   area.value = msgDrafts.get(a.id) || '';
@@ -211,7 +216,7 @@ function messageBox(a) {
       el('div', { class: 'reply-foot' }, foot,
         el('button', { class: 'btn primary sm', disabled: mine.sending, onclick: (e) => { e.stopPropagation(); send(); } }, mine.sending ? '发送中…' : '发送'))));
 }
-function dismissButtons(a) {
+export function dismissButtons(a) {
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   // 设置里关了「每个角色至少保留一个 worker」时，最后一个也和别的一样直接下线，不再确认
   const last = (data.config?.keepOnePerRole ?? true) && isLastOfRole(a);
@@ -268,18 +273,18 @@ function dismissButtons(a) {
 }
 // 手上的任务被作废、但 worker 还没收到通知（它正在干活，要等下一次调用 ateam 命令才知道）。
 // 用户可以在 agent 窗口里点停止，把这句话发过去，让它马上停手。
-function pendingCancel(a) {
+export function pendingCancel(a) {
   if (a.status !== 'online' || !a.cancelNotice?.wasWorking) return null;
   return data.state.tasks.find((t) => t.id === a.cancelNotice.taskId) || null;
 }
-function stopPrompt(a, t) {
+export function stopPrompt(a, t) {
   return `停下。你手上的任务 ${t.id} 已被作废，立即停手，不要提交。把你为它做的改动还原掉，只动你自己改过的文件：改过的已有文件逐个 git checkout -- <文件路径>，你新建的文件逐个删掉；不要用 git clean、git stash，也不要对整个目录 checkout，同一目录里可能有别人正在改的文件。然后运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。`;
 }
-function wakePrompt(a) {
+export function wakePrompt(a) {
   const doing = a.currentTask ? `继续做 ${a.currentTask}，做完提交后` : '';
   return `继续。你是 ateam worker ${a.id}（角色 ${a.role}）。${doing}运行 ateam wait --as ${a.id} 回到主循环，中途不要停下来汇报。如果提示租约已失效，就重新 ateam join --role ${a.role} --id ${a.id}${a.name ? ` --name ${a.name}` : ''}。`;
 }
-async function dismissAgents(body) {
+export async function dismissAgents(body) {
   try {
     await fetch('/api/dismiss', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch {}
@@ -301,14 +306,14 @@ async function hideAgents(ids) {
 }
 let reconnectOpen = null; // 展开了重连提示词的掉线 worker 编号
 // 掉线的 worker 窗口还在时，发给它的那句话：旧编号已失效，重新加入后接着主循环
-function reconnectPrompt(a) {
+export function reconnectPrompt(a) {
   const name = a.name ? ` --name ${a.name}` : '';
   return `继续。你是 ateam worker ${a.id}（角色 ${a.role}），已经掉线。请按 ateam-worker skill 运行 ateam join --role ${a.role} --id ${a.id}${name} 重新加入（沿用原编号），然后进入 ateam wait 主循环；如果领到「⚠ 接手任务」，先看历史和 git status，在已有改动上继续。中途不要停下来汇报。`;
 }
-function renderOfflinePanel(panel) {
+export function renderOfflinePanel(panel) {
   const offline = data.state.agents.filter((a) => a.status !== 'online' && !a.hidden)
     .sort((x, y) => y.lastSeenAt - x.lastSeenAt);
-  const close = () => { helper = { open: false, focus: null }; renderHelper(); };
+  const close = () => { closeHelper(); };
   if (!offline.length) { close(); return; }
   fill(panel,
     el('div', { class: 'panel-top', style: 'padding-bottom: 12px' },

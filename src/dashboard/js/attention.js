@@ -1,5 +1,17 @@
-'use strict';
 // 「需要你处理」：标题徽标、浏览器通知、待处理列表、体检修复、验收
+
+import { READONLY } from './prefs.js';
+import { data, setView } from './state.js';
+import { el, fill, fmtTime, modalHead, post } from './util.js';
+import { pendingCancel } from './workers.js';
+import {
+  closeHelper, helper, installProfile, openHelper, promptBlock, rolesNeedingWorkers, workerPrompt
+} from './helper.js';
+import { frozenDemo } from './demo.js';
+import { restartServer } from './update.js';
+import { awaitingUser, renderDrawer } from './drawer.js';
+import { openDecide, renderStaleDialog, staleLater } from './dialogs.js';
+import { poll, render, saveView, toastClosed } from './app.js';
 
 // 需要你操作的事：待验收的需求、缺 worker 的角色、有活干时 leader 没连上。
 // 数量显示在标签页标题和图标上，看板不在前台时也能看到。
@@ -90,7 +102,7 @@ function renderNotifyButton() {
   const show = canNotify() && Notification.permission === 'default';
   btn.hidden = !show;
 }
-async function enableNotify() {
+export async function enableNotify() {
   if (!canNotify()) return;
   try { await Notification.requestPermission(); } catch {}
   renderNotifyButton();
@@ -98,7 +110,7 @@ async function enableNotify() {
     try { new Notification('ateam 通知已开启', { body: '需求待验收、任务缺少 worker、leader 离线时将在此提醒。请保持看板标签页打开（可在后台）。', silent: true }); } catch {}
   }
 }
-function setBadge(text, color) {
+export function setBadge(text, color) {
   const key = `${text}|${color}`;
   if (key === lastBadge) return;
   lastBadge = key;
@@ -112,7 +124,7 @@ function setBadge(text, color) {
   if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.append(link); }
   link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
-function renderAttention() {
+export function renderAttention() {
   // 局域网只读访客重启不了服务，不显示这条提示
   document.getElementById('stale').hidden = !data?.stale || toastClosed.has('stale') || READONLY;
   document.getElementById('stale-why').textContent = data?.staleWhy === 'dev' ? '已切换到开发模式，当前服务仍在运行安装版的代码。' : data?.staleWhy === 'installed' ? '已切换回安装版，当前服务仍在运行源码仓库的代码。' : 'ateam 代码已更新，当前服务仍在运行旧版本。';
@@ -129,13 +141,25 @@ function renderAttention() {
   btn.title = items.map((i) => i.text).join('\n');
 }
 // 「需要你处理」：点开一个列表，每件事一行，点哪件就去处理哪件
-let attentionOpen = false;
+export let attentionOpen = false;
+export function closeAttention() { attentionOpen = false; renderAttentionList(); }
+// 页头「需要你处理」按钮：打开时重置勾选和体检结果
+export function toggleAttention() {
+  attentionOpen = !attentionOpen;
+  if (attentionOpen && helper.open) closeHelper();
+  acceptPick = null;
+  acceptConfirm = false;
+  acceptMsg = '';
+  doctorFix = { busy: null, key: null, msg: '', error: false };
+  renderAttentionList();
+  if (attentionOpen) recheckDoctor();
+}
 function goAttention(key) {
   attentionOpen = false;
   renderAttentionList();
   const [kind, id] = key.split(':');
   if (kind === 'accept') {
-    view = { job: id, task: null, report: false };
+    setView({ job: id, task: null, report: false });
     saveView();
     render();
     document.getElementById('main').scrollTop = 0;
@@ -144,21 +168,17 @@ function goAttention(key) {
     attentionOpen = true;
     renderAttentionList();
   } else if (kind === 'leader') {
-    helper = { open: true, focus: null, tab: 'lead' };
-    renderHelper();
+    openHelper({ tab: 'lead' });
   } else if (kind === 'quiet') {
     staleLater.delete(id);
     renderStaleDialog();
   } else if (kind === 'dispute') {
-    decideLater.delete(id);
-    decideFocus = id;
-    renderDecideDialog();
+    openDecide(id);
   } else if (kind === 'assign') {
     const t = data.state.tasks.find((x) => x.id === id);
-    if (t) { view = { job: t.jobId, task: t.id, report: false }; saveView(); render(); renderDrawer(true); }
+    if (t) { setView({ job: t.jobId, task: t.id, report: false }); saveView(); render(); renderDrawer(true); }
   } else if (kind === 'cancel') {
-    helper = { open: true, focus: id };
-    renderHelper();
+    openHelper({ focus: id });
   }
   // stale（服务需要重启）：顶部黄色提示条已经写了怎么做
 }
@@ -188,7 +208,7 @@ async function recheckDoctor() {
 let acceptPick = null;    // 勾选的需求编号；null 表示还没动过，默认全选
 let acceptConfirm = false; // 「验收通过」两步确认
 let acceptMsg = '';
-function renderAttentionList() {
+export function renderAttentionList() {
   const box = document.getElementById('attention-list');
   const items = attentionOpen ? attentionItems() : [];
   // 最后一项刚被「修复」掉时先不关，留着修复结果的提示
@@ -214,7 +234,7 @@ function renderAttentionList() {
       box2.addEventListener('change', () => { if (box2.checked) acceptPick.add(j.id); else acceptPick.delete(j.id); acceptConfirm = false; renderAttentionList(); });
       return el('label', { class: `acc-row${box2.checked ? ' on' : ''}` }, box2,
         el('span', { class: 'txt' }, el('b', null, j.id), j.title, el('div', { class: 'hint' }, `${tasks.length} 个任务 · ${fmtTime(j.updatedAt)} 提交汇报`)),
-        el('button', { class: 'btn sm', onclick: (e) => { e.preventDefault(); e.stopPropagation(); attentionOpen = false; renderAttentionList(); view = { job: j.id, task: null, report: true }; saveView(); render(); } }, '查看汇报'));
+        el('button', { class: 'btn sm', onclick: (e) => { e.preventDefault(); e.stopPropagation(); attentionOpen = false; renderAttentionList(); setView({ job: j.id, task: null, report: true }); saveView(); render(); } }, '查看汇报'));
     })),
     el('div', { class: 'acc-foot' },
       acceptMsg ? el('span', { class: 'hint', style: 'margin-right: auto' }, acceptMsg) : null,

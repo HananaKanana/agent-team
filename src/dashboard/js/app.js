@@ -1,9 +1,33 @@
-'use strict';
 // 页面入口：整体渲染、视图存取、主题、轮询、全局快捷键、页面启动（最后加载）
 
+import { prefs } from './prefs.js';
+import { data, setData, setView, view } from './state.js';
+import { el, icon, tickSince } from './util.js';
+import { renderWorkers } from './workers.js';
+import { touchScroll } from './settings.js';
+import { closeHelper, helper, openHelper, renderNeeds } from './helper.js';
+import { renderJobs, renderMain } from './jobs.js';
+import { closeShowDialog, renderShowDialog, showDlg } from './demo.js';
+import { PROMPTER_ONLY, renderDemoBanner, renderPrompterStrip } from './prompter.js';
+import { renderModePill, renderUpdatePill } from './update.js';
+import { closePeers, peersOpen, renderPeersBtn } from './sync.js';
+import { closeUsage, renderUsagePage, usageOpen } from './usage.js';
+import { assignOpen, closeAssign, closeDrawer, renderDrawer } from './drawer.js';
+import { closeCardMenu, openCardMenu, openJobMenu } from './menu.js';
+import { closeSpotlight, spot } from './search.js';
+import { closeConfirm, renderDecideDialog, renderStaleDialog } from './dialogs.js';
+import { closeReport, renderReport } from './report.js';
+import {
+  attentionOpen, closeAttention, enableNotify, renderAttention, renderAttentionList, setBadge,
+  toggleAttention
+} from './attention.js';
+
+let lastJson = '';
+let lastEtag = '';
+
 // 关掉的气泡：本次打开页面内不再弹（演播的按「这一场 + 状态」记，状态变了会重新出现；页头的「预演中」标签一直在）
-const toastClosed = new Set();
-const toastX = (onClose) => el('button', { class: 'toast-x', type: 'button', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); onClose(); } }, icon('close'));
+export const toastClosed = new Set();
+export const toastX = (onClose) => el('button', { class: 'toast-x', type: 'button', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); onClose(); } }, icon('close'));
 document.addEventListener('click', (e) => {
   const x = e.target.closest('[data-x]');
   if (!x) return;
@@ -32,7 +56,7 @@ themeBtn.addEventListener('click', () => {
   applyTheme(next);
   try { prefs.set('ateam.theme', next); } catch {}
 });
-function render() {
+export function render() {
   if (!data) return;
   renderNeeds();
   if (PROMPTER_ONLY) { renderPrompterStrip(); return; }
@@ -54,16 +78,16 @@ function render() {
   if (attentionOpen) renderAttentionList(); // 只在数据变化时重画，免得每次轮询都替换掉正在点的勾选框
 }
 // 选中的需求和打开的任务记在地址栏 hash 里，刷新页面后保留
-function saveView() {
+export function saveView() {
   const hash = [view.job, view.report ? 'report' : view.task].filter(Boolean).join('/');
   history.replaceState(null, '', hash ? `#${hash}` : location.pathname);
 }
 function loadView() {
   const [job, second] = location.hash.slice(1).split('/');
   const report = second === 'report';
-  view = { job: job || null, task: report ? null : second || null, report };
+  setView({ job: job || null, task: report ? null : second || null, report });
 }
-async function poll() {
+export async function poll() {
   let json;
   try {
     // 带上次的 ETag：状态没变时服务只回 304，不用重新下载和解析整份状态
@@ -83,7 +107,7 @@ async function poll() {
   // 页面代码出错不算断线，不显示「无法连接」；错误在浏览器控制台里看
   try {
     if (json !== lastJson) {
-      data = JSON.parse(json);
+      setData(JSON.parse(json));
       lastJson = json;
       render();
     } else {
@@ -100,9 +124,9 @@ document.addEventListener('keydown', (e) => {
   if (!document.getElementById('card-menu').hidden) { closeCardMenu(); return; }
   if (!document.getElementById('confirm-dialog').hidden) { closeConfirm(); return; }
   if (showDlg) { closeShowDialog(); return; }
-  if (assignOpen) { assignOpen = null; renderDrawer(false); return; }
-  if (attentionOpen) { attentionOpen = false; renderAttentionList(); return; }
-  if (helper.open) { helper = { open: false, focus: null }; renderHelper(); return; }
+  if (assignOpen) { closeAssign(); return; }
+  if (attentionOpen) { closeAttention(); return; }
+  if (helper.open) { closeHelper(); return; }
   if (usageOpen) { closeUsage(); return; }
   if (peersOpen) { closePeers(); return; }
   if (view.report) closeReport();
@@ -111,9 +135,9 @@ document.addEventListener('keydown', (e) => {
 // 点抽屉以外的地方关闭抽屉；点任务卡片则切换到那张卡片（卡片自己的点击处理负责打开）
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#card-menu')) closeCardMenu();
-  if (attentionOpen && !e.target.closest('#attention, #attention-list')) { attentionOpen = false; renderAttentionList(); }
-  if (helper.open && !e.target.closest('#helper, #helper-btn')) { helper = { open: false, focus: null }; renderHelper(); }
-  if (assignOpen && !e.target.closest('.assign-picker')) { assignOpen = null; renderDrawer(false); }
+  if (attentionOpen && !e.target.closest('#attention, #attention-list')) closeAttention();
+  if (helper.open && !e.target.closest('#helper, #helper-btn')) { closeHelper(); }
+  if (assignOpen && !e.target.closest('.assign-picker')) closeAssign();
   if (!view.task) return;
   if (e.target.closest('#drawer, .card, .cancelled-row, .demo-row, #demo-banner, #stale-dialog, #decide-dialog, #show-dialog, #confirm-dialog, #card-menu')) return;
   closeDrawer();
@@ -121,20 +145,13 @@ document.addEventListener('click', (e) => {
 document.getElementById('notify-btn').addEventListener('click', (e) => { e.stopPropagation(); enableNotify(); });
 document.getElementById('attention').addEventListener('click', (e) => {
   e.stopPropagation();
-  attentionOpen = !attentionOpen;
-  if (attentionOpen && helper.open) { helper = { open: false, focus: null }; renderHelper(); }
-  acceptPick = null;
-  acceptConfirm = false;
-  acceptMsg = '';
-  doctorFix = { busy: null, key: null, msg: '', error: false };
-  renderAttentionList();
-  if (attentionOpen) recheckDoctor();
+  toggleAttention();
 });
 document.getElementById('helper-btn').addEventListener('click', (e) => {
   e.stopPropagation();
-  helper = helper.open ? { open: false, focus: null } : { open: true, focus: null };
-  if (helper.open && attentionOpen) { attentionOpen = false; renderAttentionList(); }
-  renderHelper();
+  if (helper.open) { closeHelper(); return; }
+  if (attentionOpen) closeAttention();
+  openHelper();
 });
 loadView();
 // 地址栏的 #需求/卡号 被外部改了（菜单栏、通知点进来）：跳到对应需求并打开那张卡

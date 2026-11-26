@@ -1,7 +1,12 @@
-'use strict';
 // 「推送到手机」设置和每日摘要
 
+import { READONLY } from './prefs.js';
+import { el, icon, post } from './util.js';
+import { helper, renderHelper } from './helper.js';
+
 let pushCfg = null;
+// 下次进「推送」时重新读配置
+export function resetPush() { pushCfg = null; }
 let pushOn = false; // 总开关
 let pushLoading = false;
 const pushDraft = {}; // 渠道 → 正在输入、还没保存的字段
@@ -137,7 +142,7 @@ async function setPushOn(on) {
   if (out.ok) { pushCfg = out.channels; pushOn = !!out.enabled; }
   renderHelper(true);
 }
-function pushPage() {
+export function pushPage() {
   if (READONLY) return el('p', { class: 'hint' }, '推送配置仅可在运行 ateam 的电脑上查看和修改。');
   if (!pushCfg) { if (!pushLoading) loadPush(); return el('p', { class: 'hint' }, '读取中…'); }
   const master = el('input', { type: 'checkbox', class: 'switch', role: 'switch' });

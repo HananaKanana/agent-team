@@ -1,11 +1,18 @@
-'use strict';
 // 演播卡：开始 / 预演弹框、步骤进度、抽屉里的演播详情和脚本大纲
 
-const isDemoTask = (t) => t.kind === 'demo';
+import { data, RUN_MODE, RUN_OUTCOME, view } from './state.js';
+import { agentName, el, fill, fmtTime, icon, modalHead, renderMarkdown, tickSince } from './util.js';
+import { renderMain } from './jobs.js';
+import { assignBox, reclaimBox, renderDrawer } from './drawer.js';
+import { poll, render } from './app.js';
+
+const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
+
+export const isDemoTask = (t) => t.kind === 'demo';
 // 造成「派发暂停」的演播卡：等 worker 领的，或正在演播、没被叫停的（与服务端 demoFrozen 一致）
-const frozenDemo = () => data.state.tasks.find((t) => isDemoTask(t) && (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)));
-let demoError = null; // { id, message }
-async function demoAction(kind, t, mode, steps, viewport) {
+export const frozenDemo = () => data.state.tasks.find((t) => isDemoTask(t) && (t.status === 'queued' || (t.status === 'demoing' && !t.stopRequested)));
+export let demoError = null; // { id, message }
+export async function demoAction(kind, t, mode, steps, viewport) {
   try {
     const res = await fetch(`/api/demo/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: t.id, mode, ...(steps ? { steps } : {}), ...(viewport ? { viewport } : {}) }) });
     const out = await res.json();
@@ -16,21 +23,21 @@ async function demoAction(kind, t, mode, steps, viewport) {
   return !demoError;
 }
 // 一场演播选中的步骤（没有 = 完整演播），和服务端 stepsLabel 同一种写法
-const runSteps = (t) => t.runs?.[t.runs.length - 1]?.steps || null;
+export const runSteps = (t) => t.runs?.[t.runs.length - 1]?.steps || null;
 function stepsLabel(steps) {
   if (!steps?.length) return '';
   const contiguous = steps.every((n, i) => i === 0 || n === steps[i - 1] + 1);
   return contiguous && steps.length > 1 ? `第 ${steps[0]}–${steps[steps.length - 1]} 步` : `第 ${steps.join('、')} 步`;
 }
 // 部分演播时当前步在本场里是第几步：「本场 2/10」
-function sceneOf(t) {
+export function sceneOf(t) {
   const steps = runSteps(t);
   const n = t.demoStep?.n;
   if (!steps || !n) return '';
   return `本场 ${steps.indexOf(n) + 1}/${steps.length}`;
 }
 // 「开始演播」弹窗：从头完整演播 / 从第 N 步开始 / 只演选中的几步。预演不弹（预演总是完整走）
-let showDlg = null; // { id, pick: 'all' | 'from' | 'some', from, some: Set, error, resume }
+export let showDlg = null; // { id, pick: 'all' | 'from' | 'some', from, some: Set, error, resume }
 function openShowDialog(t) {
   const last = t.runs?.[t.runs.length - 1];
   const resume = last && (last.outcome === 'interrupted' || last.outcome === 'stopped') && last.lastStep ? last.lastStep : null;
@@ -44,7 +51,7 @@ function openRehearsalDialog(t) {
   showDlg = { id: t.id, kind: 'rehearsal', pick: preset ? vp : 'custom', custom: vp, error: null };
   renderShowDialog();
 }
-function closeShowDialog() { showDlg = null; renderShowDialog(); }
+export function closeShowDialog() { showDlg = null; renderShowDialog(); }
 function renderRehearsalDialog(box, t) {
   const d = showDlg;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(e); };
@@ -86,7 +93,7 @@ function renderRehearsalDialog(box, t) {
   box.hidden = false;
   if (d.refocus) { d.refocus = false; custom.focus(); custom.setSelectionRange(custom.value.length, custom.value.length); }
 }
-function renderShowDialog() {
+export function renderShowDialog() {
   const box = document.getElementById('show-dialog');
   const t = showDlg && data?.state.tasks.find((x) => x.id === showDlg.id);
   if (!t || t.status !== 'ready') { showDlg = null; box.hidden = true; box.replaceChildren(); return; }
@@ -149,14 +156,14 @@ function renderShowDialog() {
   for (const [sel, top] of keep) { const n = box.querySelector(sel); if (n) n.scrollTop = top; }
 }
 const runMode = (t) => t.runs?.[t.runs.length - 1]?.mode ?? 'show';
-const modeWord = (t) => (t.status === 'queued' ? t.pendingMode : runMode(t)) === 'rehearsal' ? '预演' : '演播';
+export const modeWord = (t) => (t.status === 'queued' ? t.pendingMode : runMode(t)) === 'rehearsal' ? '预演' : '演播';
 // 预演状态：未预演 / 已预演 / 页面可能有变动
-function rehearsalTag(t) {
+export function rehearsalTag(t) {
   if (!t.rehearsedAt) return el('span', { class: 'lozenge c-pending', title: '尚未完成预演，需先预演' }, '未预演');
   if (t.mayChange) return el('span', { class: 'lozenge c-asking', title: `${fmtTime(t.rehearsedAt)} 预演后有新代码通过 review，建议重新预演` }, '页面可能有变动');
   return el('span', { class: 'lozenge c-approved', title: `${fmtTime(t.rehearsedAt)} 预演` }, '已预演');
 }
-function demoButton(t) {
+export function demoButton(t) {
   const stop = (e) => e.stopPropagation();
   // Windows 版不支持预演和演播（提词悬浮窗、窗口控制只有 Mac 版）
   if (t.status === 'ready' && data.platform === 'win32') return el('span', { class: 'lozenge c-pending', title: '请在 Mac 上运行 ateam 预演和演播这张卡' }, 'Windows 版不支持演播');
@@ -190,7 +197,7 @@ function demoButton(t) {
   return null;
 }
 // 当前进行到哪一步 + 已演播多久（演播中）；等 worker 领（等待开始）；收尾中
-function demoProgress(t) {
+export function demoProgress(t) {
   if (t.status === 'queued') return el('span', null, `等待 ${t.role} worker 领取…`);
   if (t.status === 'wrapping') return el('span', null, `${agentName(t.assignee)} 正在收尾：清理数据、写入操作记录`);
   if (t.status !== 'demoing') return null;
@@ -201,34 +208,34 @@ function demoProgress(t) {
   return [el('span', null, step), ' ', since, pausedTag(t), t.stopRequested ? el('span', { class: 'tag warn' }, '已叫停') : null];
 }
 // 暂停 / 继续：worker 做完当前这一步后停住，点继续接着做下一步
-function pauseButton(t, cls) {
+export function pauseButton(t, cls) {
   const paused = !!t.paused;
   return el('button', {
     class: `${cls} pause-btn`, title: paused ? '继续执行下一步' : '当前步骤完成后暂停，浏览器停留在当前页面，便于讲解与答疑',
     onclick: (e) => { e.stopPropagation(); demoAction(paused ? 'resume' : 'pause', t); },
   }, icon(paused ? 'play' : 'pause'), paused ? '继续' : '暂停');
 }
-function pausedTag(t) {
+export function pausedTag(t) {
   if (!t.paused) return null;
   const s = t.demoStep;
   const waiting = s && t.paused.afterStep === s.n ? '当前步骤完成后暂停' : '已暂停';
   return el('span', { class: 'tag paused', title: `暂停中：${waiting}。点击「继续」执行下一步` }, '已暂停');
 }
 // 提词：这一步的讲解（没写就用这一步做什么）、下一步预告
-function cueOf(t) {
+export function cueOf(t) {
   const s = t.demoStep;
   if (!s) return { head: '准备中', say: '即将开始第 1 步', next: '' };
   const scene = sceneOf(t);
   return { head: `第 ${s.n}/${s.total} 步${scene ? `（${scene}）` : ''} · ${s.text}`, say: s.cue?.narration || s.text, next: s.cue?.next || '' };
 }
-function runSince(t) {
+export function runSince(t) {
   const run = t.runs?.[t.runs.length - 1];
   if (!run) return null;
   const n = el('span', { class: 'since', title: '已演播时长', 'data-since': run.startedAt }, icon('clock'), el('span'));
   tickSince(n);
   return n;
 }
-function demoDrawerBody(t) {
+export function demoDrawerBody(t) {
   const progress = demoProgress(t);
   return [
     el('div', { class: 'prompt' }, demoButton(t), progress ? el('span', { class: 'hint' }, progress) : null),
@@ -239,7 +246,7 @@ function demoDrawerBody(t) {
   ];
 }
 // 脚本缓存：演播需求页的步骤大纲、操作记录面板用
-const opsCache = new Map(); // taskId -> { key, html | error }
+export const opsCache = new Map(); // taskId -> { key, html | error }
 // 卡的 token 用量（Claude Code、DeepSeek Harness 的会话记录）：打开卡时读，卡状态变了重读，进行中的卡最多 30 秒重读一次
 const tokenCache = new Map(); // taskId -> { key, at, value, loading }
 function loadTokens(t) {
@@ -255,9 +262,9 @@ function loadTokens(t) {
   }
   return hit && 'value' in hit ? hit.value : undefined;
 }
-const fmtTokens = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(2)} 亿` : n >= 1e4 ? `${(n / 1e4).toFixed(1)} 万` : String(n));
+export const fmtTokens = (n) => (n >= 1e8 ? `${(n / 1e8).toFixed(2)} 亿` : n >= 1e4 ? `${(n / 1e4).toFixed(1)} 万` : String(n));
 // 详情里的「Token」一行；卡还没人领过时不显示
-function tokenFact(t, fact) {
+export function tokenFact(t, fact) {
   if (!t.history.some((h) => h.type === 'claimed')) return null;
   const v = loadTokens(t);
   if (v === undefined) return fact('Token', el('span', { class: 'hint' }, '统计中…'));
@@ -270,14 +277,13 @@ function tokenFact(t, fact) {
     v.heavy ? el('span', { class: 'heavy-tag', title: '超过同角色已通过卡用量中位数的倍数，详见需求栏底部「用量」' }, `用量偏高 ${v.heavy} 倍`) : null,
     el('span', { class: 'hint' }, ` 输入 ${fmtTokens(v.input)} · 缓存命中 ${fmtTokens(v.cacheRead)} · 输出 ${fmtTokens(v.output)} · 调用 ${v.calls} 次${v.live ? '（进行中，实时统计）' : ''}`)));
 }
-let lastOutlineStep = null;
 // 操作记录里某一步的那一条（「### 3. ...」到下一个「### 」之前）
 function opsForStep(raw, n) {
   const parts = String(raw || '').split(/^(?=###\s)/m);
   return parts.find((p) => new RegExp(`^###\\s*${n}[.、\\s]`).test(p)) || '';
 }
 // 左栏卡片下面：运行中是「下一步」「这一步怎么操作」；没在运行是「操作记录概况」。最下面是运行记录
-function stagePanels(t) {
+export function stagePanels(t) {
   const sc = loadScript(t);
   const steps = sc?.steps || [];
   const running = t.status === 'demoing' && t.demoStep;
@@ -323,7 +329,7 @@ function loadScript(t) {
   return hit.steps ? hit : null; // 重读期间返回旧数据
 }
 // 右栏：脚本步骤大纲。走过的灰、慢档的红、当前步高亮并展开讲解
-function stepOutline(t) {
+export function stepOutline(t) {
   const sc = loadScript(t);
   const s = t.status === 'demoing' ? t.demoStep : null;
   const run = t.runs?.[t.runs.length - 1];

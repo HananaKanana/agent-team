@@ -1,5 +1,5 @@
 // 发布前检查（release.sh 打包前运行，任何一项不过就不发布）：
-//   1. bin/、src/ 下所有 .js（含看板 src/dashboard/js）能通过 node --check，看板 index.html 引用的文件齐全；
+//   1. bin/、src/ 下所有 .js（含看板 src/dashboard/js）能通过 node --check，看板的样式和模块都会被加载；
 //   2. README、skills、看板说明、命令输出里提到的 `ateam <子命令>` 都是存在的命令。
 // 用法：node agent-installer/precheck.mjs
 import { execFileSync } from 'node:child_process';
@@ -19,13 +19,25 @@ const scripts = [...walk(join(ROOT, 'bin')), ...walk(join(ROOT, 'src'))].filter(
 for (const f of scripts) {
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); } catch (err) { problems.push(`语法错误 ${relative(ROOT, f)}：${String(err.stderr).split('\n').slice(0, 4).join(' ')}`); }
 }
-// 看板：脚本已在上面随 src/ 一起检查；index.html 引用的样式和脚本都要存在，dashboard/ 下的也都要被引用
+// 看板：脚本已在上面随 src/ 一起检查。样式都要被 index.html 引用；脚本是 ES 模块，从 index.html 加载的入口沿 import 走，
+// 每个模块都要走得到（走不到的不会加载），导入的文件都要存在
 const DASH = join(ROOT, 'src', 'dashboard');
 const html = readFileSync(join(DASH, 'index.html'), 'utf8');
 const linked = [...html.matchAll(/(?:href|src)="\/((?:css|js)\/[^"]+)"/g)].map((m) => m[1]);
 for (const f of linked) if (!existsSync(join(DASH, f))) problems.push(`看板 index.html 引用的 ${f} 不存在`);
+const reached = new Set();
+const follow = (f) => {
+  if (reached.has(f) || !existsSync(join(DASH, f))) return;
+  reached.add(f);
+  for (const m of readFileSync(join(DASH, f), 'utf8').matchAll(/^import [\s\S]*? from '\.\/([a-z0-9-]+\.js)';$/gm)) {
+    const g = `js/${m[1]}`;
+    if (!existsSync(join(DASH, g))) problems.push(`看板 ${f} 导入的 ${g} 不存在`);
+    follow(g);
+  }
+};
+linked.filter((f) => f.startsWith('js/')).forEach(follow);
 for (const f of walk(DASH).map((x) => relative(DASH, x).split(sep).join('/')).filter((x) => /^(css|js)\//.test(x))) {
-  if (!linked.includes(f)) problems.push(`看板 ${f} 没有被 index.html 引用`);
+  if (f.startsWith('css/') ? !linked.includes(f) : !reached.has(f)) problems.push(`看板 ${f} 没有被加载（${f.startsWith('css/') ? 'index.html 里没有引用' : '入口模块沿 import 走不到'}）`);
 }
 if (!html.includes('<!-- ateam:prefs -->')) problems.push('看板 index.html 缺少 <!-- ateam:prefs -->（服务在这里写入显示偏好）');
 

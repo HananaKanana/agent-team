@@ -1,10 +1,20 @@
-'use strict';
 // 提词：卡片下方提词条、弹出的提词小窗和悬浮窗
+
+import { prefs } from './prefs.js';
+import { data, DEMO_STATUS, RUN_MODE, RUN_OUTCOME, setView, view } from './state.js';
+import { agentName, el, fill, fmtTime, icon } from './util.js';
+import {
+  cueOf, demoAction, demoButton, demoError, demoProgress, frozenDemo, isDemoTask, modeWord, opsCache,
+  pauseButton, pausedTag, rehearsalTag, runSince, runSteps, sceneOf
+} from './demo.js';
+import { renderDrawer } from './drawer.js';
+import { openCardMenu } from './menu.js';
+import { render, saveView, toastClosed, toastX } from './app.js';
 
 // 提词小窗：单独的浏览器小窗口，打开就放到屏幕最下方，像字幕条；可以拖到第二块屏幕
 // ?prompter（不带卡号）跟随当前在跑的演播卡：Safari「添加到程序坞」做成网页 App 后一直用这一个
 const PROMPTER_PARAMS = new URLSearchParams(location.search);
-const PROMPTER_ONLY = PROMPTER_PARAMS.has('prompter') ? PROMPTER_PARAMS.get('prompter') || 'auto' : null;
+export const PROMPTER_ONLY = PROMPTER_PARAMS.has('prompter') ? PROMPTER_PARAMS.get('prompter') || 'auto' : null;
 // &native：在 macOS 提词悬浮窗（src/prompter.jxa）里，顶部留出拖动条，关闭走服务
 const PROMPTER_NATIVE = PROMPTER_PARAMS.has('native');
 if (PROMPTER_NATIVE) document.documentElement.classList.add('prompter-native');
@@ -77,7 +87,7 @@ function nativeTools() {
   ];
 }
 // 小窗里的内容：演播没在进行时也留着窗口，显示等待；下次开始自动接上
-function renderPrompterStrip() {
+export function renderPrompterStrip() {
   const box = document.getElementById('prompter-strip');
   const tasks = data?.state.tasks || [];
   const t = PROMPTER_ONLY === 'auto'
@@ -134,7 +144,7 @@ if (PROMPTER_NATIVE) {
   strip.addEventListener('mouseleave', () => { clearTimeout(hideTimer); hide(); });
 }
 let lastStripStep = null;
-function demoRow(t) {
+export function demoRow(t) {
   const [label, color] = DEMO_STATUS[t.status] || [t.status, 'pending'];
   const runs = t.runs || [];
   const last = runs[runs.length - 1];
@@ -162,7 +172,7 @@ function demoRow(t) {
     t.status === 'demoing' ? prompter(t) : progress ? el('div', { class: 'step' }, progress) : null,
     demoError?.id === t.id ? el('div', { class: 'step hint' }, demoError.message) : null);
 }
-function renderDemoBanner() {
+export function renderDemoBanner() {
   const box = document.getElementById('demo-banner');
   const t = data && frozenDemo();
   // 正在看这个演播需求时，卡上已经有完整的进度和停止按钮，不再重复横幅
@@ -172,7 +182,7 @@ function renderDemoBanner() {
     el('b', null, t.status === 'queued' ? `等待 worker 开始${modeWord(t)}：${t.title}` : `${modeWord(t)}中：${t.title}`),
     el('span', null, '派发已暂停'),
     t.status === 'demoing' ? el('span', { class: 'step' }, t.demoStep ? `第 ${t.demoStep.n}/${t.demoStep.total} 步：${cueOf(t).say}` : '准备中') : null,
-    el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); view = { job: t.jobId, task: null, report: false }; saveView(); render(); } }, '查看'),
+    el('button', { class: 'btn sm', onclick: (e) => { e.stopPropagation(); setView({ job: t.jobId, task: null, report: false }); saveView(); render(); } }, '查看'),
     t.status === 'demoing' && !t.stopRequested ? pauseButton(t, 'btn sm') : null,
     el('button', { class: 'btn warn sm', onclick: (e) => { e.stopPropagation(); demoAction('stop', t); } }, `停止${modeWord(t)}`),
     toastX(() => { toastClosed.add(key); renderDemoBanner(); }));

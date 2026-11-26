@@ -1,8 +1,19 @@
-'use strict';
-// 卡片和需求的右键（长按）菜单、跳到某张卡
+// 卡片和需求的右键（长按）菜单、跳到某张卡。会改动东西又不好撤回的（收回、作废）先弹确认框
+
+import { data, LANE_LABEL, view } from './state.js';
+import { agentLabel, avatar, el, fill, icon, laneOf, pathsOverlap, post } from './util.js';
+import { lastClaimSince } from './workers.js';
+import { acceptJob } from './jobs.js';
+import { focusReply, holdAction, renderDrawer } from './drawer.js';
+import { openConfirm } from './dialogs.js';
+import { openReport } from './report.js';
+import { poll, render, saveView } from './app.js';
+
+export let flashId = null; // 刚跳到的卡，闪一下（jumpToTask 设置，card() 读）
+let flashTimer = 0;
 
 // 跳到某张卡：不在当前需求就先切过去；滚到看得见、闪一下，打开它的详情
-function jumpToTask(id) {
+export function jumpToTask(id) {
   const t = data.state.tasks.find((x) => x.id === id);
   if (!t) return;
   if (t.jobId !== view.job) { view.job = t.jobId; view.report = false; }
@@ -15,13 +26,13 @@ function jumpToTask(id) {
   renderDrawer(true);
   requestAnimationFrame(() => document.querySelector(`.card[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }));
 }
-function closeCardMenu() {
+export function closeCardMenu() {
   const m = document.getElementById('card-menu');
   if (m.hidden) return;
   m.hidden = true;
   m.replaceChildren();
 }
-function openCardMenu(id, x, y) {
+export function openCardMenu(id, x, y) {
   const t = data.state.tasks.find((q) => q.id === id);
   if (!t) return;
   const tasks = data.state.tasks;
@@ -117,7 +128,7 @@ function placeMenu(m, x, y) {
   m.querySelector('button')?.focus();
 }
 // 左侧需求的右键菜单：查看、验收 / 汇报、暂停领取、跳到需要处理的卡、作废、复制
-function openJobMenu(id, x, y) {
+export function openJobMenu(id, x, y) {
   const j = data.state.jobs.find((q) => q.id === id);
   if (!j) return;
   const m = document.getElementById('card-menu');

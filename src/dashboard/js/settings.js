@@ -1,5 +1,14 @@
-'use strict';
 // 「设置」页：设置项、保存、测试报告模板
+
+import { prefs } from './prefs.js';
+import { data } from './state.js';
+import { el, renderMarkdown } from './util.js';
+import { renderHelper } from './helper.js';
+import { renderMain } from './jobs.js';
+import { syncSettings } from './sync.js';
+import { markRelated } from './search.js';
+import { openConfirm } from './dialogs.js';
+import { poll } from './app.js';
 
 // 改一项存一项。数字框在失去焦点或回车时保存；正在输入时轮询不重画面板（见 renderHelper）。
 const SETTING_ITEMS = [
@@ -22,18 +31,18 @@ const SETTING_ITEMS = [
   { key: 'autoNoLeader', type: 'bool', label: 'leader 离线时自动进入无 leader 模式', hint: '关闭时，仅在「帮助 → leader」中点击「下线」后进入。开启时，leader 离线（超过下方时长既未监听也未执行命令）也会自动进入，重新监听或执行命令后自动退出。token 用尽后，leader 的后台监听最多仍会保持约半小时，期间视为在线。' },
   { key: 'leaderAwayMin', type: 'int', label: '离线判定时长（分钟）', hint: '仅在上方自动进入开关开启时生效。' },
 ];
-const VIEWPORT_PRESETS = [['1280x720', ['1280×720', '小屏']], ['1600x800', ['1600×800', '默认']], ['1920x1080', ['1920×1080', '1K']], ['2560x1440', ['2560×1440', '2K']]];
 let settingsMsg = '';
+export function clearSettingsMsg() { settingsMsg = ''; }
 // 触屏模式：默认关闭。开了以后按住拖动就滚动，但拖选文字会变成滚动
-let touchScroll = false;
+export let touchScroll = false;
 try { touchScroll = prefs.get('ateam.touchScroll') === '1'; } catch {}
 // 触屏模式下没有悬停，靠悬停才出现的按钮（概览卡的「暂停领取」等）一直显示
 document.documentElement.classList.toggle('touch-mode', touchScroll);
 // 看板空列收窄：没有卡的列收成窄竖条。默认关闭
-let slimLanes = false;
+export let slimLanes = false;
 try { slimLanes = prefs.get('ateam.slimLanes') === '1'; } catch {}
 // 悬停卡片时标出依赖关系：默认关闭（框和标签多了看着重）
-let showRelations = false;
+export let showRelations = false;
 try { showRelations = prefs.get('ateam.showRelations') === '1'; } catch {}
 // 「测试用的浏览器」选 ego-browser 时：列出自动启用的测试用 profile（ego 中名称以 ateam 开头的 profile）
 let egoRefreshing = false;
@@ -57,7 +66,7 @@ function egoProfilesSetting() {
     el('span', { class: 'hint' }, status, info.error ? ` ${info.error}` : ''),
     el('span', { class: 'hint' }, '各 profile 的 Cookie 和登录状态相互独立。test worker 领取测试卡或开始预演、演播时，自动分配一个未被占用的 profile 供其独占：优先沿用该 worker 或该任务上次使用的 profile；任务提交、作废、收回或 worker 离线后释放；全部被占用时使用默认 profile，并在任务说明中提示可能互相挤下线。ego 未提供新建 profile 的接口：如需增加，请在 ego lite 中新建 profile 并以 ateam 开头命名（如 ateam4），然后点击「刷新」。')));
 }
-async function saveSetting(key, value) {
+export async function saveSetting(key, value) {
   try {
     const res = await fetch('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ [key]: value }) });
     const out = await res.json();
@@ -66,7 +75,7 @@ async function saveSetting(key, value) {
   await poll();
   renderHelper(true);
 }
-function settingsPage() {
+export function settingsPage() {
   const cfg = data.config || {};
   if (!data.config) return el('p', { class: 'hint' }, '当前服务版本不支持设置，请重启 ateam serve。');
   return [
@@ -141,7 +150,7 @@ function settingsPage() {
   ];
 }
 // 测试报告模板编辑器：存在 .ateam/test-template.md。没改过、或重置了，显示和使用 ateam 自带的模板
-let testTpl = { loaded: false, loading: false, saved: '', draft: '', custom: false, def: '', status: '', mode: 'edit' };
+export let testTpl = { loaded: false, loading: false, saved: '', draft: '', custom: false, def: '', status: '', mode: 'edit' };
 async function loadTestTpl() {
   if (testTpl.loading) return;
   testTpl.loading = true;
@@ -177,7 +186,7 @@ function fillTestTemplate(text, task, agentId) { // 同 src/format.js 的 fillTe
     .replace(/\{\{卡号\}\}/g, task.id).replace(/\{\{标题\}\}/g, task.title).replace(/\{\{测试人\}\}/g, agentId)
     .replace(/\{\{验收标准\}\}/g, task.acceptance.map((a, i) => `${i + 1}. ${one(a)}`).join('\n'));
 }
-function testTemplateEditor() {
+export function testTemplateEditor() {
   if (!testTpl.loaded) { loadTestTpl(); return el('p', { class: 'hint' }, '读取中……'); }
   const dirty = testTpl.draft !== testTpl.saved;
   const stop = (fn) => (e) => { e.stopPropagation(); fn(); };

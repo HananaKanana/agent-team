@@ -1,7 +1,12 @@
-'use strict';
 // leader 汇报阅读页
 
-function openReport() {
+import { data, JOB_STATUS, view } from './state.js';
+import { el, fill, fmtTime, icon, renderMarkdown, reviewStats } from './util.js';
+import { ACCEPT_HINT, acceptButtons } from './jobs.js';
+import { critiqueItem } from './drawer.js';
+import { render, saveView } from './app.js';
+
+export function openReport() {
   view.task = null;
   view.report = true;
   saveView();
@@ -10,12 +15,12 @@ function openReport() {
   page.scrollTop = 0;
   page.querySelector('.btn')?.focus();
 }
-function closeReport() {
+export function closeReport() {
   view.report = false;
   saveView();
   render();
 }
-function renderReport() {
+export function renderReport() {
   const page = document.getElementById('report');
   const job = data.state.jobs.find((j) => j.id === view.job);
   if (!view.report || !job || !job.report) {

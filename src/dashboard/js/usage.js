@@ -1,5 +1,12 @@
-'use strict';
 // 用量页（token）
+
+import { data, LANE_LABEL, view } from './state.js';
+import { el, fill, fmtTime, icon, laneOf, roleStyle } from './util.js';
+import { closeHelper, helper } from './helper.js';
+import { renderMain } from './jobs.js';
+import { fmtTokens } from './demo.js';
+import { peerHue, renderPeersBtn, syncInfo } from './sync.js';
+import { jumpToTask } from './menu.js';
 
 let usageData = null; // /api/usage 的结果
 let usageLoading = false;
@@ -12,14 +19,14 @@ function usageSpan(from, to) {
   const hm = (t) => new Date(t).toTimeString().slice(0, 5);
   return d(from) === d(to) ? `${d(from)} ${hm(from)}–${hm(to)}` : `${d(from)} – ${d(to)}`;
 }
-let usageOpen = false; // 需求栏底部「用量」打开的全屏页
+export let usageOpen = false; // 需求栏底部「用量」打开的全屏页
 let usageJob = null; // 只看一个需求时的需求编号（从需求概览的 Token 点进来）；null 为全部
 let usageJobData = null; // /api/usage?job= 的结果
 let usageJobLoading = false;
-function openUsage(jobId = null) {
+export function openUsage(jobId = null) {
   usageOpen = true;
   setUsageJob(jobId);
-  if (helper.open) { helper = { open: false, focus: null }; renderHelper(); }
+  if (helper.open) { closeHelper(); }
   renderUsagePage();
   renderPeersBtn();
   document.getElementById('usage-page').scrollTop = 0;
@@ -31,12 +38,12 @@ function setUsageJob(jobId) {
   if (jobId) loadJobUsage(true); else loadUsage(true);
   if (usageOpen) { renderUsagePage(); document.getElementById('usage-page').scrollTop = 0; }
 }
-function closeUsage() {
+export function closeUsage() {
   usageOpen = false;
   renderUsagePage();
   renderPeersBtn();
 }
-function renderUsagePage() {
+export function renderUsagePage() {
   const page = document.getElementById('usage-page');
   if (!usageOpen) {
     if (!page.hidden) { page.hidden = true; page.replaceChildren(); if (!view.report) document.body.style.overflow = ''; }
@@ -87,7 +94,7 @@ async function loadJobUsage(fresh) {
   if (usageOpen) renderUsagePage();
 }
 // 需求概览里的合计要用：超过 1 分钟没读过就在后台读一次
-function usageForJob(id) {
+export function usageForJob(id) {
   if (!usageLoading && (!usageData || Date.now() - (usageData.generatedAt || 0) > 60000)) loadUsage(false);
   return usageData?.jobs?.find((j) => j.id === id) ?? null;
 }

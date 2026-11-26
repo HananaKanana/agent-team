@@ -1,5 +1,7 @@
-'use strict';
 // 「项目规则」编辑器（分段规则和 src/rules.js 保持一致）
+
+import { el, fill, renderMarkdown } from './util.js';
+import { renderHelper } from './helper.js';
 
 // 项目规则编辑器的状态。规则不在 /api/state 里，进入「项目规则」页时单独读取
 let rules = { loaded: false, saved: '', draft: '', status: '', roles: [], previewRole: '' };
@@ -31,7 +33,7 @@ function unreceivedRoles(text, known) {
   }
   return out;
 }
-async function loadRules() {
+export async function loadRules() {
   try {
     const res = await fetch('/api/rules', { cache: 'no-store' });
     const json = await res.json();
@@ -64,7 +66,7 @@ function ruleCounts(text) {
   }
   return [...counts].filter(([, n]) => n > 0);
 }
-function rulesEditor() {
+export function rulesEditor() {
   if (!rules.loaded) return el('p', { class: 'hint' }, '读取中……');
   const mode = rules.mode === 'view' ? 'view' : 'edit';
   const dirty = rules.draft !== rules.saved;

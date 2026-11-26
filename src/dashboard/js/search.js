@@ -1,14 +1,19 @@
-'use strict';
 // 搜索（⌘K 或 /）和悬停卡片时标出相关的卡
 
+import { data, JOB_STATUS, LANE_LABEL, view } from './state.js';
+import { el, fill, icon, laneOf } from './util.js';
+import { showRelations } from './settings.js';
+import { closeCardMenu, jumpToTask } from './menu.js';
+import { render, saveView } from './app.js';
+
 // 按卡号、需求编号或标题搜。卡号打全了排第一；回车跳过去
-let spot = null; // { q, sel }
+export let spot = null; // { q, sel }
 function openSpotlight() {
   closeCardMenu();
   spot = { q: '', sel: 0 };
   renderSpotlight(true);
 }
-function closeSpotlight() {
+export function closeSpotlight() {
   spot = null;
   const box = document.getElementById('spotlight');
   box.hidden = true;
@@ -108,8 +113,10 @@ addEventListener('keydown', (e) => {
   }
 });
 // 悬停卡片时把它依赖的卡和依赖它的卡标出来（设置里开了「悬停显示依赖关系」才标）
-var relFor = null;
-function markRelated(id) {
+let relFor = null;
+// 卡片重画后调用：下一次悬停重新标
+export function resetRelated() { relFor = null; }
+export function markRelated(id) {
   if (relFor === id) return;
   relFor = id;
   for (const n of document.querySelectorAll('.card.rel-self, .card.rel-dep, .card.rel-after')) { n.classList.remove('rel-self', 'rel-dep', 'rel-after'); n.removeAttribute('data-rel'); }

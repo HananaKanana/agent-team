@@ -1,11 +1,12 @@
-'use strict';
 // 通用工具：建节点、图标、头像、时间格式、Markdown、接口调用、路径比较、角色名和颜色
 
+import { data, LANE_LABEL } from './state.js';
+
 // 用一组子节点替换 node 的内容；嵌套数组会展开，null/false 跳过，字符串转成文本
-function fill(node, ...children) {
+export function fill(node, ...children) {
   node.replaceChildren(...children.flat(Infinity).filter((c) => c != null && c !== false));
 }
-function el(tag, attrs, ...children) {
+export function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
@@ -19,7 +20,7 @@ function el(tag, attrs, ...children) {
   }
   return node;
 }
-const icon = (id, cls = '') => {
+export const icon = (id, cls = '') => {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('class', `ico ${cls}`);
   svg.setAttribute('aria-hidden', 'true');
@@ -29,17 +30,17 @@ const icon = (id, cls = '') => {
   return svg;
 };
 // 头像上的字：frontend-13 这类编号显示尾号，其他显示首字
-function avText(name) {
+export function avText(name) {
   const m = String(name).match(/-(\d+)$/);
   return m ? m[1] : String(name).trim().charAt(0).toUpperCase();
 }
-function avatar(id, role) {
+export function avatar(id, role) {
   if (!id) return el('span', { class: 'av none', title: '未领取' });
   const a = data.state.agents.find((x) => x.id === id);
   return el('span', { class: 'av', style: roleStyle(role ?? a?.role ?? ''), title: agentLabel(id) }, avText(a?.name || id));
 }
 // 空状态：图标 + 标题 + 下一步做什么（可带一个按钮）
-function emptyState(iconId, title, text, action) {
+export function emptyState(iconId, title, text, action) {
   return el('div', { class: 'empty-state' },
     el('div', { class: 'ico-wrap' }, icon(iconId)),
     el('h3', null, title),
@@ -47,26 +48,25 @@ function emptyState(iconId, title, text, action) {
     action || null);
 }
 // 弹框的标题栏：标题 + 右侧按钮（默认一个关闭图标）
-function modalHead(title, onClose, extra) {
+export function modalHead(title, onClose, extra) {
   return el('div', { class: 'modal-head' },
     el('h3', null, title),
     extra || null,
     onClose ? el('button', { class: 'btn ghost icon', title: '关闭', 'aria-label': '关闭', onclick: (e) => { e.stopPropagation(); onClose(); } }, icon('close')) : null);
 }
-const openGuide = (tab) => el('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); helper = { open: true, focus: null, tab }; renderHelper(); } }, tab === 'lead' ? '查看 leader 提示词' : '打开帮助');
 const pad = (n) => String(n).padStart(2, '0');
-function fmtTime(ts) {
+export function fmtTime(ts) {
   const d = new Date(ts);
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-function ago(ts) {
+export function ago(ts) {
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
   if (s < 60) return `${s} 秒前`;
   if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
   return `${Math.floor(s / 3600)} 小时前`;
 }
 // 时长：45 秒 / 23 分钟 / 2 小时 5 分 / 1 天 3 小时
-function dur(ms) {
+export function dur(ms) {
   const m = Math.floor(Math.max(0, ms) / 60000);
   if (m < 1) return `${Math.round(Math.max(0, ms) / 1000)} 秒`;
   if (m < 60) return `${m} 分钟`;
@@ -74,7 +74,7 @@ function dur(ms) {
   return `${Math.floor(m / 1440)} 天${Math.floor(m % 1440 / 60) ? ` ${Math.floor(m % 1440 / 60)} 小时` : ''}`;
 }
 // 已通过任务的总用时：第一次被领取 → 最后一次通过（含 review、打回返工）
-function spent(t) {
+export function spent(t) {
   const start = t.history.find((h) => h.type === 'claimed');
   const end = t.history.findLast((h) => h.type === 'approved');
   return start && end ? new Date(end.ts) - new Date(start.ts) : null;
@@ -89,7 +89,7 @@ const SINCE = {
   held: [['rejected', 'handoff', 'released', 'created']],
 };
 const LANE_TIME_TIP = { pending: '排队时长', working: '处理时长', rework: '返工时长', asking: '等待答复时长', submitted: '等待 review 时长', held: '挂起时长' };
-function laneTime(t, lane) {
+export function laneTime(t, lane) {
   if (lane === 'approved') {
     const ms = spent(t);
     return ms == null ? null : el('span', { class: 'since', title: '总耗时' }, icon('clock'), dur(ms));
@@ -118,12 +118,12 @@ function laneTime(t, lane) {
   tickSince(node);
   return node;
 }
-function tickSince(n) {
+export function tickSince(n) {
   const ms = Date.now() - Number(n.dataset.since);
   n.lastChild.textContent = dur(ms);
   n.classList.toggle('late', !!n.dataset.late && ms > Number(n.dataset.late));
 }
-function laneOf(t) {
+export function laneOf(t) {
   if (t.status === 'working' && t.rejectCount > 0) return 'rework';
   return t.status;
 }
@@ -132,7 +132,7 @@ function escapeHtml(s) {
 }
 // 极简 markdown：先转义 HTML，再处理标题、列表、代码块、行内代码、粗体
 // 极简 markdown：先转义 HTML，再处理标题、（可嵌套的）列表、代码块、表格、引用、行内代码、粗体、链接
-function renderMarkdown(src) {
+export function renderMarkdown(src) {
   const lines = escapeHtml(String(src ?? '').replace(/\t/g, '  ')).split('\n');
   const out = [];
   const stack = []; // 打开的列表：{ tag, indent }
@@ -193,11 +193,11 @@ function renderMarkdown(src) {
   closeAll();
   return out.join('\n');
 }
-function strip(tasks, big) {
+export function strip(tasks, big) {
   return el('div', { class: big ? 'strip big' : 'strip', 'aria-hidden': 'true' },
     tasks.map((t) => el('span', { class: `s-${laneOf(t)}`, title: `${t.id} ${LANE_LABEL[laneOf(t)]}` })));
 }
-function reviewStats(tasks) {
+export function reviewStats(tasks) {
   let reviews = 0;
   let rejects = 0;
   for (const t of tasks) {
@@ -212,7 +212,7 @@ function reviewStats(tasks) {
   return { reviews, rejects, rate, approved: approved.length };
 }
 // 审卡 worker 的进度：它这一批卡里还没审的，第一张就是正在审的
-function criticProgress(a) {
+export function criticProgress(a) {
   const reviewed = (t) => (t.critiquedRev ?? -1) === (t.rev ?? 0);
   const left = (a.critiqueBatch || [])
     .map((id) => data.state.tasks.find((t) => t.id === id))
@@ -222,35 +222,35 @@ function criticProgress(a) {
   const last = a.lastCritiqued?.length ? `，最近审核 ${a.lastCritiqued.join('、')}` : '';
   return `等待新任务${last}`;
 }
-const post = async (url, body) => {
+export const post = async (url, body) => {
   try {
     const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return await res.json();
   } catch { return { ok: false, message: '无法连接 ateam 服务。' }; }
 };
 const normPath = (p) => { const x = String(p).trim().replace(/^\.\//, '').replace(/\/+$/, ''); return x === '.' ? '' : x; };
-function pathsOverlap(a, b) {
+export function pathsOverlap(a, b) {
   for (const x of a.map(normPath)) for (const y of b.map(normPath)) {
     if (x === '' || y === '' || x === y || y.startsWith(`${x}/`) || x.startsWith(`${y}/`)) return true;
   }
   return false;
 }
-function idHasRole(a) {
+export function idHasRole(a) {
   const slug = a.role.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
   return a.id.startsWith(`${slug}-`);
 }
 // worker 显示名：起了名字的显示名字，否则显示编号
-function agentName(id) {
+export function agentName(id) {
   return data.state.agents.find((a) => a.id === id)?.name || id;
 }
-function agentLabel(id) {
+export function agentLabel(id) {
   if (id === 'user') return '用户';
   const name = data.state.agents.find((a) => a.id === id)?.name;
   return name ? `${name}（${id}）` : id;
 }
 // 角色 → 颜色。常用名固定，其他按名字哈希，同一角色永远同一颜色
 const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, product: 3, pm: 3, 产品: 3, architect: 4, arch: 4, 架构: 4, critic: 5, 审卡: 5, docs: 4, 文档: 4 };
-function roleStyle(role) {
+export function roleStyle(role) {
   const key = String(role).trim().toLowerCase();
   let i = ROLE_FIXED[key];
   if (i === undefined) {

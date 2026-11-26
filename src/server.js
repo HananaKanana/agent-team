@@ -20,7 +20,7 @@ import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
 import { checkSyncConfig, claimName, hasSyncConfig, pickRemote, codeStatus, commitsLanded, pushCode, fastForward, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
-import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime, pendingFiles } from './git.js';
+import { commitPaths, commitStats, commitTitle, detectRepos, ensureGitignore, headContent, latestChangeTime, pendingFiles } from './git.js';
 import { isArchitectRole, isDevRole } from './dev-guide.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { saveViewPref, viewPrefs } from './view-prefs.js';
@@ -1120,7 +1120,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
       }
       let commits = null;
       if (!b.noChanges) {
-        const result = await commitPaths(root, task.paths, `[${task.id}] ${b.summary.trim()}`);
+        const result = await commitPaths(root, task.paths, commitTitle(task.id, b.summary, task.title));
         if (result.nothing && result.leftover?.length) {
           throw new AteamError('INVALID', `任务路径里有改动，但一个都没能暂存提交：\n${result.leftover.map((p) => `- ${p}`).join('\n')}\n\n不要自己 git commit，用 ateam ask 告诉 leader（这是 ateam 的问题）。`);
         }
@@ -1243,7 +1243,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
       if (withoutOps(current) !== withoutOps(head)) {
         throw new AteamError('INVALID', `只能改脚本的「## 操作记录」段，其他段有改动。请把其他段恢复原样（git diff ${task.script} 查看）后再 demo save。`);
       }
-      const result = await commitPaths(root, [task.script], `[${task.id}] 操作记录：${b.summary.trim()}`);
+      const result = await commitPaths(root, [task.script], commitTitle(task.id, `操作记录：${b.summary.trim()}`, '操作记录'));
       if (result.nothing) throw new AteamError('INVALID', `脚本 ${task.script} 没有改动。操作记录没有改动就加 --no-changes。`);
       if (task.opsCleared) store.markOpsCleared(task.id, false);
       return { task: store.recordDemoSave(b.as, b.summary, result.commits), commit: result.commits.join('、') };

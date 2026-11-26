@@ -177,6 +177,17 @@ function ateamIn(top, realRoot) {
 
 // 只提交 paths 内的改动，每个涉及的仓库各提交一次。
 // 返回 { commits: ['a1b2c3d'] }（单仓库）或 { commits: ['api@a1b2c3d', ...] }（多仓库）；都没有改动时返回 { nothing: true }。
+// git 提交说明只写一行：[卡号] 一句话。取总结里第一行有内容的话（跳过「## 做了什么」这类小标题，去掉列表符号和加粗），
+// 截到第一个句号或 60 字；取不到用卡的标题。完整总结在卡的时间线里，不重复进 git
+export function commitTitle(id, summary, fallback = '') {
+  const line = String(summary ?? '').split('\n')
+    .map((l) => l.trim().replace(/^([-*+]|\d+[.)])\s+/, '').replace(/\*\*|__|`/g, '').trim())
+    .find((l) => l && !/^#{1,6}(\s|$)/.test(l) && !/^(做了什么|总结|改动|变更|完成情况|说明)[:：]?$/.test(l)) ?? '';
+  let title = line.split(/[。；;！!]/)[0].replace(/[:：，,\s]+$/, '').trim() || String(fallback).trim();
+  if (title.length > 60) title = `${title.slice(0, 59)}…`;
+  return `[${id}] ${title}`;
+}
+
 // 提交后路径里还有改动没进提交（不该有）：放在 leftover 里，调用方要报错，不能当成功。
 // worker 的提交永远不带上 .ateam/：用户可能把 .ateam/ 提交进仓库，任务路径写得宽（比如 .）时
 // 会把看板状态一起带进 worker 的提交

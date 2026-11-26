@@ -315,7 +315,7 @@ function footer(agentId, task, kind, tpl, browser, egoProfile, result = {}) {
     '做完提交后立即回到 ateam wait，整个过程中不要结束本轮回复。',
     '',
     `进度：ateam progress --as ${agentId} "..."`,
-    `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
+    `完成：ateam submit --as ${agentId} "<总结>"（第一行一句话说清做了什么，会作为 git 提交标题；下面再写文件、验证等细节）`,
     ...(task && task.kind !== 'demo' && !isTestRole(task.role) ? [DEV_NO_BROWSER] : []),
     ...(work && isDevRole(task.role) && fresh ? [...designSection(result.designs), ...devGuide(agentId, task.role, kind !== 'rejected'), ...checksSection(result.submitChecks)] : []),
     ...(work && isArchitectRole(task.role) && fresh ? designGuide(agentId, task, kind !== 'rejected') : []),

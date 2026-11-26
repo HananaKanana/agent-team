@@ -372,6 +372,8 @@ select.setting-num { width: auto; text-align: left; }
 .push-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .setting-text { width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised); color: var(--ink); font: inherit; font-size: 13px; }
 .setting-text:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.setting.setting-block { flex-direction: column; align-items: stretch; cursor: default; }
+.setting textarea.setting-area { width: 100%; height: auto; min-height: 88px; padding: 8px 10px; resize: vertical; font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 12.5px; line-height: 1.6; }
 .push-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .push-err { color: var(--rework); }
 .push-fold { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; user-select: none; }
@@ -1563,7 +1565,7 @@ const HISTORY = {
   approved: ['通过', 'approved'], rejected: ['打回', 'rework'], handoff: ['离线交接', 'held'],
   held: ['挂起', 'held'], released: ['放回', 'pending'], edited: ['修改', 'pending'], cancelled: ['作废', 'cancelled'],
   demo_ended: ['运行结束', 'approved'], demo_saved: ['操作记录', 'approved'],
-  note: ['补充说明', 'pending'], note_delivered: ['已送达', 'working'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做其他任务', 'held'], profile: ['浏览器 profile', 'working'],
+  note: ['补充说明', 'pending'], note_delivered: ['已送达', 'working'], critique: ['审卡', 'held'], demo_paused: ['暂停', 'asking'], demo_resumed: ['继续', 'working'], parked: ['转做其他任务', 'held'], profile: ['浏览器 profile', 'working'], check: ['提交检查', 'submitted'],
 };
 // 演播卡的状态：名称、lozenge 颜色
 const DEMO_STATUS = { ready: ['待演播', 'pending'], queued: ['等待开始', 'asking'], demoing: ['演播中', 'working'], wrapping: ['收尾中', 'submitted'], cancelled: ['已作废', 'cancelled'] };
@@ -2133,6 +2135,8 @@ const SETTING_ITEMS = [
   { group: '审卡' },
   { key: 'criticAutoLeave', type: 'bool', label: '审核完成后自动下线', hint: '审卡 worker 审核完所有待审任务后自动下线（新启动的同样适用），有新任务需审核时再启动。关闭后审卡 worker 常驻，仅在用户要求时下线。' },
   { group: 'review' },
+  { key: 'submitChecks', type: 'text', label: '提交检查命令', placeholder: 'bash build-tools/scripts/check-size.sh\nbash build-tools/scripts/check-dup.sh', hint: '开发任务执行 ateam submit 时，在 worker 一侧的项目目录中逐行运行以下命令，任一命令退出码非 0 即拒绝提交，并将输出末尾返回给 worker；时间线记录检查结果。每行一条，以 # 开头的行忽略；留空表示不检查。命令可读取环境变量 ATEAM_CHANGED_FILES（本任务改动的文件，每行一个）与 ATEAM_TASK_PATHS（任务路径），用于只检查本任务的改动。测试、产品、架构任务不运行。' },
+  { key: 'submitCheckMin', type: 'int', label: '单条检查命令超时（分钟）', hint: '单条命令超过该时长未结束即视为未通过。' },
   { key: 'rejectLimit', type: 'int', label: '打回次数上限', hint: '同一任务被打回达到该次数后停止自动派发并挂起，转由 leader 处理（改写任务或直接修改）。' },
   { group: 'leader' },
   { key: 'autoNoLeader', type: 'bool', label: 'leader 离线时自动进入无 leader 模式', hint: '关闭时，仅在「帮助 → leader」中点击「下线」后进入。开启时，leader 离线（超过下方时长既未监听也未执行命令）也会自动进入，重新监听或执行命令后自动退出。token 用尽后，leader 的后台监听最多仍会保持约半小时，期间视为在线。' },
@@ -2381,6 +2385,10 @@ function settingsPage() {
         input.addEventListener('change', () => saveSetting(it.key, input.value));
         // Windows 版只支持 ego-browser（服务端也按 ego 处理）
         if (it.key === 'testBrowser' && data.platform === 'win32') input.disabled = true;
+      } else if (it.type === 'text') {
+        input = el('textarea', { class: 'setting-text setting-area', rows: '4', spellcheck: 'false', placeholder: it.placeholder || '' });
+        input.value = String(cfg[it.key] ?? '');
+        input.addEventListener('change', () => saveSetting(it.key, input.value));
       } else {
         input = el('input', { type: 'number', class: 'setting-num', min: String(it.min ?? 1), step: it.type === 'int' ? '1' : 'any' });
         input.value = String(cfg[it.key]);
@@ -2388,7 +2396,7 @@ function settingsPage() {
       }
       input.addEventListener('click', (e) => e.stopPropagation());
       const hint = it.key === 'testBrowser' && data.platform === 'win32' ? `${it.hint}Windows 版仅支持 ego-browser。` : it.hint;
-      const row = el('label', { class: 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, hint)));
+      const row = el(it.type === 'text' ? 'div' : 'label', { class: it.type === 'text' ? 'setting setting-block' : 'setting' }, input, el('span', null, el('b', null, it.label), el('span', { class: 'hint' }, hint)));
       return it.key === 'testBrowser' && cfg.testBrowser === 'ego' ? [row, egoProfilesSetting()] : row;
     }),
     settingsMsg ? el('p', { class: 'hint' }, settingsMsg) : null,
@@ -5293,7 +5301,7 @@ function agentLabel(id) {
 }
 
 // 角色 → 颜色。常用名固定，其他按名字哈希，同一角色永远同一颜色
-const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, product: 3, pm: 3, 产品: 3, critic: 5, 审卡: 5, docs: 4, 文档: 4 };
+const ROLE_FIXED = { frontend: 0, fe: 0, 前端: 0, backend: 1, be: 1, 后端: 1, test: 2, qa: 2, 测试: 2, product: 3, pm: 3, 产品: 3, architect: 4, arch: 4, 架构: 4, critic: 5, 审卡: 5, docs: 4, 文档: 4 };
 function roleStyle(role) {
   const key = String(role).trim().toLowerCase();
   let i = ROLE_FIXED[key];
@@ -5455,6 +5463,7 @@ function leadPrompt() {
 // 标准角色：看板上总是列出来，leader skill 里也按这几个拆任务
 const STANDARD_ROLES = [
   { key: 'product', label: '产品', what: '编写产品文档，不涉及代码' },
+  { key: 'architect', label: '架构', what: '编写架构设计文档，不涉及代码' },
   { key: 'frontend', label: '前端', what: '页面和交互' },
   { key: 'backend', label: '后端', what: '接口和数据' },
   { key: 'test', label: '测试', what: '按验收标准测试并编写报告' },

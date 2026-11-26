@@ -4,6 +4,7 @@
 import { formatDoctor } from '../src/doctor.js';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import {
   formatCards, formatError, formatEventLine, formatEvents, formatJob, formatJobs, formatStatus, formatTask, staffingHint, formatWait, formatReview } from '../src/format.js';
@@ -50,7 +51,7 @@ worker
   ateam progress --as <ID> "<笔记>" [--expect <分钟>]
   ateam ack <回执号> --as <ID>（回执工具调用后收到的「# ateam 补充说明」）
   ateam tab-lost --as <ID>（自己的浏览器标签页没了，才需要；之后可以再开一次）
-  ateam ask --as <ID> "<问题>"
+  ateam ask --as <ID> "<问题>" [--user]（--user：需要用户本人决定的问题，如技术选型）
   ateam submit --as <ID> "<总结>" [--no-changes]
   ateam demo step --as <ID> 3/12 "<这一步做什么>" [--slow]
   ateam demo end --as <ID> "<结果>" [--stuck]
@@ -74,7 +75,7 @@ leader
   ateam watch [--timeout 90] [--follow]
   ateam approve T3 ["<备注>"]
   ateam reject T3 "<修改意见>"
-  ateam answer T3 "<答复>"
+  ateam answer T3 "<答复>" [--user-approved]（worker 用 --user 问的，转达用户的决定时必须带上）
   ateam status [--job J1 | --all]
   ateam doctor                     自检：git 提交、.ateam 提交范围、测试浏览器配置
   ateam cards [--job J1] [--todo]
@@ -384,6 +385,51 @@ function browserAction(payload) {
   return USE_IN_COMMAND.test(command) ? 'use' : null;
 }
 
+// 提交检查：开发卡提交前在本机依次运行项目配置的命令（看板「设置 → 提交检查」）。
+// 在 worker 这边跑：编译可能要几分钟，不能占着服务；用的也是 worker 自己终端的环境。
+// 返回通过的命令列表（没配置时返回 null）；有一条不通过就报告服务、打印输出末尾并退出，不提交
+async function runSubmitChecks(as) {
+  const plan = await request('POST', '/api/submit-check/plan', { as });
+  if (!plan.commands?.length) return null;
+  const limitMs = plan.timeoutMin * 60000;
+  const expect = Math.min(180, plan.timeoutMin * plan.commands.length);
+  await request('POST', '/api/progress', { as, text: `运行提交检查（${plan.commands.length} 条命令）`, expect }).catch(() => {});
+  const env = {
+    ...process.env,
+    ATEAM_TASK_ID: plan.taskId,
+    ATEAM_TASK_PATHS: plan.paths.join('\n'),
+    ATEAM_CHANGED_FILES: plan.files.join('\n'),
+  };
+  const passed = [];
+  for (const command of plan.commands) {
+    const started = Date.now();
+    const r = spawnSync(command, { cwd: plan.root, env, shell: true, encoding: 'utf8', timeout: limitMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true });
+    const secs = Math.round((Date.now() - started) / 1000);
+    if (r.status === 0) { passed.push(`${command}（${secs} 秒）`); continue; }
+    const timedOut = r.error?.code === 'ETIMEDOUT' || (r.status === null && r.signal);
+    const why = timedOut ? `超过 ${plan.timeoutMin} 分钟未结束` : r.error ? r.error.message : `退出码 ${r.status}`;
+    await request('POST', '/api/submit-check/fail', { as, command, detail: why }).catch(() => {});
+    const lines = `${r.stdout ?? ''}${r.stderr ?? ''}`.trimEnd().split(/\r?\n/);
+    const tail = lines.slice(-80).join('\n');
+    const outside = plan.files.length ? '' : '\n（任务路径里没有检测到改动。）';
+    fail([
+      `提交检查未通过，没有提交 ${plan.taskId}。`,
+      '',
+      `命令：${command}`,
+      `结果：${why}`,
+      ...(passed.length ? [`已通过：${passed.join('；')}`] : []),
+      '',
+      `输出（最后 ${Math.min(80, lines.length)} 行）：`,
+      '```',
+      tail || '（没有输出）',
+      '```',
+      '',
+      `按输出修改后再运行 ateam submit。问题出在任务路径（${plan.paths.join('、')}）以外的文件（比如别的 worker 正在改的），不要去改它们，用 ateam ask --as ${as} 说明情况。检查命令本身跑不起来（找不到命令、环境问题）也用 ateam ask。${outside}`,
+    ].join('\n'));
+  }
+  return passed;
+}
+
 async function preBrowserHook() {
   if (!process.env.ATEAM_URL && !findPortFile(process.cwd())) return '';
   try {
@@ -585,16 +631,22 @@ const commands = {
   async ask({ flags, positional }) {
     const as = requireAs(flags);
     const text = requireArg(positional[0], '问题', `ateam ask --as ${as} "接口返回的日期用什么格式？"`);
-    const { task } = await request('POST', '/api/ask', { as, text });
-    return `已就 ${task.id} 向 leader 提问。请运行 ateam wait --as ${as} 等待答复，不要猜。`;
+    const forUser = !!flags.user;
+    const { task } = await request('POST', '/api/ask', { as, text, forUser });
+    return forUser
+      ? `已就 ${task.id} 提交给用户决定（经 leader 转给用户，或用户在看板上直接答复）。请运行 ateam wait --as ${as} 等待答复，不要猜，也不要先按自己的推荐写下去。`
+      : `已就 ${task.id} 向 leader 提问。请运行 ateam wait --as ${as} 等待答复，不要猜。`;
   },
 
   async submit({ flags, positional }) {
     const as = requireAs(flags);
     const summary = requireArg(positional[0], '提交总结', `ateam submit --as ${as} "完成登录页，手工验证了表单校验"`);
-    const { task, commit } = await request('POST', '/api/submit', { as, summary, noChanges: !!flags['no-changes'] });
+    const noChanges = !!flags['no-changes'];
+    const checks = noChanges ? null : await runSubmitChecks(as);
+    const { task, commit } = await request('POST', '/api/submit', { as, summary, noChanges, ...(checks ? { checks } : {}) });
     const what = commit ? `提交 ${commit}` : '无代码改动';
-    return `已提交 ${task.id}（${what}），等待 leader review。请运行：ateam wait --as ${as}`;
+    const passed = checks?.length ? `提交检查全部通过（${checks.length} 条）。` : '';
+    return `${passed}已提交 ${task.id}（${what}），等待 leader review。请运行：ateam wait --as ${as}`;
   },
 
   async 'job new'({ flags, positional }) {
@@ -761,10 +813,10 @@ const commands = {
     return `已打回 ${task.id}（第 ${task.rejectCount} 次），${where}。`;
   },
 
-  async answer({ positional }) {
+  async answer({ flags, positional }) {
     const id = requireArg(positional[0], '任务编号', 'ateam answer T3 "<答复>"');
     const text = requireArg(positional[1], '答复', `ateam answer ${id} "用 ISO 8601 格式"`);
-    const { task } = await request('POST', '/api/answer', { id, text });
+    const { task } = await request('POST', '/api/answer', { id, text, userApproved: !!flags['user-approved'] });
     const where = task.status === 'working' ? `将送达 ${task.assignee}` : '提问者已掉线，答复会交给接手的 worker';
     return `已答复 ${task.id}，${where}。`;
   },

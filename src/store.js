@@ -1,6 +1,7 @@
 // 纯逻辑状态机：需求、任务、worker、事件。不碰网络和磁盘，时钟可注入。
 import { AteamError } from './errors.js';
 import { isTestRole } from './format.js';
+import { isDevRole } from './dev-guide.js';
 import { stepsLabel, VIEWPORT_RE } from './demo.js';
 
 const KEEP_DELIVERED_EVENTS = 200;
@@ -61,6 +62,9 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     autoPull: { type: 'bool', def: () => false },
     // 同步看板时附带用量摘要（每天合计、每卡平均、打回率），同事的「用量 → 团队」能看到
     shareUsage: { type: 'bool', def: () => true },
+    // 提交检查：开发卡 ateam submit 时在 worker 那边依次运行的命令（一行一条），有一条退出码非 0 就不提交。空 = 不检查
+    submitChecks: { type: 'text', def: () => '' },
+    submitCheckMin: { type: 'int', min: 1, max: 120, def: () => 15 },
   };
 
   function config() {
@@ -1001,6 +1005,11 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
       if (!spec) continue;
       if (value === null) { delete state.settings[key]; continue; }
       if (spec.type === 'bool') { state.settings[key] = !!value; continue; }
+      if (spec.type === 'text') {
+        if (typeof value !== 'string' || value.length > 4000) throw new AteamError('INVALID', `${key} 必须是不超过 4000 字的文本。`);
+        state.settings[key] = value.split(/\r?\n/).map((l) => l.trimEnd()).join('\n').trim();
+        continue;
+      }
       if (spec.type === 'choice') {
         if (!spec.options.includes(value)) throw new AteamError('INVALID', `${key} 只能是 ${spec.options.join('、')} 之一。`);
         state.settings[key] = value;
@@ -1181,13 +1190,36 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return note ? { ...task, note } : task;
   }
 
-  function ask(agentId, text) {
+  // forUser：要用户本人决定的问题（技术选型、要不要引入新框架这类）。leader 不能自己答，
+  // 只能把用户的原话转过来（--user-approved），或者用户在看板上直接答复
+  function ask(agentId, text, forUser = false) {
     text = requireText(text, '问题');
     const { agent, task } = workingTaskOf(agentId);
     task.status = 'asking';
-    addHistory(task, 'asked', agent.id, text);
+    if (forUser) task.userQuestion = true;
+    else delete task.userQuestion;
+    addHistory(task, 'asked', agent.id, forUser ? `【需要用户决定】${text}` : text);
     trackLeaderRead(task);
-    emit('question', { taskId: task.id, agentId: agent.id, text });
+    emit('question', {
+      taskId: task.id, agentId: agent.id, forUser: forUser || undefined,
+      text: forUser ? `【需要用户决定，不要自己答】${text}\n\n把问题原样转给用户（给出候选和 worker 的推荐），用户答复后 ateam answer ${task.id} "<用户的决定>" --user-approved；用户也可以在看板上直接答复。` : text,
+    });
+    changed();
+    return task;
+  }
+
+  // 提交检查：这张卡要跑哪些命令（只有开发卡、设置里配了命令才跑）
+  function submitCheckPlan(agentId) {
+    const { task } = workingTaskOf(agentId);
+    const commands = config().submitChecks.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    if (task.kind === 'demo' || !isDevRole(task.role) || !commands.length) return { task, commands: [] };
+    return { task, commands, timeoutMin: config().submitCheckMin };
+  }
+
+  // 提交检查没通过：记在时间线上，leader 和用户都能看到 worker 卡在哪
+  function recordCheckFail(agentId, command, detail) {
+    const { agent, task } = workingTaskOf(agentId);
+    addHistory(task, 'check', agent.id, `提交检查未通过：${requireText(command, '命令')}${detail ? `（${String(detail).slice(0, 200)}）` : ''}`);
     changed();
     return task;
   }
@@ -1212,9 +1244,10 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
   }
 
   // commit：一个提交号、多个提交号（多仓库时每个仓库一个，如 api@a1b2c3d），或 null（无代码改动）
-  function recordSubmit(agentId, summary, commit) {
+  function recordSubmit(agentId, summary, commit, checks = null) {
     summary = requireText(summary, '提交总结');
     const { agent, task } = workingTaskOf(agentId);
+    if (checks?.length) addHistory(task, 'check', agent.id, `提交检查通过：${checks.join('；')}`);
     const list = [].concat(commit ?? []).filter(Boolean);
     task.commits.push(...list);
     commit = list.length ? list.join('、') : null;
@@ -1716,9 +1749,13 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     return task;
   }
 
-  function answer(taskId, text, by = 'lead') {
+  function answer(taskId, text, by = 'lead', userApproved = false) {
     text = requireText(text, '答复');
     const task = getTask(taskId);
+    if (task.userQuestion && task.status === 'asking' && by !== 'user' && !userApproved) {
+      throw new AteamError('NEEDS_USER', `${task.id} 的提问需要用户本人决定（技术选型这类），不要自己答。把问题和候选原样转给用户，用户答复后运行 ateam answer ${task.id} "<用户的决定>" --user-approved；用户也可以在看板上直接答复。`);
+    }
+    delete task.userQuestion;
     if (task.status === 'asking' && task.parked) {
       unpark(task);
     } else if (task.status === 'asking') {
@@ -2431,7 +2468,7 @@ export function createStore({ state, now = Date.now, leaseMs = 15 * 60 * 1000, i
     config,
     createJob, editJob, addTask, editTask,
     join, touch,
-    nextFor, waitingInfo, progress, ask, taskForSubmit, addCommits, recordSubmit,
+    nextFor, waitingInfo, progress, ask, submitCheckPlan, recordCheckFail, taskForSubmit, addCommits, recordSubmit,
     pauseDemo, resumeDemo, holdTask, holdJob, acceptJobs, setPriority, assignTask, submitCritique, handleCritique, ruleCritique, noteTask, noteForHookSession, ackNote, assignEgoProfile, browserGuard, tabLost, bindHookSession, agentIdOfHookSession, agentSegments, digestSent, markDigest, boundSessions, setTaskTokens, markRotate, messageAgent, leaderOpenedTask, userReply, critiqueQueue, cards, dispatchOrder, approve, reject, answer, release, cancel, cancelJob, reclaim, hideAgents, dismiss, keepAgents, setSettings, staffingNeeds, checkStaffing, keepWaiting, checkIdle, report, sweep, noteActivity,
     getJob, getTask, pendingActions, takeEvents, overlapsFor, setPeerTasks,
     setLeaderAway, clashes, addDemo, demoBlockers, markOpsCleared, startDemo, stopDemo, releaseDemo, demoFrozen, demoStep, demoEnd, demoTaskForSave, recordDemoSave, expireDemoRequests,

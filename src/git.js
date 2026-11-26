@@ -195,6 +195,17 @@ export async function commitPaths(root, paths, message) {
   return leftover.length ? { commits, leftover } : { commits };
 }
 
+// 任务路径内还没提交的改动文件（含新文件、删除），路径相对项目目录。提交检查用它告诉检查脚本这次改了哪些文件
+export async function pendingFiles(root, paths) {
+  const groups = await groupByRepo(root, paths);
+  const realRoot = realpath(root);
+  const out = [];
+  for (const [top, { label, paths: repoPaths }] of groups) {
+    for (const p of await changedFiles(top, repoPaths, ateamIn(top, realRoot))) out.push((label ? `${label}/` : '') + p);
+  }
+  return out;
+}
+
 // 任务路径内未提交改动（含新文件）的最新修改时间，没有改动时返回 null。
 // 用作 worker 的「活动心跳」：worker 在写代码，文件就在变；token 用完窗口停了，文件也就不变了。
 export async function latestChangeTime(root, paths) {

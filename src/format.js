@@ -1,7 +1,7 @@
 // 把任务、事件、状态渲染成给大模型读的 markdown 文本。
 // worker skill 依赖 formatWait 的标题文本，修改时要同步 skills/ateam-worker/SKILL.md。
 import { stepsLabel } from './demo.js';
-import { devGuide, isProductRole } from './dev-guide.js';
+import { checksSection, designGuide, designSection, devGuide, isArchitectRole, isDevRole } from './dev-guide.js';
 
 const STATUS = {
   pending: '待领取',
@@ -304,7 +304,9 @@ function recordedTool(script) {
 // 非测试卡：自查只做编译、构建、既有测试和代码审阅，浏览器只给测试卡用（hook 也会拦）
 const DEV_NO_BROWSER = '自查只做编译、构建、跑项目已有的测试和代码审阅；**不要打开浏览器验证页面**（dsh-cdp、chrome-agent.sh、ego-browser、WorkBuddy 的浏览器工具都不用，会被 hook 拒绝），也不为了验证去起服务、用 curl 或脚本做端到端。功能验证由测试卡在浏览器里做；提交时如实写验证到哪一步。';
 
-function footer(agentId, task, kind, tpl, browser, egoProfile) {
+function footer(agentId, task, kind, tpl, browser, egoProfile, result = {}) {
+  const work = task && task.kind !== 'demo';
+  const fresh = ['task', 'resume', 'handoff', 'own', 'rejected'].includes(kind);
   return [
     '',
     '',
@@ -315,7 +317,8 @@ function footer(agentId, task, kind, tpl, browser, egoProfile) {
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
     ...(task && task.kind !== 'demo' && !isTestRole(task.role) ? [DEV_NO_BROWSER] : []),
-    ...(task && task.kind !== 'demo' && !isTestRole(task.role) && !isProductRole(task.role) && ['task', 'resume', 'handoff', 'own', 'rejected'].includes(kind) ? devGuide(agentId, task.role, kind !== 'rejected') : []),
+    ...(work && isDevRole(task.role) && fresh ? [...designSection(result.designs), ...devGuide(agentId, task.role, kind !== 'rejected'), ...checksSection(result.submitChecks)] : []),
+    ...(work && isArchitectRole(task.role) && fresh ? designGuide(agentId, task, kind !== 'rejected') : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId, profile: egoProfile }) : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');
@@ -461,7 +464,7 @@ export function formatWait(result, agentId, waiting, round = 0, timeout) {
   if (result.rules) {
     out += `\n\n## 项目规则（每个任务都必须遵守）\n\n${result.rules}`;
   }
-  return out + footer(agentId, task, kind, result.testTemplate, result.browser, result.egoProfile);
+  return out + footer(agentId, task, kind, result.testTemplate, result.browser, result.egoProfile, result);
 }
 
 // 演播卡的指令：预演 / 演播、被叫停、收尾。标题文本 skill 里有引用

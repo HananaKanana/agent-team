@@ -20,7 +20,8 @@ import { loadState, saveState } from './persist.js';
 import { collect as collectUsage, totalOf } from './usage.js';
 import { buildReport } from './usage-report.js';
 import { checkSyncConfig, claimName, hasSyncConfig, pickRemote, codeStatus, commitsLanded, pushCode, fastForward, SYNC_MARK, defaultName, explainGitError, fetchPeers, PEER_STALE_MS, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, thisHost, trackedBoardFiles, untrackBoardFiles, writeSelf } from './sync.js';
-import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime } from './git.js';
+import { commitPaths, commitStats, detectRepos, ensureGitignore, headContent, latestChangeTime, pendingFiles } from './git.js';
+import { isArchitectRole, isDevRole } from './dev-guide.js';
 import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { saveViewPref, viewPrefs } from './view-prefs.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
@@ -284,6 +285,13 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     if (tpl) out.testTemplate = tpl;
     const rules = rulesFor(readRules(), result.task.role).trim();
     if (rules) out.rules = rules;
+    // 开发卡：同一个需求有架构设计卡的，附上设计文档的位置和状态；配了提交检查的，附上要跑的命令
+    if (result.task.kind !== 'demo' && isDevRole(result.task.role)) {
+      const designs = store.state.tasks.filter((d) => d.jobId === result.task.jobId && d.id !== result.task.id && d.kind !== 'demo' && isArchitectRole(d.role) && d.status !== 'cancelled');
+      if (designs.length) out.designs = designs.map((d) => ({ id: d.id, title: d.title, paths: d.paths, status: d.status }));
+      const checks = store.config().submitChecks.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+      if (checks.length) out.submitChecks = checks;
+    }
     const job = store.state.jobs.find((j) => j.id === result.task.jobId);
     if (job?.description?.trim()) out.job = { id: job.id, title: job.title, description: job.description.trim() };
     // 演播卡：附上脚本全文，worker 不用自己去找文件
@@ -463,7 +471,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
   }
 
   // 菜单栏「启动 worker」可选的角色：标准角色 + 未完成的卡和在线 worker 用到的角色；缺人的标出来（与看板「worker」页一致）
-  const STANDARD_ROLES = [['product', '产品'], ['frontend', '前端'], ['backend', '后端'], ['test', '测试'], ['critic', '审卡']];
+  const STANDARD_ROLES = [['product', '产品'], ['architect', '架构'], ['frontend', '前端'], ['backend', '后端'], ['test', '测试'], ['critic', '审卡']];
   function spawnRoles() {
     const st = store.state;
     const roles = new Map(STANDARD_ROLES.map(([key, label]) => [key, { role: key, label }]));
@@ -1088,9 +1096,21 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     'POST /api/tab-lost': (b) => ({ agent: store.tabLost(b.as) }),
     'POST /api/ack': (b) => store.ackNote(b.as, b.id),
     'POST /api/progress': (b) => ({ task: store.progress(b.as, b.text, b.expect) }),
-    'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text) }),
+    'POST /api/ask': (b) => ({ task: store.ask(b.as, b.text, !!b.forUser) }),
+    // 提交检查：CLI 先问要跑哪些命令，在 worker 那边跑（编译可能要几分钟，不能占着服务），没通过再报回来记到时间线上
+    'POST /api/submit-check/plan': async (b) => {
+      const plan = store.submitCheckPlan(b.as);
+      if (!plan.commands.length) return { commands: [] };
+      const files = await pendingFiles(root, plan.task.paths).catch(() => []);
+      return { commands: plan.commands, timeoutMin: plan.timeoutMin, root, taskId: plan.task.id, paths: plan.task.paths, files };
+    },
+    'POST /api/submit-check/fail': (b) => ({ task: store.recordCheckFail(b.as, b.command, b.detail) }),
     'POST /api/submit': (b) => serial(async () => {
       const task = store.taskForSubmit(b.as);
+      // 配了提交检查的开发卡必须经 ateam submit 跑过检查（noChanges 的不用检查）
+      if (!b.noChanges && store.submitCheckPlan(b.as).commands.length && !Array.isArray(b.checks)) {
+        throw new AteamError('INVALID', '这个项目配置了提交检查，请用 ateam submit 提交（它会先运行检查命令）。');
+      }
       if (typeof b.summary !== 'string' || !b.summary.trim()) {
         throw new AteamError('INVALID', '提交总结不能为空。请写明做了什么、怎么验证的。');
       }
@@ -1110,7 +1130,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
           throw new AteamError('INVALID', `已提交 ${commits.join('、')}，但任务路径里还有这些改动没进提交：\n${result.leftover.map((p) => `- ${p}`).join('\n')}\n\n先确认它们是这个任务的改动，再原样运行一次 ateam submit（服务会把它们补进新的提交）。不要自己 git commit。如果重交后还是这样，用 ateam ask 告诉 leader。`);
         }
       }
-      return { task: store.recordSubmit(b.as, b.summary, commits), commit: commits ? commits.join('、') : null };
+      return { task: store.recordSubmit(b.as, b.summary, commits, b.noChanges ? null : b.checks), commit: commits ? commits.join('、') : null };
     }),
     'POST /api/jobs': (b) => ({ job: store.createJob({ title: b.title, description: b.description, origin: b.origin, demo: !!b.demo }) }),
     'POST /api/demo/add': (b) => {
@@ -1318,7 +1338,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     'POST /api/approve': (b) => ({ task: store.approve(requireId(b), b.text ?? '') }),
     'POST /api/reject': (b) => ({ task: store.reject(requireId(b), b.text) }),
     'POST /api/prefs': (b) => { saveViewPref(root, b); return {}; },
-    'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text) }),
+    'POST /api/answer': (b) => ({ task: store.answer(requireId(b), b.text, 'lead', !!b.userApproved) }),
     'POST /api/reply': (b) => ({ task: store.userReply(requireId(b), b.text) }),
     'POST /api/release': (b) => ({ task: store.release(requireId(b)) }),
     'POST /api/cancel': (b) => ({ task: store.cancel(requireId(b), b.text ?? '') }),

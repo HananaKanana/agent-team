@@ -4,9 +4,9 @@ import { READONLY } from './prefs.js';
 import { data, setView } from './state.js';
 import { el, fill, fmtTime, modalHead, post } from './util.js';
 import { pendingCancel } from './workers.js';
-import {
-  closeHelper, helper, installProfile, openHelper, promptBlock, rolesNeedingWorkers, workerPrompt
-} from './helper.js';
+import { closeHelper, helper, openHelper, promptBlock, workerPrompt } from './helper.js';
+import { installProfile } from './install.js';
+import { rolesNeedingWorkers } from './spawn.js';
 import { frozenDemo } from './demo.js';
 import { restartServer } from './update.js';
 import { awaitingUser, renderDrawer } from './drawer.js';

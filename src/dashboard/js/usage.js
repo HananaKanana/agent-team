@@ -3,7 +3,7 @@
 import { data, LANE_LABEL, view } from './state.js';
 import { el, fill, fmtTime, icon, laneOf, roleStyle } from './util.js';
 import { closeHelper, helper } from './helper.js';
-import { renderMain } from './jobs.js';
+import { renderMain } from './job-page.js';
 import { fmtTokens } from './demo.js';
 import { peerHue, renderPeersBtn, syncInfo } from './sync.js';
 import { jumpToTask } from './menu.js';

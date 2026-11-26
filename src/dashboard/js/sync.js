@@ -5,7 +5,7 @@ import { data, LANE_LABEL, view } from './state.js';
 import { ago, el, emptyState, fill, fmtTime, icon, laneOf, renderMarkdown, roleStyle } from './util.js';
 import { saveSetting } from './settings.js';
 import { closeHelper, helper, openHelper, renderHelper } from './helper.js';
-import { navCollapsed } from './jobs.js';
+import { navCollapsed } from './nav.js';
 import { closeUsage, openUsage, usageOpen } from './usage.js';
 import { toastX } from './app.js';
 

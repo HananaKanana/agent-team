@@ -4,7 +4,7 @@ import { prefs } from './prefs.js';
 import { data } from './state.js';
 import { el, renderMarkdown } from './util.js';
 import { renderHelper } from './helper.js';
-import { renderMain } from './jobs.js';
+import { renderMain } from './job-page.js';
 import { syncSettings } from './sync.js';
 import { markRelated } from './search.js';
 import { openConfirm } from './dialogs.js';

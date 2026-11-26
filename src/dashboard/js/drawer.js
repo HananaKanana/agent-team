@@ -6,7 +6,8 @@ import {
   agentLabel, avatar, dur, el, fill, fmtTime, icon, laneOf, post, renderMarkdown, roleStyle, spent
 } from './util.js';
 import { pendingCancel, stopPrompt } from './workers.js';
-import { platformLabel, promptBlock, promptBox, spawnButton, spawnMessage, spawnState } from './helper.js';
+import { promptBlock, promptBox } from './helper.js';
+import { platformLabel, spawnButton, spawnMessage, spawnState } from './spawn.js';
 import { demoDrawerBody, isDemoTask, modeWord, rehearsalTag, tokenFact } from './demo.js';
 import { openDecide } from './dialogs.js';
 import { poll, render, saveView } from './app.js';

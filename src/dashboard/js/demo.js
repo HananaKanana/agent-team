@@ -2,7 +2,7 @@
 
 import { data, RUN_MODE, RUN_OUTCOME, view } from './state.js';
 import { agentName, el, fill, fmtTime, icon, modalHead, renderMarkdown, tickSince } from './util.js';
-import { renderMain } from './jobs.js';
+import { renderMain } from './job-page.js';
 import { assignBox, reclaimBox, renderDrawer } from './drawer.js';
 import { poll, render } from './app.js';
 

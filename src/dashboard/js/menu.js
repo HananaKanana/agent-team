@@ -3,7 +3,7 @@
 import { data, LANE_LABEL, view } from './state.js';
 import { agentLabel, avatar, el, fill, icon, laneOf, pathsOverlap, post } from './util.js';
 import { lastClaimSince } from './workers.js';
-import { acceptJob } from './jobs.js';
+import { acceptJob } from './job-page.js';
 import { focusReply, holdAction, renderDrawer } from './drawer.js';
 import { openConfirm } from './dialogs.js';
 import { openReport } from './report.js';

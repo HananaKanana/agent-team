@@ -2,7 +2,7 @@
 
 import { data, JOB_STATUS, view } from './state.js';
 import { el, fill, fmtTime, icon, renderMarkdown, reviewStats } from './util.js';
-import { ACCEPT_HINT, acceptButtons } from './jobs.js';
+import { ACCEPT_HINT, acceptButtons } from './job-page.js';
 import { critiqueItem } from './drawer.js';
 import { render, saveView } from './app.js';
 

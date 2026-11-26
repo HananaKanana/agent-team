@@ -303,6 +303,35 @@ function recordedTool(script) {
 // 非测试卡：自查只做编译、构建、既有测试和代码审阅，浏览器只给测试卡用（hook 也会拦）
 const DEV_NO_BROWSER = '自查只做编译、构建、跑项目已有的测试和代码审阅；**不要打开浏览器验证页面**（dsh-cdp、chrome-agent.sh、ego-browser、WorkBuddy 的浏览器工具都不用，会被 hook 拒绝），也不为了验证去起服务、用 curl 或脚本做端到端。功能验证由测试卡在浏览器里做；提交时如实写验证到哪一步。';
 
+const isProductRole = (role) => /^(product|pm|产品)$/i.test(String(role ?? '').trim());
+const isFrontendRole = (role) => /^(frontend|fe|web|前端)$/i.test(String(role ?? '').trim());
+const isBackendRole = (role) => /^(backend|be|server|后端)$/i.test(String(role ?? '').trim());
+
+// 开发卡的工作规范：领卡、接手时附上完整版，打回时只提醒要点。
+// 取自 agency-agents-zh（MIT）的「最小变更工程师」「代码库入职引导工程师」「软件架构师」「代码审查员」，按 ateam 的流程改写
+function devGuide(agentId, role, full) {
+  if (!full) {
+    return ['', '改的时候同样遵守开发规范：只改修改意见涉及的地方，不顺手重构；提交前逐行看一遍 diff，在提交说明里附上最终的文件清单。'];
+  }
+  const roleLines = isFrontendRole(role) ? [
+    '- 前端：页面、组件、数据请求、状态分开放；一个页面拆成若干组件，组件只管展示和交互，接口调用集中在一处，不在组件里到处写请求。沿用项目已有的组件和样式变量，不另起一套。',
+  ] : isBackendRole(role) ? [
+    '- 后端：接口层只做参数校验和调用，业务逻辑放在服务层，数据读写放在数据层，不跨层直接调用。错误要带上原因返回，不吞掉异常。接口的请求、响应格式和前端或任务描述约定的一致，要改约定先 `ateam ask`。',
+  ] : [];
+  return [
+    '',
+    '## 开发规范（这张卡必须遵守）',
+    '',
+    `1. **先读再写**：动手前读这张卡涉及的现有代码和项目文档（项目规则里提到的规范文件一定要读），弄清楚入口在哪、调用怎么走、新代码该放在哪一层、哪个目录。说「某个模块负责某件事」时要能指到具体文件。`,
+    `2. **先报方案再写代码**：读完后用 \`ateam progress --as ${agentId} "方案：..."\` 报一份几行的方案：新建和修改哪些文件、每个文件负责什么、放在哪一层、对外的函数或接口是什么、为什么这样拆。报完直接开始写，不用等批准；写的过程中方案有大的改变，再报一次。`,
+    '3. **按职责拆文件**：一个文件只负责一件事，不把整个功能写进一个文件；沿用项目已有的目录结构、分层和命名习惯，不在目录根下平铺。同一段逻辑不复制第二份，抽到共用的地方。项目规定了文件或函数的行数上限就遵守；没有规定时，文件过长（几百行以上）、函数过长（超过一屏）就该拆。',
+    '4. **不过度设计**：每加一层抽象、一个配置项都要说得出理由；只为这张卡要的功能写代码，不为「以后可能用到」预留。',
+    '5. **只改任务要求的**：不顺手重构、不改格式、不给没改的代码加注释；发现范围外值得改的问题，在提交说明里写出来，交给 leader 另派卡。',
+    '6. **提交前自查**：逐行看一遍 diff，问自己「这一行是这张卡要求的吗」，不是就删掉；对照第 3 条检查文件和函数的大小、有没有重复代码。提交说明里附上最终的文件清单（每个文件一句话说明职责），和方案不一样的地方说明原因。',
+    ...roleLines,
+  ];
+}
+
 function footer(agentId, task, kind, tpl, browser, egoProfile) {
   return [
     '',
@@ -314,6 +343,7 @@ function footer(agentId, task, kind, tpl, browser, egoProfile) {
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<做了什么、怎么验证的>"`,
     ...(task && task.kind !== 'demo' && !isTestRole(task.role) ? [DEV_NO_BROWSER] : []),
+    ...(task && task.kind !== 'demo' && !isTestRole(task.role) && !isProductRole(task.role) && ['task', 'resume', 'handoff', 'own', 'rejected'].includes(kind) ? devGuide(agentId, task.role, kind !== 'rejected') : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId, profile: egoProfile }) : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');

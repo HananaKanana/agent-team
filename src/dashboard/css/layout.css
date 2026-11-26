@@ -1,0 +1,38 @@
+/* 宽屏 / 窄屏布局、触屏、减少动效 */
+
+/* 宽屏：页面本身不滚动，需求列表和看板各自滚动。
+   否则页面滚动条和抽屉的滚动条会在右边并排出现两条 */
+@media (min-width: 901px) {
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  body > header.top { flex: none; }
+  .layout { flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  nav.jobs, main { overflow-y: auto; scrollbar-width: thin; }
+  /* 看板高度 = 主区可视高度：头部（标题、说明、概览）在上面，往上滑就能把头部滑走、让看板占满一屏；
+     原来看板只填剩下的空间，主区没有可滚的内容，滑不动 */
+  @supports (height: 1cqh) {
+    main { container-type: size; }
+    main > .board { flex: none; height: calc(100cqh - 38px); }
+  }
+}
+/* 拖动滚动时不选中文字 */
+html.drag-scrolling, html.drag-scrolling * { user-select: none !important; -webkit-user-select: none !important; cursor: grabbing !important; }
+.drawer, .helper { scrollbar-width: thin; overscroll-behavior: contain; }
+@media (max-width: 900px) {
+  .layout, .layout.nav-collapsed { grid-template-columns: 1fr; }
+  /* 上下排列时，收起的需求栏是一行编号 */
+  .nav-collapsed nav.jobs { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .nav-collapsed .nav-head { margin: 0 4px 0 0; }
+  nav.jobs { border-right: none; border-bottom: 1px solid var(--line); }
+  main { padding: 16px; }
+  .board { flex: none; min-height: 0; grid-template-columns: 1fr; overflow-x: visible; }
+  /* 上下排列时空列不竖排，只留一行表头 */
+  .lane.slim h3 { flex-direction: row; padding: 10px 12px 8px; }
+  .lane.slim h3 .label { writing-mode: horizontal-tb; letter-spacing: 0; margin-right: auto; }
+  .lane.slim h3 .n { order: 0; }
+  .lane .cards { overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer, .card, .switch, .switch::after { transition: none; }
+  .modal, .sk { animation: none; }
+  .pulse, .strip.big span.s-working::after { animation: none; }
+}

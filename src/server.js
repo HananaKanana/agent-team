@@ -26,7 +26,11 @@ import { DEFAULT_TEST_TEMPLATE } from './format.js';
 import { saveViewPref, viewPrefs } from './view-prefs.js';
 import { checkOps, clearOps, opsSection, parseOps, parseSteps, stepCount, withoutOps } from './demo.js';
 
-const DASHBOARD = join(dirname(fileURLToPath(import.meta.url)), 'dashboard.html');
+// 看板：src/dashboard/ 下的 index.html、css/、js/，浏览器直接加载，不需要构建
+const DASHBOARD_DIR = join(dirname(fileURLToPath(import.meta.url)), 'dashboard');
+const DASHBOARD = join(DASHBOARD_DIR, 'index.html');
+const DASHBOARD_ASSET = /^\/(css|js)\/[a-z0-9-]+\.(css|js)$/;
+const ASSET_TYPE = { css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8' };
 const PROMPTER_JXA = join(dirname(fileURLToPath(import.meta.url)), 'prompter.jxa');
 // agent-team 自己的安装目录，看板「安装」页用它拼出安装命令
 const TOOL_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -487,7 +491,7 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
     };
   }
 
-  // 待你处理的事，与看板「待处理」（dashboard.html 的 attentionItems）同一套规则。hash 是看板地址的 #需求/卡号，菜单栏点了直达
+  // 待你处理的事，与看板「待处理」（src/dashboard/js/attention.js 的 attentionItems）同一套规则。hash 是看板地址的 #需求/卡号，菜单栏点了直达
   let lanUrls = [];
   // act：菜单栏通知上可以直接点的操作（验收、启动 worker、收回任务、重启服务），没有就只能打开看板
   function attention() {
@@ -1650,13 +1654,28 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
           // 本机打开：把显示偏好写进页面，看板同步读到（换端口、换浏览器都在）。局域网只读访问不给，用那台电脑自己的浏览器
           if (local) {
             const prefs = JSON.stringify(viewPrefs(root)).replace(/</g, '\\u003c');
-            html = html.replace('<script>', `<script>window.ATEAM_PREFS = ${prefs};</script>\n<script>`);
+            html = html.replace('<!-- ateam:prefs -->', `<script>window.ATEAM_PREFS = ${prefs};</script>`);
           }
           res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
           res.end(html);
         } catch {
           res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
-          res.end('dashboard.html 不存在');
+          res.end('src/dashboard/index.html 不存在');
+        }
+        return;
+      }
+      // 看板的样式和脚本：只认 /css/<名字>.css、/js/<名字>.js，名字只有小写字母、数字和连字符，读不到 src/dashboard 以外的文件
+      if (req.method === 'GET' && DASHBOARD_ASSET.test(url.pathname)) {
+        const [, dir, ext] = url.pathname.match(DASHBOARD_ASSET);
+        if (dir !== ext) { res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }); res.end('not found'); return; }
+        try {
+          const body = await readFile(join(DASHBOARD_DIR, url.pathname.slice(1)));
+          // 每次都向服务确认：改了看板刷新就生效
+          res.writeHead(200, { 'content-type': ASSET_TYPE[ext], 'cache-control': 'no-cache' });
+          res.end(body);
+        } catch {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+          res.end('not found');
         }
         return;
       }

@@ -1,0 +1,264 @@
+/* 需求列表、需求进度、空状态、骨架屏、需求页概览、汇报页、决定框、待处理列表 */
+
+/* 选中的需求：浮起的白卡 + 左侧整条主题色竖条 + 外圈主题色描边，在灰色侧栏上一眼能认出 */
+.job[aria-current="true"] {
+  background: var(--raised);
+  box-shadow: inset 4px 0 0 var(--brand), 0 0 0 1px color-mix(in srgb, var(--brand) 45%, transparent), 0 4px 10px -4px rgba(9, 30, 66, .22);
+}
+.job[aria-current="true"]:hover { background: var(--raised); }
+.job[aria-current="true"] .sub { color: var(--muted); }
+.job .title { font-weight: 600; font-size: 13.5px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.job[aria-current="true"] .title { color: var(--brand-ink); }
+.job .title .jid, .job-head .jid { color: var(--faint); font-weight: 500; margin-right: 6px; }
+.job .sub .accepted { color: var(--approved); font-weight: 600; }
+/* 已作废的需求：和作废的卡一样置灰，标题划掉 */
+main.job-dropped .board, main.job-dropped .progress, main.job-dropped .job-side, main.job-dropped .report-bar { filter: grayscale(1); opacity: .6; }
+main.job-dropped .board:hover { opacity: .85; }
+main.job-dropped .card .t { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
+.since.dead-dep { color: var(--rework); font-weight: 600; }
+.job.dropped .title { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
+.job.dropped .strip { opacity: .35; filter: grayscale(1); }
+.accepted-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 10px; padding: 10px 12px 10px 14px;
+  border: none; border-top: 1px solid var(--line-soft); background: none; cursor: pointer;
+  color: var(--muted); font-size: 13px; font-weight: 600; text-align: left;
+}
+.accepted-toggle:hover { color: var(--ink); }
+.accepted-toggle.first { margin-top: 0; border-top: none; padding-top: 4px; }
+.accepted-toggle .tag.live { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
+/* 已作废需求的提示条 */
+.job-cancelled { padding: 8px 12px; border-radius: 6px; font-size: 13px; line-height: 1.6; color: var(--muted);
+  background: color-mix(in srgb, var(--faint) 10%, var(--surface)); box-shadow: inset 3px 0 0 var(--faint); }
+.report-bar .hint { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
+.job .sub { color: var(--faint); font-size: 12px; display: flex; justify-content: space-between; margin-top: 5px; }
+
+/* 需求进度：每个任务一格，按状态着色 */
+.strip { display: flex; gap: 1px; margin-top: 7px; height: 4px; border-radius: 99px; overflow: hidden; }
+.strip span { flex: 1; background: color-mix(in srgb, var(--pending) 30%, transparent); }
+.strip span.s-approved { background: var(--approved); }
+.strip span.s-working { background: var(--working); }
+.strip span.s-rework { background: var(--rework); }
+.strip span.s-asking { background: var(--asking); }
+.strip span.s-submitted { background: var(--submitted); }
+.strip span.s-held { background: var(--held); }
+.strip.big { flex: 1; min-width: 200px; height: 8px; gap: 2px; margin: 0; border-radius: 0; overflow: visible; }
+.strip.big span { position: relative; border-radius: 2px; }
+.strip.big span:first-child { border-radius: 99px 2px 2px 99px; }
+.strip.big span:last-child { border-radius: 2px 99px 99px 2px; }
+.strip.big span:only-child { border-radius: 99px; }
+.strip.big span.s-working::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent);
+  background-size: 200% 100%; animation: sheen 2.4s linear infinite;
+}
+@keyframes sheen { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+
+main { padding: 22px 28px 16px; min-width: 0; display: flex; flex-direction: column; }
+main > * { flex: none; }
+/* 空状态：居中的图标 + 一句标题 + 下一步该做什么 */
+.empty-state { margin: auto; padding: 48px 16px; max-width: 420px; text-align: center; color: var(--muted); }
+.empty-state .ico-wrap { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 50%; display: grid; place-items: center; background: var(--sunken); color: var(--faint); }
+.empty-state .ico-wrap svg { width: 26px; height: 26px; }
+.empty-state h3 { margin: 0 0 6px; font-size: 15px; font-weight: 650; color: var(--ink); }
+.empty-state p { margin: 0 0 14px; font-size: 13px; line-height: 1.7; }
+nav.jobs .empty-state { padding: 28px 8px; }
+nav.jobs .empty-state .ico-wrap { width: 44px; height: 44px; }
+nav.jobs .empty-state .ico-wrap svg { width: 20px; height: 20px; }
+/* 骨架屏：第一次拿到数据前的占位 */
+.sk { border-radius: 4px; background: linear-gradient(90deg, var(--sunken) 0, color-mix(in srgb, var(--sunken) 40%, var(--surface)) 50%, var(--sunken) 100%); background-size: 200% 100%; animation: sk 1.4s ease-in-out infinite; }
+@keyframes sk { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sk-job { height: 64px; margin: 4px 0; }
+.sk-line { height: 14px; margin: 8px 0; }
+.sk-title { height: 26px; width: 55%; margin: 18px 0 12px; }
+.sk-board { flex: 1 0 0; min-height: 420px; display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); gap: 8px; margin-top: 22px; }
+.sk-lane { border-radius: 6px; background: var(--sunken); padding: 40px 6px 6px; }
+.sk-card { height: 116px; margin-bottom: 6px; background: color-mix(in srgb, var(--raised) 70%, transparent); border-radius: 4px; }
+.job-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 24px; align-items: start; }
+.job-head .crumbs { grid-column: 1 / -1; font-size: 12.5px; color: var(--faint); }
+.job-head h2.job-title { font-size: 22px; line-height: 1.4; color: var(--ink); font-weight: 650; margin: 0; }
+.job-head h2.job-title.dropped { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 70%, transparent); }
+.job-head .head-acts { padding-top: 4px; }
+.job-head .desc { grid-column: 1 / -1; color: var(--muted); margin: 2px 0 0; max-width: 78ch; white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; }
+.job-head .desc.clamped { max-height: 5.1em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 40%, transparent); mask-image: linear-gradient(#000 40%, transparent); }
+.job-head .more { grid-column: 1 / -1; justify-self: start; border: none; background: none; color: var(--brand); font-size: 13px; padding: 0; cursor: pointer; }
+.job-head .more:hover { text-decoration: underline; }
+.job-head .origin-box { grid-column: 1 / -1; }
+/* 普通需求：左边标题和说明（说明铺满左栏，不留缝），右边一张概览卡：数字、各角色进度、最近动态。
+   卡片不撑高头部：高度跟左栏走（说明收起时矮、展开时高），放不下的动态在卡里滚动 */
+.job-head .crumbs { display: flex; align-items: center; gap: 10px; }
+.job-head .crumbs .lozenge { height: 20px; font-size: 11.5px; }
+.job-head.has-side { grid-template-columns: minmax(0, 1fr) minmax(340px, 480px); gap: 0 28px; align-items: stretch; }
+.job-head.has-side .desc { max-width: none; }
+.job-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-content: start; min-width: 0; }
+.job-main > * { grid-column: 1 / -1; }
+.job-main > h2.job-title { grid-column: 1; grid-row: 2; }
+.job-main > .head-acts { grid-column: 2; grid-row: 2; align-self: start; }
+.job-side { position: relative; container-type: inline-size; } /* 宽度由外面的网格决定，按卡片自己的宽度调整指标排列 */
+.job-side.bare { min-height: 0; }
+.job-side .inner { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
+  padding: 14px 16px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }
+.job-side.bare .inner { position: static; }
+.kpis { flex: none; display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); }
+.kpis.has-tokens { grid-template-columns: repeat(5, auto) minmax(max-content, 1fr); }
+/* 多了 Token 一项：每项左右留白收窄一点，时长不截断（放不下时换行，不显示省略号） */
+.kpis.has-tokens .kpi { padding: 0 11px; }
+.kpis.has-tokens .kpi:first-child { padding-left: 0; }
+.kpis.has-tokens .kpi.dur b { overflow: visible; text-overflow: clip; }
+/* 6 项一行约需 400px：概览卡较窄（或窄屏）时排成两行，每行 3 项，不截断、不溢出 */
+@container (max-width: 430px) { .kpis.has-tokens { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; } .kpis.has-tokens .kpi:nth-child(4) { padding-left: 0; border-left: none; } }
+@media (max-width: 720px) { .kpis.has-tokens { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; } .kpis.has-tokens .kpi:nth-child(4) { padding-left: 0; border-left: none; } }
+.kpi { display: grid; gap: 2px; padding: 0 14px; border-left: 1px solid var(--line-soft); min-width: 0; }
+.kpi:first-child { padding-left: 0; border-left: none; }
+.kpi b { font-size: 18px; line-height: 24px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.kpi b small { font-size: 12px; font-weight: 500; color: var(--faint); margin-left: 1px; }
+.kpi.dur b { font-size: 13.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.kpi span { font-size: 11.5px; line-height: 16px; color: var(--faint); white-space: nowrap; }
+.kpi.warn b { color: var(--rework); }
+.roles { flex: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px 18px; }
+.role .rl { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.role .rl b { font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.role > i { display: block; position: relative; height: 4px; margin-top: 3px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
+.role > i > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--working); }
+.role.full > i > i { background: var(--approved); }
+.activity { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.side-h { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.side-h .sub { font-weight: 400; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.acts { list-style: none; margin: 0 -8px; padding: 0; overflow: hidden; min-height: 0; flex: 1; }
+.acts li[hidden], .activity[hidden] { display: none; }
+.acts li { display: grid; grid-template-columns: 7px auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 2px 8px; border-radius: 4px; font-size: 12.5px; line-height: 22px; }
+.acts li.link { cursor: pointer; }
+.acts li.link:hover, .acts li.link:focus-visible { background: var(--sunken); }
+.acts li i { width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--pending)); }
+.acts .when { color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.acts .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.acts .what .key { color: var(--muted); margin-right: 6px; }
+.acts .what .who { color: var(--faint); font-size: 12px; margin-left: 8px; }
+/* 说明 + 展开：宽屏照常上下排 */
+.desc-row { display: contents; }
+.side-strip { display: none; }
+.side-strip .strip { margin: 0; }
+/* 窄屏：概览卡挪到说明下面，自己撑高；数字和角色进度并排 */
+@media (max-width: 1180px) {
+  .job-head h2.job-title { font-size: 19px; }
+  .job-head.has-side { margin-bottom: 16px; } /* 下面的进度条进了概览卡，补上和看板之间的间距 */
+  /* 说明收起时只露一行，「展开全部说明」接在行尾 */
+  .job-head .desc-row:has(.desc.clamped) { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .job-head .desc-row .desc.clamped { flex: 1; min-width: 0; max-height: 1.7em; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+  .job-head .desc-row .desc.clamped > * { margin: 0; }
+  .job-head .desc-row:has(.desc.clamped) .more { flex: none; white-space: nowrap; }
+  /* 任务进度条进概览卡，下面那条不显示 */
+  .side-strip { display: block; flex: 1 1 100%; }
+  main > .progress { display: none; }
+  .job-head.has-side { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .job-side { min-height: 0; }
+  /* 高度由内容撑开（不能跟宽屏一样 height:100%，Safari 会按旧高度算，把下面裁掉）；
+     数字和角色进度能并排就并排，放不下角色进度折到下一行 */
+  .job-side .inner, .job-side.bare .inner { position: static; height: auto; overflow: visible; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 12px 16px; }
+  .job-side .roles { flex: 1 1 260px; }
+  .job-side .activity { flex: 1 1 100%; min-height: auto; }
+  /* 宽屏里动态列表靠 min-height:0 在卡内滚动；窄屏要按真实高度撑开，否则 Safari 把行高算矮，卡片压到下面的进度条上 */
+  .job-side .acts { flex: none; min-height: auto; overflow: visible; }
+}
+.lozenge {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 3px; white-space: nowrap;
+  font-size: 11.5px; font-weight: 700; color: var(--c, var(--faint)); background: color-mix(in srgb, var(--c, var(--faint)) 15%, transparent);
+}
+.progress { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; margin: 16px 0; }
+.stats { display: flex; flex-wrap: wrap; align-items: center; color: var(--faint); font-size: 12.5px; white-space: nowrap; }
+.stats span + span { border-left: 1px solid var(--line); margin-left: 14px; padding-left: 14px; }
+.stats b { color: var(--ink); font-weight: 650; font-size: 13px; margin-left: 5px; }
+
+/* 需求页上的汇报提示条：一行，点按钮进入阅读页 */
+.report-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  background: color-mix(in srgb, var(--approved) 8%, var(--surface)); border-radius: 6px;
+  box-shadow: inset 3px 0 0 var(--approved), 0 0 0 1px color-mix(in srgb, var(--approved) 25%, transparent);
+  padding: 10px 14px 10px 16px; margin-bottom: 16px;
+}
+.report-bar .what { font-weight: 600; color: var(--approved); }
+.report-bar .when { color: var(--muted); font-size: 12.5px; margin-right: auto; }
+.btn.primary { box-shadow: none; background: var(--brand); color: var(--on-color); font-weight: 600; }
+.btn.primary:hover { background: color-mix(in srgb, #000 12%, var(--brand)); }
+.btn.warn { box-shadow: none; background: var(--rework); color: var(--on-color); font-weight: 600; }
+.btn.warn:hover { background: color-mix(in srgb, #000 12%, var(--rework)); }
+
+/* 汇报阅读页：全屏，正文居中 */
+.modal-back { position: fixed; inset: 0; z-index: 30; background: var(--backdrop); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.modal-back[hidden] { display: none; }
+.modal {
+  width: min(560px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+  background: var(--surface); border-radius: 8px; box-shadow: var(--shadow-pop); overflow: hidden;
+  animation: pop .14s ease-out;
+}
+.modal-back.again .modal, .att-pop.again .modal { animation: none; }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.985); } }
+.modal-head { display: flex; align-items: center; gap: 8px; padding: 16px 12px 12px 24px; flex: none; }
+.modal .modal-head h3 { margin: 0 auto 0 0; font-size: 17px; font-weight: 650; }
+.modal-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 24px 16px; overscroll-behavior: contain; }
+.modal-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 24px 16px; border-top: 1px solid var(--line-soft); }
+.modal-foot .hint { margin-right: auto; }
+.modal h3 { margin: 0 0 6px; font-size: 17px; font-weight: 650; }
+.modal .lead { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.modal .stale-item { background: var(--raised); border-radius: 6px; box-shadow: var(--shadow-card); padding: 12px 14px; margin-top: 10px; }
+.modal .stale-item p { margin: 0 0 6px; font-size: 13.5px; line-height: 1.6; }
+.modal .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* 决定框：每个选项是一张可点的卡片，标题 + 一句说明 */
+.choices { display: grid; gap: 8px; margin-top: 8px; }
+.choice {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised);
+}
+.choice:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand-soft) 45%, var(--raised)); }
+.choice.on { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.choice .radio { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--faint); }
+.choice:hover .radio, .choice.on .radio { border-color: var(--brand); box-shadow: inset 0 0 0 3px var(--raised), inset 0 0 0 8px var(--brand); }
+.choice b { display: block; font-size: 13.5px; font-weight: 600; }
+.choice span.d { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.55; margin-top: 2px; }
+/* 「需要你处理」列表：每件事一行，前面是类别小色块 */
+.att-row .kind { flex: none; width: 52px; justify-content: center; margin-right: 4px; }
+.att-row .what { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0 10px; line-height: 1.5; }
+.att-row .btn.sm { flex: none; min-width: 72px; }
+.modal-body > .att-row:first-child { border-top: none; }
+.report-page { position: fixed; inset: 0; z-index: 20; background: var(--bg); overflow-y: auto; }
+.report-page[hidden] { display: none; }
+.report-top {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.report-top .crumb { color: var(--faint); font-size: 13px; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-top .crumb b { color: var(--ink); font-weight: 600; }
+.report-top .crumb a { color: inherit; text-decoration: none; }
+.report-top .crumb a:hover { color: var(--ink); text-decoration: underline; }
+.report-top .btn svg { width: 16px; height: 16px; }
+/* 正文居中，宽屏时左边是目录；够宽时右边留一样宽的空列，正文仍在正中 */
+.report-wrap { display: grid; grid-template-columns: minmax(0, 780px); justify-content: center; gap: 32px; padding: 32px 20px 80px; }
+.report-toc { display: none; }
+@media (min-width: 1180px) {
+  .report-wrap.has-toc { grid-template-columns: 200px minmax(0, 780px); }
+  .report-wrap.has-toc .report-toc { display: block; grid-column: 1; grid-row: 1; position: sticky; top: 88px; align-self: start; font-size: 13px; }
+  .report-wrap.has-toc > :not(.report-toc) { grid-column: 2; }
+}
+@media (min-width: 1360px) { .report-wrap.has-toc { grid-template-columns: 200px minmax(0, 780px) 200px; } }
+.report-toc h5 { margin: 0 0 8px; font-size: 12px; color: var(--faint); font-weight: 600; }
+.report-toc a { display: block; padding: 4px 0 4px 12px; border-left: 2px solid var(--line); color: var(--muted); text-decoration: none; line-height: 1.5; }
+.report-toc a:hover { color: var(--brand); border-left-color: var(--brand); }
+.report-sheet {
+  min-width: 0; padding: 36px 48px 44px;
+  background: var(--raised); border-radius: 8px; box-shadow: var(--shadow-card);
+}
+.report-title { margin: 0 0 14px; font-size: 26px; line-height: 1.35; font-weight: 700; }
+.report-meta { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 20px; margin-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+.report-meta span { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 10px; border-radius: 4px; background: var(--sunken); color: var(--faint); font-size: 12.5px; }
+.report-meta b { color: var(--ink); font-weight: 650; font-size: 13px; }
+.report-sheet .md { font-size: 15px; line-height: 1.8; }
+.report-sheet .md h1 { font-size: 22px; line-height: 1.35; margin: 24px 0 14px; }
+.report-sheet .md h2 { font-size: 18px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); scroll-margin-top: 72px; }
+.report-sheet .md h3 { font-size: 15.5px; margin: 24px 0 8px; }
+.report-sheet .md blockquote { border-left-color: var(--brand); background: var(--sunken); padding: 6px 14px; border-radius: 0 4px 4px 0; }
+.report-sheet .md table { font-size: 13.5px; }
+.report-sheet .md th { background: var(--sunken); }
+.report-sheet .accept-tip { margin-top: 28px; padding: 12px 16px; border-radius: 6px; background: color-mix(in srgb, var(--approved) 9%, var(--surface)); box-shadow: inset 3px 0 0 var(--approved); color: var(--ink); font-size: 13.5px; }
+.report-sheet .md li { margin: 4px 0; }
+.report-sheet .md code { font-size: 13px; }
+@media (max-width: 700px) { .report-wrap { padding: 0; } .report-sheet { border-radius: 0; box-shadow: none; padding: 20px 16px 40px; } }
+

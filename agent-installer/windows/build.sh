@@ -136,7 +136,7 @@ case "$(file "$DIST/$OUT_NAME")" in
     *PE32+*x86-64*) echo "  ✓ 是 64 位 Windows 程序" ;;
     *) die "产物不是 64 位 Windows 程序：$(file "$DIST/$OUT_NAME")" ;;
 esac
-for need in "node/$NODE_VERSION/node.exe" ateam.exe ateam.exe.config ateam.cmd app/bin/ateam.js app/src/server.js app/src/dashboard.html \
+for need in "node/$NODE_VERSION/node.exe" ateam.exe ateam.exe.config ateam.cmd app/bin/ateam.js app/src/server.js app/src/dashboard/index.html app/src/dashboard/js/app.js app/src/dashboard/css/base.css \
             app/skills/ateam-worker/SKILL.md app/skills/ateam-lead/SKILL.md app/dsh-plugin/index.js app/package.json; do
     unzip -l "$PAYLOAD_ZIP" "$need" >/dev/null 2>&1 || die "payload.zip 里缺 $need"
     printf '  ✓ %s\n' "$need"

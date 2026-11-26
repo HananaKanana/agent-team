@@ -1,6 +1,6 @@
 // 项目规则按角色分段：`## ALL` 段和第一个小标题之前的内容发给所有人，
 // `## backend`、`## frontend, test` 这类段只发给标题里的角色，`## leader` 段只给 leader（ateam status、ateam show 里显示）。
-// 看板 src/dashboard.html 里有一份同样规则的解析（预览用），两边改动要保持一致。
+// 看板 src/dashboard/js/rules.js 里有一份同样规则的解析（预览用），两边改动要保持一致。
 
 const HEADING = /^## (.*)$/;
 const ROLE_SPLIT = /[,，、\s]+/;

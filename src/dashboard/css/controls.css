@@ -1,0 +1,68 @@
+/* 表格短列、提示词块、按钮 */
+
+/* 时间、类型、执行者、结果、操作记录这些短列不换行，只有说明列换行占满剩余宽度 */
+.demo-runs th, .demo-runs td { white-space: nowrap; }
+.demo-runs td.note { white-space: normal; width: 100%; min-width: 220px; line-height: 1.6; overflow-wrap: anywhere; }
+.demo-runs td.note .hint { margin-top: 2px; }
+.demo-runs td.r-done { color: var(--approved); font-weight: 600; }
+.demo-runs td.r-stopped { color: var(--asking); font-weight: 600; }
+.demo-runs td.r-interrupted { color: var(--rework); font-weight: 600; }
+.needs-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.needs-row + .needs-row { margin-top: 8px; }
+.needs b, .banner b { font-weight: 650; }
+.needs .pblock code { background: var(--surface); }
+.prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+/* 提示词块：文字铺满，复制按钮嵌在右上角 */
+.pblock { position: relative; margin-top: 8px; }
+.pblock code {
+  display: block; background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 4px;
+  padding: 10px 64px 10px 12px; user-select: all; white-space: pre-wrap; line-height: 1.6; font-size: 12.5px;
+}
+.pblock .btn { position: absolute; top: 7px; right: 7px; }
+/* 按钮：统一高度；primary 实色，ghost 无边框 */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 12px; border: none; border-radius: 4px;
+  background: color-mix(in srgb, var(--faint) 22%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--faint) 30%, transparent);
+  color: var(--ink); font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: color-mix(in srgb, var(--faint) 34%, transparent); }
+.btn.sm { height: 26px; padding: 0 9px; font-size: 12.5px; }
+.btn.ghost { border-color: transparent; background: transparent; box-shadow: none; color: var(--muted); }
+/* 页头右侧的次要按钮（帮助、深浅色）：白底细边，和红色的「需要你处理」同高同圆角 */
+.btn.head-btn { height: 32px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); font-weight: 500; }
+.btn.head-btn:hover { color: var(--ink); background: var(--sunken); }
+.btn.head-btn svg { width: 15px; height: 15px; }
+.btn.ghost:hover { background: color-mix(in srgb, var(--faint) 14%, transparent); color: var(--ink); }
+.btn.done { background: color-mix(in srgb, var(--approved) 14%, transparent); color: var(--approved); }
+.hint { color: var(--muted); font-size: 12.5px; }
+
+.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: calc(100vh - 56px); transition: grid-template-columns .18s ease; }
+.layout.nav-collapsed { grid-template-columns: 64px minmax(0, 1fr); }
+.nav-head { display: flex; align-items: center; justify-content: space-between; margin: -4px 0 6px; }
+.nav-head h2 { margin-bottom: 0 !important; }
+.nav-toggle { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--faint); cursor: pointer; }
+.nav-toggle:hover { color: var(--ink); background: var(--sunken); }
+.nav-toggle svg { width: 16px; height: 16px; }
+.nav-collapsed nav.jobs { padding: 12px 8px; align-items: center; gap: 4px; }
+.nav-collapsed .nav-head { justify-content: center; margin: 0 0 6px; }
+.job-mini {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 46px; height: 40px; padding: 0; border: 0; border-radius: 6px;
+  background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.job-mini:hover { background: var(--sunken); color: var(--ink); }
+.job-mini[aria-current="true"] { background: var(--raised); color: var(--brand-ink); box-shadow: inset 3px 0 0 var(--brand), 0 0 0 1px color-mix(in srgb, var(--brand) 45%, transparent); }
+.job-mini > i.none { visibility: hidden; }
+.job-mini > i { display: block; width: 28px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--faint) 25%, transparent); overflow: hidden; }
+.job-mini > i > i { display: block; height: 100%; background: var(--working); }
+.job-mini.ok > i > i { background: var(--approved); }
+.job-mini.dropped { text-decoration: line-through; color: var(--faint); }
+.job-mini.more { color: var(--faint); letter-spacing: 1px; }
+nav.jobs { background: var(--rail); border-right: 1px solid var(--line); padding: 16px 10px; display: flex; flex-direction: column; gap: 2px; }
+nav.jobs h2, main h2 { font-size: 12px; font-weight: 600; color: var(--faint); margin: 0 10px 8px; }
+.job {
+  position: relative; display: block; width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 12px 11px 14px; border: none; border-radius: 6px; background: none;
+}
+.job { transition: background-color .12s, box-shadow .12s; }
+.job:hover { background: var(--sunken); }

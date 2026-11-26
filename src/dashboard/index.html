@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ateam 调度台</title>
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/panels.css">
+<link rel="stylesheet" href="/css/demo.css">
+<link rel="stylesheet" href="/css/controls.css">
+<link rel="stylesheet" href="/css/jobs.css">
+<link rel="stylesheet" href="/css/board.css">
+<link rel="stylesheet" href="/css/drawer.css">
+<link rel="stylesheet" href="/css/layout.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5v3.2l2 1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="3" fill="currentColor"/><path d="M4.5 8.2l2.3 2.3 4.7-4.9" fill="none" stroke="var(--on-color)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-top" viewBox="0 0 16 16"><path d="M3.5 7.5L8 3l4.5 4.5M3.5 12.5L8 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13.5 9.6A5.6 5.6 0 016.4 2.5a5.6 5.6 0 107.1 7.1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 16 16"><path d="M13.5 2.5v11M10.5 8h-8M5.5 5L2.5 8l3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sidebar" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 2.8v10.4" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-tick" viewBox="0 0 16 16"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-popout" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5L8 8M12 9.5v3a1 1 0 01-1 1H3.5a1 1 0 01-1-1V5a1 1 0 011-1h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l2.5-7.5A2 2 0 017.4 4h9.2a2 2 0 011.9 1.5L21 13v5a2 2 0 01-2 2H5a2 2 0 01-2-2z M3 13h5l1.5 2.5h5L16 13h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 12.3l2.7 2.7L16.2 9.4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2 2"/></symbol>
+  <symbol id="i-pointer" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 16 16"><path d="M10 2.5l3.5 3.5-2.2 1-2.3 2.3.3 2.7-1 1L2.9 7.6l1-1 2.7.3L8.9 4.6z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.7 10.3L2.5 13.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 3.5v-.5a1 1 0 00-1-1h-6a1 1 0 00-1 1v6a1 1 0 001 1h.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M4.2 11.8l7.6-7.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.8 8z" fill="currentColor"/></symbol>
+  <symbol id="i-text-down" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-text-up" viewBox="0 0 16 16"><path d="M1.5 13L5 3.5 8.5 13M2.8 9.8h4.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 8h4M12.5 6v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-bg-less" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
+  <symbol id="i-bg-more" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".55" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 16 16"><path d="M2.5 13.5h11M4.5 11V7.5M8 11V4M11.5 11V6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.75 13.25c.4-2.3 2.1-3.5 4.25-3.5s3.85 1.2 4.25 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10.5 3.6a2.1 2.1 0 0 1 0 4M12 9.9c1.3.4 2.05 1.5 2.3 3.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-help" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.2 6.3a1.9 1.9 0 0 1 3.7.5c0 1.3-1.9 1.6-1.9 2.7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.6" r=".9" fill="currentColor"/></symbol>
+  <symbol id="i-shrink" viewBox="0 0 16 16"><path d="M13.5 2.5v11M2.5 8h8M7.5 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+<header class="top">
+  <h1><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>ateam 调度台<span class="ver" id="ver"></span></h1>
+  <span class="vr"></span>
+  <div class="workers" id="workers"></div>
+  <button class="mode-pill" id="mode-pill" type="button" hidden></button>
+  <button class="btn attention" id="attention" type="button" hidden></button>
+  <button class="btn" id="notify-btn" type="button" hidden title="开启浏览器通知：需求待验收、任务缺少 worker、leader 离线时发送提醒">开启通知</button>
+  <button class="mode-pill update-pill" id="update-pill" type="button" hidden></button>
+  <span class="ro-pill" id="ro-pill" hidden title="当前从局域网中的其他电脑打开看板，仅可查看。所有操作请在运行 ateam 的电脑上进行。">只读访问</span>
+  <button class="btn head-btn search-btn" id="search-btn" type="button" title="按卡号或标题搜索（⌘K 或 /）" aria-label="搜索"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><span>搜索</span><kbd>⌘K</kbd></button>
+  <button class="btn head-btn helper-btn" id="helper-btn" type="button" title="提示词、安装、项目规则、设置等"><svg class="ico" aria-hidden="true"><use href="#i-help"/></svg>帮助</button>
+  <button class="btn head-btn icon" id="theme-btn" type="button"></button>
+</header>
+<section class="needs pop" id="needs" hidden aria-label="需要 worker" role="dialog"></section>
+<!-- 页面提示都做成右上角的浮动气泡，不占页面、可以关掉 -->
+<div class="toasts" id="toasts">
+<div class="banner demo" id="demo-banner" hidden></div>
+<div class="banner" id="sync-banner" hidden></div>
+<div class="banner" id="banner" hidden><b>无法连接 ateam 服务</b>，3 秒后自动重试。请确认 ateam serve 正在运行。<button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="banner"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="banner stale" id="stale" hidden><b>服务需要重启</b>：<span id="stale-why">ateam 代码已更新，当前服务仍在运行旧版本。</span>请点击「重启」，或在运行 ateam serve 的终端中按 Ctrl+C 后重新运行 ateam serve。数据不会丢失，worker 和 leader 将自动重连。<button class="btn sm stale-restart" id="stale-restart" type="button">重启</button><button class="toast-x" type="button" aria-label="关闭" title="关闭" data-x="stale"><svg class="ico" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+</div>
+<div class="layout">
+  <nav class="jobs" id="jobs" aria-label="需求列表"><h2>需求</h2><div class="sk sk-job"></div><div class="sk sk-job"></div><div class="sk sk-job"></div></nav>
+  <main id="main" aria-busy="true"><div class="sk sk-line" style="width: 90px"></div><div class="sk sk-title"></div><div class="sk sk-line" style="width: 70%"></div><div class="sk sk-line" style="width: 48%"></div><div class="sk-board"><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div><div class="sk-lane"></div><div class="sk-lane"><div class="sk-card"></div></div><div class="sk-lane"><div class="sk-card"></div><div class="sk-card"></div><div class="sk-card"></div></div><div class="sk-lane"></div></div></main>
+</div>
+<aside class="drawer" id="drawer" hidden aria-label="任务详情"></aside>
+<div class="prompter-strip" id="prompter-strip" aria-live="polite"></div>
+<div class="att-pop" id="attention-list" hidden role="dialog" aria-label="待处理事项"></div>
+<div class="helper" id="helper" hidden role="dialog" aria-label="给 worker 的提示词"></div>
+<div class="report-page" id="report" hidden role="dialog" aria-label="leader 汇报"></div>
+<div class="report-page" id="usage-page" hidden role="dialog" aria-label="用量"></div>
+<div class="report-page" id="peers-page" hidden role="dialog" aria-label="同事"></div>
+<div class="modal-back" id="decide-dialog" hidden role="dialog" aria-modal="true" aria-label="审卡分歧"></div>
+<div class="modal-back" id="show-dialog" hidden role="dialog" aria-modal="true" aria-label="开始演播"></div>
+<div class="modal-back" id="confirm-dialog" hidden role="dialog" aria-modal="true" aria-label="确认"></div>
+<div class="ctx-menu" id="card-menu" hidden role="menu"></div>
+<div class="spot-back" id="spotlight" hidden role="dialog" aria-modal="true" aria-label="搜索"></div>
+<div class="modal-back" id="stale-dialog" hidden role="dialog" aria-modal="true" aria-label="worker 无响应"></div>
+
+<!-- ateam:prefs -->
+<script src="/js/prefs.js"></script>
+<script src="/js/state.js"></script>
+<script src="/js/util.js"></script>
+<script src="/js/workers.js"></script>
+<script src="/js/settings.js"></script>
+<script src="/js/push.js"></script>
+<script src="/js/rules.js"></script>
+<script src="/js/helper.js"></script>
+<script src="/js/jobs.js"></script>
+<script src="/js/demo.js"></script>
+<script src="/js/prompter.js"></script>
+<script src="/js/update.js"></script>
+<script src="/js/sync.js"></script>
+<script src="/js/usage.js"></script>
+<script src="/js/drawer.js"></script>
+<script src="/js/menu.js"></script>
+<script src="/js/search.js"></script>
+<script src="/js/dialogs.js"></script>
+<script src="/js/report.js"></script>
+<script src="/js/attention.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

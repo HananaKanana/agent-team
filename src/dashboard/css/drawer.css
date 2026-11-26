@@ -1,0 +1,141 @@
+/* 任务详情抽屉、时间线、已作废 */
+
+/* 任务详情抽屉（参考 Jira 的任务详情）：顶部固定一条工具栏；宽屏时右侧是「详情」栏 */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(600px, 100vw);
+  background: var(--surface); box-shadow: var(--shadow-pop), -16px 0 32px -12px rgba(9, 30, 66, .18);
+  overflow-y: auto; padding: 0 0 48px; z-index: 10;
+  transform: translateX(0); transition: transform .18s ease-out, width .18s ease-out;
+}
+.drawer.wide { width: min(1100px, 80vw); }
+@media (max-width: 900px) { .drawer.wide { width: 100vw; } }
+.drawer[hidden] { display: block; transform: translateX(105%); visibility: hidden; }
+.drawer-bar {
+  /* 高于时间线圆点（z-index 1），滚动时圆点不会盖到头部上 */
+  position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 8px;
+  height: 52px; padding: 0 12px 0 24px; background: var(--surface); border-bottom: 1px solid var(--line-soft);
+}
+.drawer-bar .crumbs { margin-right: auto; font-size: 13px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drawer-bar .crumbs b { color: var(--muted); font-weight: 600; }
+.drawer-bar .btn svg { width: 16px; height: 16px; }
+.drawer-body { padding: 18px 24px 0; }
+.drawer h2 { font-size: 20px; line-height: 1.4; font-weight: 650; color: var(--ink); margin: 0; overflow-wrap: anywhere; }
+.drawer .facts .lozenge { height: 22px; font-size: 12px; padding: 0 8px; }
+.drawer .who { display: inline-flex; align-items: center; gap: 6px; }
+.drawer .who .av { width: 22px; height: 22px; font-size: 10px; }
+/* 「详情」紧跟标题：一行一项，标签在左、值在右 */
+.drawer .facts { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 20px; margin: 16px 0 0; font-size: 13px; }
+.drawer .facts dt { color: var(--faint); }
+.drawer .facts dd { margin: 0; min-height: 22px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; color: var(--ink); overflow-wrap: anywhere; }
+.drawer .facts dd code { font-size: 12px; background: var(--sunken); padding: 1px 6px; border-radius: 3px; }
+.drawer h4 { font-size: 14px; color: var(--ink); margin: 24px 0 8px; font-weight: 650; }
+.drawer-sec-head { display: flex; align-items: center; gap: 8px; }
+.drawer-sec-head h4 { flex: 1; }
+.drawer-sec-head .spawn-btn { margin-top: 16px; }
+.drawer .descbox { font-size: 13.5px; line-height: 1.7; }
+.drawer .descbox.md > :first-child { margin-top: 0; }
+.drawer ul.commits { margin: 0; padding-left: 20px; }
+/* 验收标准：带圆圈序号的清单 */
+.drawer ol.checklist { list-style: none; margin: 0; padding: 0; counter-reset: ac; }
+.drawer ol.checklist li { position: relative; counter-increment: ac; padding: 6px 0 6px 32px; font-size: 13.5px; line-height: 1.6; border-top: 1px solid var(--line-soft); }
+.drawer ol.checklist li:first-child { border-top: none; }
+.drawer ol.checklist li::before {
+  content: counter(ac); position: absolute; left: 0; top: 7px; width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--sunken);
+}
+.drawer .c-approved ol.checklist li::before, .drawer ol.checklist.done li::before { color: var(--on-color); background: var(--approved); }
+code, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline > li { position: relative; padding: 0 0 14px 26px; }
+.timeline > li::before {
+  /* 空心圆用渐变画，不用 border：Safari 在抽屉滑入（transform）后，小圆的 border 会出现一道缺口 */
+  content: ""; position: absolute; z-index: 1; left: 6px; top: 6px; width: 10px; height: 10px; border-radius: 50%;
+  background: radial-gradient(circle closest-side, var(--surface) 55%, var(--c, var(--pending)) 60%);
+}
+.timeline > li::after { content: ""; position: absolute; left: 10px; top: 18px; bottom: 0; width: 2px; background: var(--line-soft); }
+.timeline > li:last-child::after { display: none; }
+.timeline > li > div:first-child { line-height: 20px; } /* 第一行固定行高。中文字形在行框里偏下，圆点（top 6 + 高 10）比几何中心低 1px，看起来才对齐 */
+.timeline .when { color: var(--faint); font-size: 12px; }
+.hook-platform { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.hook-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.hook-head .btn { margin-left: auto; }
+.hook-state { padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 18px; color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.hook-state.ok { color: var(--approved); background: color-mix(in srgb, var(--approved) 14%, transparent); }
+.hook-note { margin: -2px 0 8px; font-size: 12.5px; color: var(--muted); }
+.hook-note.err { color: var(--rework); }
+.cdp-write { margin: 8px 0; }
+.att-fix { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.att-fix.err { color: var(--rework); }
+.hook-foot { margin-top: 12px; }
+.wcard-head .spawn-btn { flex: none; margin-left: 2px; color: var(--brand); font-weight: 600; }
+.wcard-head .spawn-btn:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.spawn-btn .ico { width: 11px; height: 11px; }
+.role-count { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.role-count.short { color: var(--asking); font-weight: 600; }
+.spawn-msg { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
+.spawn-msg.err { color: var(--rework); }
+.read-flag { display: inline-block; margin-left: 8px; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; vertical-align: 1px; color: var(--asking); background: color-mix(in srgb, var(--asking) 12%, transparent); }
+.read-flag.read { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
+.read-flag.sent { color: var(--muted); background: color-mix(in srgb, var(--faint) 18%, transparent); }
+.timeline .what { font-weight: 600; font-size: 13px; color: var(--c); }
+.timeline .text { white-space: pre-wrap; font-size: 13px; overflow-wrap: anywhere; margin-top: 2px; color: var(--ink); }
+.timeline .text.md { white-space: normal; line-height: 1.65; }
+.timeline .text.md > :first-child { margin-top: 0; }
+.timeline .text.md > :last-child { margin-bottom: 0; }
+.timeline .text.md h1, .timeline .text.md h2, .timeline .text.md h3, .timeline .text.md h4 { font-size: 13px; font-weight: 650; margin: 12px 0 4px; }
+.timeline .text.md p { margin: 4px 0; }
+.timeline .text.md ul, .timeline .text.md ol { margin: 4px 0; padding-left: 20px; }
+.timeline .text.md ul { list-style: disc; } .timeline .text.md ol { list-style: decimal; }
+.timeline .text.md li { padding: 0; margin: 2px 0; }
+.timeline .text.md pre { font-size: 12px; }
+
+.md h1, .md h2, .md h3 { color: var(--ink); margin: 14px 0 6px; }
+.md h1 { font-size: 19px; } .md h2 { font-size: 16px; } .md h3 { font-size: 14px; }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md pre { background: var(--sunken); padding: 10px 12px; border-radius: 4px; overflow-x: auto; }
+/* 长路径、长链接、长行内代码在任意处折行，不撑出容器 */
+.md { overflow-wrap: anywhere; }
+.md code { background: var(--sunken); padding: 0 4px; border-radius: 3px; overflow-wrap: anywhere; word-break: break-all; }
+.md pre code { background: none; padding: 0; word-break: normal; }
+.md li { margin: 2px 0; }
+.md ul ul, .md ol ul, .md ul ol, .md ol ol { margin: 2px 0; }
+.md blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.md table { border-collapse: collapse; margin: 8px 0; font-size: 12.5px; display: block; max-width: 100%; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+.md a { color: var(--brand); }
+.job-head .desc.md { white-space: normal; }
+.job-head .desc.md p { margin: 2px 0; }
+
+.c-pending { --c: var(--pending); } .c-working { --c: var(--working); } .c-rework { --c: var(--rework); }
+.c-asking { --c: var(--asking); } .c-submitted { --c: var(--submitted); } .c-approved { --c: var(--approved); }
+.c-held { --c: var(--held); }
+.c-cancelled { --c: var(--pending); }
+/* 已作废：放在看板最下面，置灰 */
+.card.cancelled { opacity: .55; filter: grayscale(1); margin-bottom: 0; }
+.card.cancelled .t { text-decoration: line-through; font-weight: 500; }
+/* 已作废（参考 Jira 的 Won't Do）：不占看板，收在看板下方一个可折叠的列表里，一行一张 */
+.cancelled-box { margin-top: 16px; flex: none; }
+.cancelled-toggle {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px 4px 4px; border: none; border-radius: 4px;
+  background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cancelled-toggle:hover { background: color-mix(in srgb, var(--faint) 14%, transparent); color: var(--ink); }
+.cancelled-toggle svg { width: 14px; height: 14px; transition: transform .15s; }
+.cancelled-toggle[aria-expanded="true"] svg { transform: rotate(0deg); }
+.cancelled-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.cancelled-toggle .n { min-width: 20px; height: 18px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center; font-size: 11.5px; color: var(--faint); background: color-mix(in srgb, var(--faint) 14%, transparent); }
+.cancelled-rows { margin-top: 6px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.cancelled-row {
+  display: grid; grid-template-columns: 56px minmax(0, 1fr) auto minmax(0, 36%) 24px; align-items: center; gap: 12px;
+  width: 100%; padding: 8px 12px; border: none; border-top: 1px solid var(--line-soft); background: transparent;
+  color: var(--muted); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.cancelled-row:first-child { border-top: none; }
+.cancelled-row:hover { background: var(--raised-hover); color: var(--ink); }
+.cancelled-row .key { font-weight: 600; text-decoration: line-through; color: var(--faint); }
+.cancelled-row .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cancelled-row .why { color: var(--faint); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cancelled-row .av { width: 22px; height: 22px; font-size: 10px; filter: grayscale(1); opacity: .7; }
+@media (max-width: 700px) { .cancelled-row { grid-template-columns: 48px minmax(0, 1fr) 24px; } .cancelled-row .tag, .cancelled-row .why { display: none; } }
+

@@ -258,7 +258,9 @@ for f in \
     "usr/local/bin/ateam" \
     "Library/Application Support/ateam/app/bin/ateam.js" \
     "Library/Application Support/ateam/app/src/server.js" \
-    "Library/Application Support/ateam/app/src/dashboard.html" \
+    "Library/Application Support/ateam/app/src/dashboard/index.html" \
+    "Library/Application Support/ateam/app/src/dashboard/js/app.js" \
+    "Library/Application Support/ateam/app/src/dashboard/css/base.css" \
     "Library/Application Support/ateam/app/src/install.js" \
     "Library/Application Support/ateam/app/src/update.js" \
     "Library/Application Support/ateam/app/skills/ateam-lead/SKILL.md" \

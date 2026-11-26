@@ -3,6 +3,7 @@
 import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { clearOps, opsSection, parseOps, stepCount } from '../demo.js';
+import { ARCH_DOC, ARCH_MAX, designDocPath, designExcerpt } from '../design-doc.js';
 import { isArchitectRole, isDevRole } from '../dev-guide.js';
 import { AteamError } from '../errors.js';
 import { DEFAULT_TEST_TEMPLATE } from '../format.js';
@@ -70,6 +71,11 @@ function testTemplateFor(task, full) {
   return full ? { custom: true, text } : { custom: true };
 }
 
+// 读项目里的文件（相对项目目录）；没有或读不了返回 null
+function readProjectFile(rel) {
+  try { return readFileSync(join(root, rel), 'utf8'); } catch { return null; }
+}
+
 export function withRules(result, agentId) {
   if (!result) return result;
   // 测试卡、演播卡的输出里要写明这次用哪个浏览器（看板设置「测试用的浏览器」）
@@ -91,10 +97,21 @@ export function withRules(result, agentId) {
   if (tpl) out.testTemplate = tpl;
   const rules = rulesFor(readRules(), result.task.role).trim();
   if (rules) out.rules = rules;
-  // 开发卡：同一个需求有架构设计卡的，附上设计文档的位置和状态；配了提交检查的，附上要跑的命令
+  // 开发卡、架构卡：附上项目架构总览（docs/architecture.md，有的话）
+  if (result.task.kind !== 'demo' && (isDevRole(result.task.role) || isArchitectRole(result.task.role))) {
+    const text = readProjectFile(ARCH_DOC)?.trim();
+    if (text) out.architecture = { path: ARCH_DOC, text: text.length > ARCH_MAX ? text.slice(0, ARCH_MAX).replace(/\n[^\n]*$/, '') : text, truncated: text.length > ARCH_MAX };
+  }
+  // 开发卡：同一个需求有架构设计卡的，附上设计文档的位置、状态和跟这张卡有关的部分；配了提交检查的，附上要跑的命令
   if (result.task.kind !== 'demo' && isDevRole(result.task.role)) {
     const designs = store.state.tasks.filter((d) => d.jobId === result.task.jobId && d.id !== result.task.id && d.kind !== 'demo' && isArchitectRole(d.role) && d.status !== 'cancelled');
-    if (designs.length) out.designs = designs.map((d) => ({ id: d.id, title: d.title, paths: d.paths, status: d.status }));
+    if (designs.length) {
+      out.designs = designs.map((d) => {
+        const doc = readProjectFile(designDocPath(d));
+        const excerpt = doc ? designExcerpt(doc, result.task.paths) : null;
+        return { id: d.id, title: d.title, paths: d.paths, status: d.status, ...(excerpt ? { excerpt } : {}) };
+      });
+    }
     const checks = store.config().submitChecks.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
     if (checks.length) out.submitChecks = checks;
   }

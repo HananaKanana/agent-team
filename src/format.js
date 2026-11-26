@@ -1,7 +1,7 @@
 // 把任务、事件、状态渲染成给大模型读的 markdown 文本。
 // worker skill 依赖 formatWait 的标题文本，修改时要同步 skills/ateam-worker/SKILL.md。
 import { stepsLabel } from './demo.js';
-import { checksSection, designGuide, designSection, devGuide, isArchitectRole, isDevRole } from './dev-guide.js';
+import { architectureSection, checksSection, designGuide, designSection, devGuide, isArchitectRole, isDevRole } from './dev-guide.js';
 
 const STATUS = {
   pending: '待领取',
@@ -317,8 +317,8 @@ function footer(agentId, task, kind, tpl, browser, egoProfile, result = {}) {
     `进度：ateam progress --as ${agentId} "..."`,
     `完成：ateam submit --as ${agentId} "<总结>"（第一行一句话说清做了什么，会作为 git 提交标题；下面再写文件、验证等细节）`,
     ...(task && task.kind !== 'demo' && !isTestRole(task.role) ? [DEV_NO_BROWSER] : []),
-    ...(work && isDevRole(task.role) && fresh ? [...designSection(result.designs), ...devGuide(agentId, task.role, kind !== 'rejected'), ...checksSection(result.submitChecks)] : []),
-    ...(work && isArchitectRole(task.role) && fresh ? designGuide(agentId, task, kind !== 'rejected') : []),
+    ...(work && isDevRole(task.role) && fresh ? [...architectureSection(result.architecture, kind !== 'rejected'), ...designSection(result.designs, kind !== 'rejected'), ...devGuide(agentId, task.role, kind !== 'rejected'), ...checksSection(result.submitChecks)] : []),
+    ...(work && isArchitectRole(task.role) && fresh ? [...architectureSection(result.architecture, kind !== 'rejected'), ...designGuide(agentId, task, kind !== 'rejected')] : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) && browser ? browserSection(browser, { space: task.id, agentId, profile: egoProfile }) : []),
     ...(task && task.kind !== 'demo' && isTestRole(task.role) ? testProgressRule(agentId, task, ['task', 'handoff', 'own'].includes(kind), tpl) : []),
   ].join('\n');

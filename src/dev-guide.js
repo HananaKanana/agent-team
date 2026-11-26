@@ -5,6 +5,8 @@
 //   sickn33/antigravity-awesome-skills：software-architecture
 // 按 ateam 的流程改写：开发卡不做功能验证，自查只到编译、既有测试和代码审阅。
 
+import { ARCH_DOC, designDocPath } from './design-doc.js';
+
 const isRole = (re) => (role) => re.test(String(role ?? '').trim());
 export const isProductRole = isRole(/^(product|pm|产品)$/i);
 export const isArchitectRole = isRole(/^(architect|arch|架构)$/i);
@@ -81,13 +83,6 @@ export function devGuide(agentId, role, full) {
 // 按依赖排序的任务清单、共用的接口规范和共用知识）两步，合成一份设计文档，由一个人统一定结构，再按它拆开发卡
 
 // 设计文档放哪：任务路径里直接写了 .md 文件就用它，否则放在第一个路径下面
-export function designDocPath(task) {
-  const paths = (task.paths ?? []).map((p) => String(p).replace(/\/+$/, ''));
-  const file = paths.find((p) => p.toLowerCase().endsWith('.md'));
-  if (file) return file;
-  return paths[0] ? `${paths[0]}/${task.id}-设计.md` : `${task.id}-设计.md`;
-}
-
 const designTemplate = (task) => `# ${task.id} 设计：${task.title}
 
 ## 1. 目标和范围
@@ -140,13 +135,14 @@ export function designGuide(agentId, task, full) {
     '',
     `这是架构设计卡：**只写设计文档，不改业务代码**（任务路径以外的改动不会被提交）。设计文档写在 \`${file}\`，开发卡会按它的文件清单和接口来写，所以要写到开发拿到就能动手的程度。`,
     '',
-    '1. **先读代码**：读需求说明、产品文档，再读相关的现有代码：入口、调用路径、分层和目录结构，项目规则里提到的结构规范一定要读。找出项目里同类的功能是怎么写的。设计要落在现有结构里，不另起一套；每个说法都能指到具体文件。',
+    `1. **先读代码**：读需求说明、产品文档、项目架构总览（\`${ARCH_DOC}\`，有的话），再读相关的现有代码：入口、调用路径、分层和目录结构，项目规则里提到的结构规范一定要读。找出项目里同类的功能是怎么写的。设计要落在现有结构里，不另起一套；每个说法都能指到具体文件。`,
     `2. **报进度**：读完代码先 \`ateam progress --as ${agentId} "读完：<现状一句话>"\`，之后每写完两三节报一次。`,
     '3. **按下面的模板写**，各节都要有内容，没有的写「无」。文件清单具体到路径，接口写到能直接照着写代码的程度（函数签名、请求和响应的字段）。',
     `4. **技术选型由用户决定，不能自己定**：新项目，或要引入新框架、新语言、新数据库、新的主要依赖、新的构建或部署方式时，先只写第 1–3 节，按模板第 3 节列出现有约束、2–3 个候选（优缺点、怎么融合进现有项目）和你的推荐，然后 \`ateam ask --user --as ${agentId} "技术选型待确认：见 ${designDocPath(task)} 第 3 节。候选 …，推荐 …，理由 …"\` 提交给用户决定，**等答复后再写后面各节**，把用户的决定原话填进第 3 节。沿用现有技术栈的不用问，第 3 节写「沿用现有：…」。`,
     '5. **先求简单**：先想最简单能工作的结构。不加需求里没有的功能，不为「以后可能用到」加抽象层和扩展点。',
     `6. **其他拿不准的也问**：需求有两种理解、要在几种做法里替用户拍板时，先 \`ateam ask --as ${agentId}\`，不要自己定；取舍都在第 4 节写理由。`,
-    '7. **自查后提交**：核对文件清单、接口、拆卡建议三处前后一致（拆卡建议里的每个文件都在文件清单里，接口两边的字段一致），第 3 节要么是「沿用现有」、要么有用户确认的原话，再 `ateam submit`。leader review 通过后按拆卡建议派开发卡。',
+    `7. **架构总览**：\`${ARCH_DOC}\` 写整个项目的结构（模块划分、目录约定、技术栈、公共组件和工具在哪、各类功能照哪个现有实现写），所有开发卡领卡时都会看到。${(task.paths ?? []).some((p) => String(p).replace(/^\.\//, '') === ARCH_DOC) ? `它在你的任务路径里：项目还没有这份文件就写一份（控制在一两屏，只写整体，不写这次需求的细节）；这次设计新增了模块、目录约定或技术栈的，同步更新它。` : `它不在你的任务路径里，你改不了：这次设计要新增模块、目录约定或技术栈的，把要更新的内容写进设计文档第 11 节，由 leader 安排。`}`,
+    '8. **自查后提交**：核对文件清单、接口、拆卡建议三处前后一致（拆卡建议里的每个文件都在文件清单里，接口两边的字段一致），第 3 节要么是「沿用现有」、要么有用户确认的原话，再 `ateam submit`。leader review 通过后按拆卡建议派开发卡。',
     '',
     '模板：',
     '',
@@ -158,17 +154,36 @@ export function designGuide(agentId, task, full) {
 
 // 开发卡：同一个需求的架构设计
 const DESIGN_STATUS = { approved: '已通过', submitted: '待 review', working: '编写中', asking: '编写中', pending: '未开始', held: '已挂起' };
-export function designSection(designs) {
+export function designSection(designs, full = true) {
   if (!designs?.length) return [];
-  const list = designs.map((d) => `- ${d.id}《${d.title}》：\`${designDocPath(d)}\`（${DESIGN_STATUS[d.status] ?? d.status}）`);
   const pending = designs.some((d) => d.status !== 'approved');
+  const out = ['', '## 设计文档', ''];
+  for (const d of designs) {
+    out.push(`- ${d.id}《${d.title}》：\`${designDocPath(d)}\`（${DESIGN_STATUS[d.status] ?? d.status}）`);
+    if (!full || !d.excerpt) continue;
+    const { files, split, api, data } = d.excerpt;
+    out.push('');
+    out.push('### 你负责的文件（第 5 节）', '', files || '文件清单里没有和这张卡的路径对应的行：按卡的路径和描述做，拿不准范围先 `ateam ask`。', '');
+    if (split) out.push('### 拆卡建议里的这张卡（第 10 节）', '', split, '');
+    if (api) out.push('### 接口（第 6 节）', '', api, '');
+    if (data) out.push('### 数据结构（第 7 节）', '', data, '');
+    out.push('现状、实现思路、调用流程、复用这几节在文档里，动手前读一遍。');
+  }
+  out.push('', `**按设计文档的文件清单、接口和数据结构写**，你报的方案以它为准，不另想一套；分给这张卡的文件就是你的范围。设计行不通或有遗漏，先 \`ateam ask\` 说明，不要自己改设计、不要偏离着写。${pending ? '设计还没通过 review，以文档的最新内容为准，有变动 leader 会通知。' : ''}`);
+  return out;
+}
+
+// 开发卡、架构卡：项目架构总览
+export function architectureSection(arch, full = true) {
+  if (!arch) return [];
+  if (!full) return ['', `新代码按项目架构总览 \`${arch.path}\` 的模块划分和目录约定放。`];
   return [
     '',
-    '## 设计文档',
+    `## 项目架构（\`${arch.path}\`）`,
     '',
-    ...list,
+    arch.text + (arch.truncated ? `\n\n…（后面还有，见 \`${arch.path}\`）` : ''),
     '',
-    `动手前先读。**按设计文档的文件清单、接口和数据结构写**，你报的方案以它为准，不另想一套；拆卡建议里分给这张卡的文件就是你的范围。设计行不通或有遗漏，先 \`ateam ask\` 说明，不要自己改设计、不要偏离着写。${pending ? '设计还没通过 review，以文档的最新内容为准，有变动 leader 会通知。' : ''}`,
+    '新代码按这里的模块划分和目录约定放，同类功能照这里指的现有实现写。要改变整体结构（新模块、新的目录约定、新技术栈），先 `ateam ask`，不要自己定。',
   ];
 }
 

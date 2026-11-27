@@ -9,7 +9,7 @@ import { saveState } from '../persist.js';
 import { dataDir, root, store } from './context.js';
 import { send, sendError } from './http.js';
 import { withRules } from './rules.js';
-import { syncSoon } from './sync.js';
+import { boardCommitSoon, syncSoon } from './sync.js';
 
 const DEFAULT_HOLD_SEC = 90;
 const MAX_HOLD_SEC = 110;
@@ -69,6 +69,7 @@ export function onChange() {
   saveState(dataDir, store.state);
   pushSoon();
   syncSoon();
+  boardCommitSoon();
   wakeSoon();
 }
 

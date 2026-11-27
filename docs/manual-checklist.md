@@ -225,6 +225,7 @@
 5. [ ] 多仓库项目（项目目录本身不是 git 仓库）：不出现「.ateam 的提交范围」问题，`ateam doctor` 该项显示「多仓库项目…不会被提交」
 6. [ ] 装了 browser-cdp-setup 但 DeepSeek Harness 未配 dsh-cdp 的 dataDir：「待处理」里点「修复」后，`cordis.patch.yml` 里 dsh-cdp 条目带上 `dataDir: <主目录>/.chrome-agent`（已有的 dsh-cdp 条目只补 dataDir，其他设置不变；首次改动留 `.bak.ateam` 备份），底部提示需重启 DeepSeek Harness；「帮助 → 安装 → 可选：测试浏览器」第 ② 步的「写入配置」按钮效果相同，写入后显示「已配置完成」
 7. [ ] 重启 ateam serve 后 `.ateam/runtime.json` 明显变小、不再缩进成多行；看板上在线 worker、待处理、时间线照常；leader 的 `ateam watch` 收到的新事件文字完整（存进 runtime.json 后已送达事件只留前 300 字）
+8. [ ] 没开多人协作的单仓库项目：验收一个需求后约 5 秒，`git log -1` 是 ateam 的提交「看板：J? 已验收」，`git show --stat` 只有 `.ateam/` 下的文件（board.json、archive/ 等，没有 runtime.json、port）；worker 已暂存或未暂存的改动保持原样；作废一个需求同样提交「看板：J? 已作废」。启动服务时 `.ateam/archive/` 有没提交的文件，约 8 秒后补交一次（如「看板：保存 16 个已结束需求的记录」）；项目 `.gitignore` 里加上 `.ateam/` 后不再提交；开了多人协作的项目不出现这类提交
 
 ## 安装包与升级
 

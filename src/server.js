@@ -15,7 +15,7 @@ import { checkRotate, recheck, refreshEgoProfiles, rotateSpawn } from './server/
 import { checkUpdate, stopServer, UPDATE_EVERY } from './server/update.js';
 import { checkPush } from './server/push.js';
 import { loadUsageHistory, snapshotTokens, usageReport } from './server/usage.js';
-import { loadSyncConfig, syncAuto, syncCfg, syncTick } from './server/sync.js';
+import { boardCommit, boardCommitSoon, loadSyncConfig, syncAuto, syncCfg, syncTick } from './server/sync.js';
 import { killPrompter } from './server/routes-demo.js';
 
 
@@ -96,5 +96,8 @@ export async function startServer({ root, port = 7700, autoPort = false, leaseMi
   setInterval(() => { snapshotTokens().catch(() => {}); checkRotate().catch(() => {}); }, 60000).unref();
   setInterval(() => { syncTick().catch(() => {}); syncAuto().catch(() => {}); }, 60000).unref();
   setTimeout(() => { (syncCfg.enabled ? syncTick() : syncAuto()).catch(() => {}); }, 5000).unref();
+  // 没开多人协作：记下已结束的需求，之后新验收、作废的才提交；启动 8 秒后补交 archive/ 里没提交的（等自动开启协作先判断完）
+  boardCommitSoon();
+  setTimeout(() => { boardCommit(true).catch(() => {}); }, 8000).unref();
   return server;
 }

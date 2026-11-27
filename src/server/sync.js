@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { AteamError } from '../errors.js';
 import { version as ateamVersion } from '../install.js';
-import { checkSyncConfig, claimName, codeStatus, commitsLanded, defaultName, explainGitError, fastForward, fetchPeers, hasSyncConfig, PEER_STALE_MS, pickRemote, pushCode, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, SYNC_MARK, thisHost, trackedBoardFiles, writeSelf } from '../sync.js';
+import { checkSyncConfig, claimName, codeStatus, commitBoardFiles, commitsLanded, defaultName, explainGitError, fastForward, fetchPeers, hasSyncConfig, PEER_STALE_MS, pickRemote, pushCode, pushSelf, readPeers, readSyncConfig, saveSyncConfig, SYNC_FORMAT, SYNC_MARK, thisHost, trackedBoardFiles, writeSelf } from '../sync.js';
 import { dataDir, layout, root, store, syncProject } from './context.js';
+import { serial } from './http.js';
 import { leaderOnline, pushSoon, wakeSoon } from './live.js';
 import { usageReport } from './usage.js';
 import { parseOwners, readOwners } from './owners.js';
@@ -160,6 +161,37 @@ export function syncSoon() {
   if (!syncCfg.enabled || syncTimer) return;
   syncTimer = setTimeout(() => { syncTimer = null; syncTick().catch(() => {}); }, 30000);
   syncTimer.unref?.();
+}
+
+// 没开多人协作：看板文件随代码仓库保存。需求验收、作废后（5 秒内合并成一次）把 .ateam 单独提交到当前分支；
+// 启动时 archive/ 有没提交的已结束需求也补交一次。多仓库项目的 .ateam 不在仓库里，不提交
+const DONE_WORD = { accepted: '已验收', cancelled: '已作废' };
+let doneJobs = null;
+let boardTimer = null;
+const doneNow = () => new Set(store.state.jobs.filter((j) => DONE_WORD[j.status]).map((j) => j.id));
+function boardMessage(ids) {
+  if (!ids.length) return '看板：更新需求和卡的记录';
+  if (ids.length > 4) return `看板：保存 ${ids.length} 个已结束需求的记录`;
+  const byWord = new Map();
+  for (const id of ids) {
+    const word = DONE_WORD[store.state.jobs.find((j) => j.id === id)?.status] ?? '已结束';
+    byWord.set(word, [...(byWord.get(word) ?? []), id]);
+  }
+  return `看板：${[...byWord].map(([w, list]) => `${list.join('、')} ${w}`).join('，')}`;
+}
+export async function boardCommit(onlyArchive = false) {
+  if (syncCfg.enabled || !syncRel()) return null;
+  return serial(() => commitBoardFiles({ top: syncTop(), rel: syncRel(), describe: boardMessage, onlyArchive }))
+    .then((out) => { if (out.sha) console.log(`${out.sha} ${boardMessage(out.ids)}`); return out; })
+    .catch((err) => { console.log(`看板文件提交失败：${err.stderr?.trim() || err.message}`); return null; });
+}
+export function boardCommitSoon() {
+  const now = doneNow();
+  const fresh = doneJobs && [...now].some((id) => !doneJobs.has(id));
+  doneJobs = now;
+  if (!fresh || boardTimer) return;
+  boardTimer = setTimeout(() => { boardTimer = null; boardCommit().catch(() => {}); }, 5000);
+  boardTimer.unref?.();
 }
 
 // 自动开启：这台电脑没对这个项目做过选择（开启、关闭都没有），而仓库里的 .ateam/.gitignore 有迁移提交写的说明行

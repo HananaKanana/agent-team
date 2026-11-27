@@ -288,6 +288,39 @@ export async function untrackBoardFiles({ top, rel, dataDir, name }) {
   return { sha, count: files.length };
 }
 
+// 没开多人协作时把看板文件（.ateam 下没被忽略的：board.json、archive/、demos/、规则、模板）单独提交到当前分支。
+// 和 untrackBoardFiles 一样用临时暂存区从 HEAD 生成提交，不碰 worker 暂存了一半的改动；提交后真正的暂存区只同步 .ateam。
+// describe(ids)：archive/ 里新增或改动的需求编号 → 提交说明。onlyArchive：archive/ 没变就不提交（启动时补交用）
+// 返回 { sha, ids } / { nothing } / { skip: 原因 }
+export async function commitBoardFiles({ top, rel, describe, onlyArchive = false }) {
+  try { await git(top, ['check-ignore', '-q', `${rel}/`]); return { skip: 'ignored' }; } catch {}
+  const gitDir = (await git(top, ['rev-parse', '--absolute-git-dir'])).trim();
+  if (['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply'].some((f) => existsSync(join(gitDir, f)))) return { skip: 'busy' };
+  let head;
+  try { head = (await git(top, ['rev-parse', '--verify', '-q', 'HEAD^{commit}'])).trim(); } catch { return { skip: 'no-head' }; }
+  const index = join(tmpdir(), `ateam-board-${process.pid}-${Date.now()}.index`);
+  const env = { GIT_INDEX_FILE: index };
+  let sha;
+  let ids;
+  try {
+    await git(top, ['read-tree', head], { env });
+    await git(top, ['add', '-A', '--', rel], { env });
+    const tree = (await git(top, ['write-tree'], { env })).trim();
+    if (tree === (await git(top, ['rev-parse', `${head}^{tree}`])).trim()) return { nothing: true };
+    const changed = await git(top, ['diff', '--cached', '--name-status', '--no-renames', head, '--', `${rel}/archive`], { env });
+    ids = changed.split('\n').map((l) => l.match(/^[AM]\t.*\/([^/]+)\.json$/)?.[1]).filter(Boolean);
+    if (onlyArchive && !ids.length) return { nothing: true };
+    const msg = describe(ids);
+    const commit = (await git(top, ['commit-tree', tree, '-p', head, '-m', msg])).trim();
+    await git(top, ['update-ref', '-m', msg, 'HEAD', commit, head]);
+    sha = commit.slice(0, 7);
+  } finally {
+    rmSync(index, { force: true });
+  }
+  await git(top, ['reset', '-q', 'HEAD', '--', rel]);
+  return { sha, ids };
+}
+
 export const thisHost = () => hostname();
 
 // 用哪个远程：仓库里有 want 就用它；want 是默认的 origin 而仓库没有 origin、只有一个远程时，用那一个；其余情况原样返回（开启时报找不到远程）
